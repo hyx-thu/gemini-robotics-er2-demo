@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=17" />
+    <link rel="stylesheet" href="/static/style.css?v=18" />
   </head>
   <body>
     <div class="container">
@@ -117,45 +117,49 @@
                     <canvas id="overlay-canvas"></canvas>
                     <canvas id="fx-canvas"></canvas>
                   </div>
-                  <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
-                    <canvas id="robot-twin-canvas"></canvas>
-                    <div class="twin-hud">
-                      <span class="twin-title">🤖 Robot Twin</span>
-                      <span id="twin-action" class="twin-action">Idle</span>
-                      <span id="twin-status" class="twin-status hidden"></span>
-                    </div>
-                    <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
-                  </div>
                   <div id="plan-hud" class="plan-hud hidden" title="Current plan step">
                     <div class="hud-dots"></div>
                     <div class="hud-line"><span class="hud-idx"></span><span class="hud-text"></span></div>
                     <div class="hud-watchdog hidden"></div>
                   </div>
-                  <div id="status-label" class="status-label disconnected">Disconnected</div>
+                  <div class="lower-row">
+                    <div class="lower-left">
+                      <div id="status-label" class="status-label disconnected">Disconnected</div>
 
-                  <div class="controls-grid">
-                    <div class="controls-row">
-                      <div class="model-selector-wrapper" style="display: none;">
-                        <button id="endpointSelectorBtn" class="btn model-selector-btn">
-                          <span id="endpointSelectorLabel">Gemini Live API</span>
-                          <span class="model-selector-caret">&#9662;</span>
-                        </button>
-                        <div id="endpointDropdown" class="model-dropdown hidden">
-                          <div class="model-option active" data-endpoint="gemini_live_api">Gemini Live API</div>
+                      <div class="controls-grid">
+                        <div class="controls-row">
+                          <div class="model-selector-wrapper" style="display: none;">
+                            <button id="endpointSelectorBtn" class="btn model-selector-btn">
+                              <span id="endpointSelectorLabel">Gemini Live API</span>
+                              <span class="model-selector-caret">&#9662;</span>
+                            </button>
+                            <div id="endpointDropdown" class="model-dropdown hidden">
+                              <div class="model-option active" data-endpoint="gemini_live_api">Gemini Live API</div>
+                            </div>
+                          </div>
+                          <div class="model-selector-wrapper">
+                            <button id="modelSelectorBtn" class="btn model-selector-btn">
+                              <span id="modelSelectorLabel">models/gemini-robotics-er-2-streaming-preview</span>
+                              <span class="model-selector-caret">&#9662;</span>
+                            </button>
+                            <div id="modelDropdown" class="model-dropdown hidden">
+                              <!-- Filled dynamically by JS -->
+                            </div>
+                          </div>
+                          <button id="connectBtn" class="btn" title="Connect to Agent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
+                          <button id="micBtn" class="btn" title="Start Microphone"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+                          <button id="audioToggleBtn" class="btn active" title="Toggle Audio (Mute/Unmute)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg></button>
                         </div>
                       </div>
-                      <div class="model-selector-wrapper">
-                        <button id="modelSelectorBtn" class="btn model-selector-btn">
-                          <span id="modelSelectorLabel">models/gemini-robotics-er-2-streaming-preview</span>
-                          <span class="model-selector-caret">&#9662;</span>
-                        </button>
-                        <div id="modelDropdown" class="model-dropdown hidden">
-                          <!-- Filled dynamically by JS -->
-                        </div>
+                    </div>
+                    <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
+                      <canvas id="robot-twin-canvas"></canvas>
+                      <div class="twin-hud">
+                        <span class="twin-title">🤖 Robot Twin</span>
+                        <span id="twin-action" class="twin-action">Idle</span>
+                        <span id="twin-status" class="twin-status hidden"></span>
                       </div>
-                      <button id="connectBtn" class="btn" title="Connect to Agent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
-                      <button id="micBtn" class="btn" title="Start Microphone"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
-                      <button id="audioToggleBtn" class="btn active" title="Toggle Audio (Mute/Unmute)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                      <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                     </div>
                   </div>
                 </div>
@@ -375,6 +379,6 @@
     <script src="/static/agent-client.js?v=2"></script>
     <script src="/static/agent-ui.js?v=37"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=1"></script>
+    <script type="module" src="/static/robot-twin.js?v=2"></script>
   </body>
 </html>

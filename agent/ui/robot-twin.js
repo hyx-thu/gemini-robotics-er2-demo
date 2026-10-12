@@ -27,9 +27,10 @@ function init() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(38, 2, 0.05, 50);
-  const HOME_CAM = new THREE.Vector3(1.9, 1.35, 2.2);
-  const HOME_TARGET = new THREE.Vector3(0.35, 0.42, 0);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+  // Framed for a small square panel: robot + table, with headroom for rearing up.
+  const HOME_CAM = new THREE.Vector3(2.0, 1.55, 2.75);
+  const HOME_TARGET = new THREE.Vector3(0.38, 0.5, 0);
   camera.position.copy(HOME_CAM);
 
   const controls = new OrbitControls(camera, canvas);
@@ -214,7 +215,9 @@ function init() {
   // ------------------------------------------------------------- pose state --
   const STAND_H = 0.52, SIT_H = 0.3;
   const STOW = { yaw: 0, s: 3.06, e: -2.98, w: -0.06 };
-  const cur = { h: STAND_H, pitch: 0, roll: 0, yaw: 0, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0 };
+  // rear: 0 = on four legs, 1 = reared up on the hind legs (front feet in the air).
+  const REAR_PITCH = 0.95;
+  const cur = { h: STAND_H, pitch: 0, roll: 0, yaw: 0, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0 };
   const tgt = { ...cur };
   let armStowed = true;
   let sitting = false;
@@ -277,7 +280,14 @@ function init() {
   let pendingTarget = null;   // latest detect target (robot frame)
 
   const actions = {
-    stand: () => enqueue([wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; tgt.roll = 0; })]),
+    // Stand: get up on four legs, then rear up on the hind legs with the front
+    // feet lifted so the motion reads clearly, hold, and come back down.
+    stand: () => enqueue([
+      wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; tgt.roll = 0; tgt.rear = 0; }),
+      wait(1.1, () => { tgt.rear = 1; }),
+      wait(0.9, () => {}),
+      wait(1.0, () => { tgt.rear = 0; }),
+    ]),
     sit: () => enqueue([
       ...(armStowed ? [] : [wait(0.8, () => { armStowed = true; setArm(STOW); tgt.grip = 0; })]),
       wait(1.0, () => { sitting = true; tgt.h = SIT_H; tgt.pitch = 0.36; }),
@@ -507,8 +517,14 @@ function init() {
 
     // Body pose.
     const breathe = Math.sin(t * 2.2) * 0.006 * (1 - walkAmt);
-    body.position.y = cur.h + breathe + Math.abs(Math.sin(gaitPhase)) * 0.015 * walkAmt;
-    body.rotation.set(cur.roll, 0, cur.pitch);
+    // Rearing pivots the body about the hind hips (kept in place).
+    const q = cur.rear * REAR_PITCH;
+    const rx = -HIP_X, ry = HIP_Y;      // hind hip in body frame
+    const pivX = rx - (rx * Math.cos(q) - ry * Math.sin(q));
+    const pivY = ry - (rx * Math.sin(q) + ry * Math.cos(q));
+    body.position.x = pivX;
+    body.position.y = cur.h + pivY + breathe + Math.abs(Math.sin(gaitPhase)) * 0.015 * walkAmt;
+    body.rotation.set(cur.roll, 0, cur.pitch + q);
     robot.rotation.y = gait ? Math.sin(t * 3) * 0.02 : 0;
 
     // Leg IK: feet planted under the neutral hip positions (with gait offsets).
@@ -518,9 +534,17 @@ function init() {
       const ph = gaitPhase + L.phase;
       const stride = 0.09 * walkAmt * Math.sign((gait && gait.vx) || 1);
       const footW = tmpV.set(L.sx * HIP_X + Math.sin(ph) * stride, Math.max(0, Math.cos(ph)) * 0.07 * walkAmt, L.sz * HIP_Z);
-      // Sitting: hind feet slide slightly forward.
-      if (L.sx < 0) footW.x += 0.12 * (STAND_H - cur.h) / (STAND_H - SIT_H);
+      // Sitting: hind feet slide slightly forward; rearing: hind feet step in
+      // under the raised body.
+      if (L.sx < 0) footW.x += 0.12 * (STAND_H - cur.h) / (STAND_H - SIT_H) + 0.08 * cur.rear;
       footW.applyMatrix4(tmpM);   // into body frame
+      if (L.sx > 0 && cur.rear > 0.001) {
+        // Front feet lift off and tuck in front of the chest while rearing.
+        const tuckX = L.hip.position.x + 0.16, tuckY = L.hip.position.y - 0.27;
+        const wave = Math.sin(t * 6 + (L.sz > 0 ? 0 : Math.PI)) * 0.03 * cur.rear;
+        footW.x += (tuckX - footW.x) * cur.rear;
+        footW.y += (tuckY + wave - footW.y) * cur.rear;
+      }
       const dx = footW.x - L.hip.position.x, dy = footW.y - L.hip.position.y;
       let d = Math.hypot(dx, dy);
       d = clamp(d, Math.abs(L1 - L2) + 0.01, L1 + L2 - 0.001);
