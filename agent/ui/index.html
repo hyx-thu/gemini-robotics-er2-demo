@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=19" />
+    <link rel="stylesheet" href="/static/style.css?v=21" />
   </head>
   <body>
     <div class="container">
@@ -45,6 +45,9 @@
           </div>
         </div>
         <div class="header-actions">
+          <button id="skillsMapBtn" class="btn help-guide-icon-btn" title="Robot skills map — inputs, models & callable skills">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          </button>
           <div class="help-popover-wrapper">
             <button id="helpGuideBtn" class="btn help-guide-icon-btn" title="Quick Start &amp; Demo Prompts">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -335,6 +338,85 @@
         <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="btn">Close</button>
       </div>
     </div>
+    <!-- Robot Skills Map -->
+    <div id="skills-modal" class="skills-modal hidden" role="dialog" aria-label="Robot skills map">
+      <div class="skills-card">
+        <div class="skills-head">
+          <div>
+            <div class="skills-title">🐕 Spot Skills Map <span class="skills-sub">机器人技能示意图</span></div>
+            <div class="skills-desc">What goes into the model, which model reasons over it, and which robot skills (function tools) it can call.</div>
+          </div>
+          <button id="skillsCloseBtn" class="help-popover-close" title="Close">&times;</button>
+        </div>
+        <div class="skills-flow">
+          <!-- Inputs -->
+          <div class="sk-col">
+            <div class="sk-col-title">① Inputs <span>输入</span></div>
+            <div class="sk-node in"><b>🎤 Voice</b><small>Mic audio, streamed in real time</small></div>
+            <div class="sk-node in"><b>📹 Camera video</b><small>Live webcam / robot camera frames</small></div>
+            <div class="sk-node in"><b>⌨️ Text</b><small>Typed chat messages</small></div>
+            <div class="sk-node in"><b>❤️ Heartbeat</b><small>Periodic status prompt (≥ 3 s) to keep the robot proactive</small></div>
+            <div class="sk-node in"><b>📍 Location</b><small>Browser geolocation (for maps / local questions)</small></div>
+            <div class="sk-node in loop"><b>🔁 Tool results</b><small>Each skill's result + fresh frame feed back to the model</small></div>
+          </div>
+          <div class="sk-arrow"><svg viewBox="0 0 40 24"><path d="M2 12h30M26 5l8 7-8 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Live API<br>stream</span></div>
+          <!-- Models -->
+          <div class="sk-col">
+            <div class="sk-col-title">② Models <span>模型</span></div>
+            <div class="sk-node model er"><b>gemini-robotics-er-2</b><small>Embodied Reasoning (streaming). Text out → Gemini TTS voice. Spatial grounding: points, boxes, trajectories.</small></div>
+            <div class="sk-node model"><b>gemini-3.8-live</b><small>Native audio in/out, low-latency conversation.</small></div>
+            <div class="sk-node model"><b>gemini-3.8-live · extended thinking</b><small>Native audio with deeper reasoning for multi-step tasks.</small></div>
+            <div class="sk-node helper"><b>Helpers</b><small>Gemini TTS · Flash-Lite grounding (Search / Maps)</small></div>
+            <div class="sk-node helper"><b>Agent server</b><small>Plan tracking · action watchdog (command → visual confirm → retry) · stop / language lock</small></div>
+          </div>
+          <div class="sk-arrow"><svg viewBox="0 0 40 24"><path d="M2 12h30M26 5l8 7-8 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>function<br>calls</span></div>
+          <!-- Skills -->
+          <div class="sk-col sk-skills">
+            <div class="sk-col-title">③ Robot skills <span>可调用技能</span></div>
+            <div class="sk-grid">
+              <div class="sk-cat c-move"><div class="sk-cat-title">🐾 Locomotion &amp; posture <span>移动与姿态</span></div>
+                <div class="sk-skill"><code>stand</code> Stand up</div>
+                <div class="sk-skill"><code>sit</code> Sit down (only when asked)</div>
+                <div class="sk-skill"><code>drive</code> Short body-relative move / turn</div>
+                <div class="sk-skill"><code>get_waypoints</code> List known places</div>
+                <div class="sk-skill"><code>navigate</code> Walk to a named waypoint</div>
+                <div class="sk-skill"><code>stop</code> Stop all motion now</div>
+              </div>
+              <div class="sk-cat c-see"><div class="sk-cat-title">👁️ Perception <span>感知</span></div>
+                <div class="sk-skill"><code>look</code> Aim the gripper camera</div>
+                <div class="sk-skill"><code>detect</code> Locate one object / spot (point + box)</div>
+                <div class="sk-skill"><code>draw_points</code> Annotate the camera view</div>
+                <div class="sk-skill"><code>clear_overlay</code> Clear annotations</div>
+              </div>
+              <div class="sk-cat c-arm"><div class="sk-cat-title">🦾 Manipulation <span>操作</span></div>
+                <div class="sk-skill"><code>pick</code> Grasp the detected object (with 2D trajectory)</div>
+                <div class="sk-skill"><code>place</code> Put it down at the detected spot</div>
+                <div class="sk-skill"><code>stow</code> Fold the arm away</div>
+                <div class="sk-skill"><code>wait_for_pick_up</code> Hand an object to a person</div>
+              </div>
+              <div class="sk-cat c-plan"><div class="sk-cat-title">🧭 Planning &amp; verification <span>规划与验证</span></div>
+                <div class="sk-skill"><code>update_plan</code> Show / advance the step plan</div>
+                <div class="sk-skill"><code>confirm_action</code> Visually confirm a step succeeded</div>
+                <div class="sk-skill"><code>health_check</code> Robot / battery status</div>
+              </div>
+              <div class="sk-cat c-talk"><div class="sk-cat-title">💬 Communication <span>交流</span></div>
+                <div class="sk-skill"><code>send_message</code> Speak / reply to the user</div>
+                <div class="sk-skill"><code>ack</code> Heartbeat: nothing to do</div>
+              </div>
+              <div class="sk-cat c-web"><div class="sk-cat-title">🌐 World knowledge <span>外部知识</span></div>
+                <div class="sk-skill"><code>get_current_location</code> Where am I</div>
+                <div class="sk-skill"><code>google_search</code> Fresh web facts</div>
+                <div class="sk-skill"><code>google_maps_search</code> Nearby places, routes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sk-outputs">
+          <span class="sk-out-title">Outputs 输出 →</span>
+          <span>🔊 Voice reply</span><span>💬 Subtitles &amp; chat</span><span>📋 Plan panel</span><span>🎯 Camera overlays</span><span>🤖 3D robot twin</span><span>🐕 Robot motion</span>
+        </div>
+      </div>
+    </div>
     <!-- Latency Detail Panel (expands above footer) -->
     <div id="latency-detail" class="latency-detail hidden">
       <div class="latency-detail-section">
@@ -377,7 +459,7 @@
     </div>
     <script src="/static/media-handler.js?v=6"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=37"></script>
+    <script src="/static/agent-ui.js?v=38"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
     <script type="module" src="/static/robot-twin.js?v=3"></script>
   </body>

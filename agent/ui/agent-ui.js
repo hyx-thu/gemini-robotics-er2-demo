@@ -2890,6 +2890,23 @@ themeRadios.forEach(radio => {
   startLatencyScopeRotation();
 }
 
+// --- Robot skills map (header button → modal) ---
+{
+  const modal = document.getElementById('skills-modal');
+  const openBtn = document.getElementById('skillsMapBtn');
+  const closeBtn = document.getElementById('skillsCloseBtn');
+  const close = () => modal && modal.classList.add('hidden');
+  if (openBtn && modal) openBtn.onclick = (e) => { e.stopPropagation(); modal.classList.remove('hidden'); };
+  if (closeBtn) closeBtn.onclick = close;
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+      close();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+}
+
 // --- Keyboard Shortcuts ---
 document.addEventListener('keydown', (e) => {
   // Don't intercept when typing in input fields
