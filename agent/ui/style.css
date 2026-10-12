@@ -2321,3 +2321,29 @@ details.message.thought summary {
   .sk-arrow { transform: rotate(90deg); height: 40px; }
   .sk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Skills map v2 — flowchart style (overrides the card layout above). */
+.skills-flow { display: block; }
+.fc-svg { width: 100%; height: auto; display: block; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.fc-box { fill: var(--bg-surface, #fff); stroke: #5f6368; stroke-width: 1.3; }
+.fc-model { stroke: #1a73e8; stroke-width: 2.2; fill: rgba(26, 115, 232, 0.05); }
+.fc-cat { stroke: #9aa0a6; }
+.fc-bar { fill: var(--cat); }
+.fc-line { stroke: #5f6368; stroke-width: 1.4; }
+.fc-arrowhead { fill: #5f6368; }
+.fc-loop { stroke: #a142f4; stroke-width: 1.6; stroke-dasharray: 6 4; }
+.fc-loop-t { fill: #a142f4; font-size: 12px; font-weight: 600; }
+.fc-t { fill: var(--text-primary, #202124); font-size: 13.5px; font-weight: 600; }
+.fc-s { fill: var(--text-secondary, #5f6368); font-size: 11.5px; }
+.fc-big { fill: #1a73e8; font-size: 17px; font-weight: 700; }
+.fc-col { fill: var(--text-secondary, #5f6368); font-size: 11px; font-weight: 700; letter-spacing: .6px; }
+.fc-lbl { fill: var(--text-secondary, #5f6368); font-size: 10.5px; font-style: italic; }
+.fc-code { fill: var(--cat); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; font-weight: 600; }
+.dark-theme .fc-box { stroke: #9aa0a6; }
+.dark-theme .fc-line { stroke: #9aa0a6; }
+.dark-theme .fc-arrowhead { fill: #9aa0a6; }
+.dark-theme .fc-big { fill: #8ab4f8; }
+.dark-theme .fc-model { stroke: #8ab4f8; }
+.dark-theme .fc-loop { stroke: #c58af9; }
+.dark-theme .fc-loop-t { fill: #c58af9; }
+.skills-card { width: min(1240px, 100%); }
