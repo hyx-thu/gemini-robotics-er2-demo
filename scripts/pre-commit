@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# =====================================================================
+# pre-commit hook — refuse to commit anything that looks like a secret.
+#
+# Installed by: ./scripts/install-hooks.sh
+# Bypass (only if you are 100% sure): git commit --no-verify
+# =====================================================================
+set -euo pipefail
+
+# File names that must never be staged (even if gitignored, a forced add gets caught here).
+BLOCKED_FILES_RE='(^|/)\.env(\..*)?$|(^|/)API_KEY$|\.key$|service-account.*\.json$|credentials.*\.json$'
+# Content patterns: Google API keys, OAuth client secrets, private keys, bearer tokens.
+BLOCKED_CONTENT_RE='AIza[0-9A-Za-z_-]{35}|GOCSPX-[0-9A-Za-z_-]+|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|ya29\.[0-9A-Za-z_-]+'
+
+fail=0
+
+while IFS= read -r -d '' file; do
+  if [[ "$file" =~ $BLOCKED_FILES_RE ]] && [[ "$(basename "$file")" != ".env.example" ]]; then
+    echo "✖ pre-commit: refusing to commit secret file: $file" >&2
+    fail=1
+    continue
+  fi
+  # Only scan the staged blob, not the working tree.
+  if git show ":$file" 2>/dev/null | grep -Eq "$BLOCKED_CONTENT_RE"; then
+    echo "✖ pre-commit: possible secret found in staged file: $file" >&2
+    git show ":$file" | grep -En "$BLOCKED_CONTENT_RE" | sed 's/\(AIza[0-9A-Za-z_-]\{6\}\)[0-9A-Za-z_-]*/\1…(redacted)/g' | head -n 3 >&2
+    fail=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [[ $fail -ne 0 ]]; then
+  echo "" >&2
+  echo "Commit aborted. Move secrets to agent/.env (gitignored) or Secret Manager." >&2
+  exit 1
+fi

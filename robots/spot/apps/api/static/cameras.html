@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spot Camera Debug</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef1f0;
+      --panel: #ffffff;
+      --ink: #1d2426;
+      --muted: #667176;
+      --border: #cfd6d3;
+      --accent: #087f6d;
+      --accent-soft: #dcefeb;
+      --danger: #a93b35;
+      --viewport: #111617;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      letter-spacing: 0;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .identity {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      white-space: nowrap;
+    }
+
+    #status {
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    input[type="range"] { width: 96px; }
+
+    button {
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: var(--panel);
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent); }
+    button:disabled { cursor: wait; opacity: 0.55; }
+
+    main {
+      padding: 12px;
+    }
+
+    #grid {
+      width: 100%;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+
+    .camera-card {
+      min-width: 0;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .camera-head {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .camera-name {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .camera-meta {
+      flex: 0 0 auto;
+      max-width: 40%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: var(--aspect, 4 / 3);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      min-width: 0;
+      background: var(--viewport);
+    }
+
+    .viewport img,
+    .viewport canvas {
+      min-width: 0;
+      max-width: 100%;
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    .camera-state {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      max-width: calc(100% - 16px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 3px 6px;
+      border-radius: 4px;
+      background: rgb(17 22 23 / 78%);
+      color: #e9efed;
+      font-size: 10px;
+    }
+
+    .camera-card.error { border-color: #d8aaa6; }
+    .camera-card.error .camera-state { background: rgb(114 31 26 / 88%); }
+    .camera-card.agent-camera { border-color: var(--accent); }
+    .depth-tag { color: #8d4b9c; }
+    .visual-tag { color: var(--accent); }
+    .mono-tag { color: var(--muted); }
+
+    .empty {
+      grid-column: 1 / -1;
+      padding: 36px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 700px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .toolbar {
+        width: calc(100vw - 32px);
+        max-width: 100%;
+        align-self: stretch;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 74px;
+        gap: 8px;
+      }
+      .toolbar .control:first-child { min-width: 0; }
+      .toolbar .control:nth-child(2) { grid-column: 1 / -1; }
+      .toolbar button { grid-column: 2; grid-row: 1; width: 74px; padding: 0 8px; }
+      input[type="range"] { width: min(72px, 19vw); }
+      main { padding: 8px; overflow-x: hidden; }
+      #grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="identity">
+      <h1>Spot Camera Debug</h1>
+      <span id="status">loading sources</span>
+    </div>
+    <div class="toolbar">
+      <label class="control">
+        <span>JPEG <output id="quality-value">70</output>%</span>
+        <input id="quality" type="range" min="30" max="95" step="5" value="70">
+      </label>
+      <label class="control">
+        <input id="auto-refresh" type="checkbox">
+        <span>Auto 5s</span>
+      </label>
+      <button id="refresh" type="button" title="Refresh all cameras">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="grid" aria-live="polite"></section>
+  </main>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const status = document.getElementById('status');
+    const refreshButton = document.getElementById('refresh');
+    const autoRefresh = document.getElementById('auto-refresh');
+    const quality = document.getElementById('quality');
+    const qualityValue = document.getElementById('quality-value');
+
+    let sources = [];
+    let refreshing = false;
+    let refreshTimer = null;
+
+    function setStatus(text) {
+      status.textContent = text;
+    }
+
+    function sourceKind(source) {
+      if (source.image_type === 2) return ['depth', 'depth-tag'];
+      if (source.name.includes('color')) return ['color', 'visual-tag'];
+      return ['mono', 'mono-tag'];
+    }
+
+    function sourceCard(source) {
+      const [kind, kindClass] = sourceKind(source);
+      const card = document.createElement('article');
+      card.className = source.name === 'hand_color_image'
+        ? 'camera-card agent-camera'
+        : 'camera-card';
+      card.dataset.source = source.name;
+      card.innerHTML = `
+        <div class="camera-head">
+          <span class="camera-name" title="${source.name}">${source.name}</span>
+          <span class="camera-meta ${kindClass}">
+            ${source.name === 'hand_color_image' ? 'agent · ' + kind : source.cols + 'x' + source.rows + ' · ' + kind}
+          </span>
+        </div>
+        <div class="viewport" style="--aspect: ${source.cols} / ${source.rows}">
+          <img alt="${source.name}" hidden>
+          <canvas width="${source.cols}" height="${source.rows}" hidden></canvas>
+          <span class="camera-state">waiting</span>
+        </div>`;
+      return card;
+    }
+
+    function depthColor(normalized) {
+      const t = Math.max(0, Math.min(1, normalized));
+      const stops = [
+        [242, 76, 44],
+        [247, 196, 60],
+        [57, 180, 117],
+        [45, 164, 207],
+        [62, 78, 178],
+      ];
+      const scaled = t * (stops.length - 1);
+      const index = Math.min(stops.length - 2, Math.floor(scaled));
+      const mix = scaled - index;
+      return stops[index].map((value, channel) =>
+        Math.round(value + (stops[index + 1][channel] - value) * mix));
+    }
+
+    function renderDepth(card, source, buffer) {
+      const expected = source.cols * source.rows * 2;
+      if (buffer.byteLength < expected) {
+        throw new Error(`raw depth ${buffer.byteLength}B, expected ${expected}B`);
+      }
+
+      const view = new DataView(buffer);
+      const samples = [];
+      const pixelCount = source.cols * source.rows;
+      const sampleStep = Math.max(1, Math.floor(pixelCount / 5000));
+      for (let index = 0; index < pixelCount; index += sampleStep) {
+        const value = view.getUint16(index * 2, true);
+        if (value > 0 && value < 65535) samples.push(value);
+      }
+      if (!samples.length) throw new Error('no valid depth samples');
+      samples.sort((a, b) => a - b);
+      const near = samples[Math.floor(samples.length * 0.02)];
+      const far = samples[Math.floor(samples.length * 0.98)];
+      const span = Math.max(1, far - near);
+
+      const canvas = card.querySelector('canvas');
+      const image = card.querySelector('img');
+      const context = canvas.getContext('2d');
+      const pixels = context.createImageData(source.cols, source.rows);
+      for (let index = 0; index < pixelCount; index++) {
+        const depth = view.getUint16(index * 2, true);
+        const offset = index * 4;
+        if (depth === 0 || depth === 65535) {
+          pixels.data[offset + 3] = 255;
+          continue;
+        }
+        const color = depthColor((depth - near) / span);
+        pixels.data[offset] = color[0];
+        pixels.data[offset + 1] = color[1];
+        pixels.data[offset + 2] = color[2];
+        pixels.data[offset + 3] = 255;
+      }
+      context.putImageData(pixels, 0, 0);
+      image.hidden = true;
+      canvas.hidden = false;
+
+      const scale = source.depth_scale || 1000;
+      return `${(near / scale).toFixed(2)}–${(far / scale).toFixed(2)} m`;
+    }
+
+    async function renderVisual(card, response) {
+      const blob = await response.blob();
+      const image = card.querySelector('img');
+      const canvas = card.querySelector('canvas');
+      const oldUrl = image.dataset.objectUrl;
+      const objectUrl = URL.createObjectURL(blob);
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error('image decode failed'));
+        image.src = objectUrl;
+      });
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
+      image.dataset.objectUrl = objectUrl;
+      canvas.hidden = true;
+      image.hidden = false;
+      return `${Math.round(blob.size / 1024)} KB`;
+    }
+
+    async function refreshSource(source) {
+      const card = grid.querySelector(`[data-source="${CSS.escape(source.name)}"]`);
+      const state = card.querySelector('.camera-state');
+      card.classList.remove('error');
+      state.textContent = 'capturing';
+      const url = `/images/${encodeURIComponent(source.name)}` +
+          `?quality_percent=${quality.value}&t=${Date.now()}`;
+      try {
+        const response = await fetch(url, {cache: 'no-store'});
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(`${response.status} ${detail}`);
+        }
+        const detail = source.image_type === 2
+          ? renderDepth(card, source, await response.arrayBuffer())
+          : await renderVisual(card, response);
+        state.textContent = `${new Date().toLocaleTimeString()} · ${detail}`;
+      } catch (error) {
+        card.classList.add('error');
+        state.textContent = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    async function runLimited(items, limit, worker) {
+      let next = 0;
+      async function run() {
+        while (next < items.length) {
+          const item = items[next++];
+          await worker(item);
+        }
+      }
+      await Promise.all(Array.from({length: Math.min(limit, items.length)}, run));
+    }
+
+    async function refreshAll() {
+      if (refreshing || !sources.length) return;
+      refreshing = true;
+      refreshButton.disabled = true;
+      setStatus(`refreshing ${sources.length} cameras`);
+      const started = performance.now();
+      try {
+        await runLimited(sources, 3, refreshSource);
+        const errors = grid.querySelectorAll('.camera-card.error').length;
+        const elapsed = ((performance.now() - started) / 1000).toFixed(1);
+        setStatus(`${sources.length - errors}/${sources.length} cameras · ${elapsed}s`);
+      } finally {
+        refreshing = false;
+        refreshButton.disabled = false;
+      }
+    }
+
+    function updateAutoRefresh() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = autoRefresh.checked ? setInterval(refreshAll, 5000) : null;
+    }
+
+    async function initialize() {
+      try {
+        const response = await fetch('/images/sources', {cache: 'no-store'});
+        if (!response.ok) throw new Error(await response.text());
+        sources = await response.json();
+        sources.sort((left, right) => {
+          if (left.name === 'hand_color_image') return -1;
+          if (right.name === 'hand_color_image') return 1;
+          return left.name.localeCompare(right.name);
+        });
+        grid.replaceChildren(...sources.map(sourceCard));
+        if (!sources.length) {
+          grid.innerHTML = '<div class="empty">No camera sources reported.</div>';
+          setStatus('no cameras');
+          return;
+        }
+        await refreshAll();
+      } catch (error) {
+        grid.innerHTML = '<div class="empty">Connect Spot, then refresh this page.</div>';
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    refreshButton.addEventListener('click', refreshAll);
+    autoRefresh.addEventListener('change', updateAutoRefresh);
+    quality.addEventListener('input', () => { qualityValue.value = quality.value; });
+    quality.addEventListener('change', refreshAll);
+    window.addEventListener('beforeunload', () => {
+      if (refreshTimer) clearInterval(refreshTimer);
+      document.querySelectorAll('img[data-object-url]').forEach((image) =>
+        URL.revokeObjectURL(image.dataset.objectUrl));
+    });
+
+    initialize();
+  </script>
+</body>
+</html>

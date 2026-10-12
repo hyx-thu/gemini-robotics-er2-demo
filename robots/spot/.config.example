@@ -1,0 +1,13 @@
+# Copy this file to .config and fill in real values.
+# The file is ignored by git.
+
+SPOT_HOSTNAME=192.168.80.3
+BOSDYN_CLIENT_USERNAME=user
+BOSDYN_CLIENT_PASSWORD=replace-with-spot-password
+SPOT_TAKE_LEASE=true
+
+GEMINI_API_KEY=replace-with-gemini-api-key
+
+FASTAPI_BASE_URL=http://127.0.0.1:8000
+HYDRATION_PORT=3000
+HYDRATION_AUTO_CONNECT=false

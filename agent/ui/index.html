@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini Robotic ER2 — Live Robot Control</title>
+    <link rel="stylesheet" href="/static/style.css?v=15" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="app-header">
+        <div class="header-brand">
+          <div class="header-brand-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 192 192">
+              <defs>
+                <linearGradient id="geminiOfficialSparkGrad" x1="55.12" y1="138.12" x2="148.5" y2="52.88" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#217bfe"/>
+                  <stop offset="0.27" stop-color="#078efb"/>
+                  <stop offset="0.68" stop-color="#a190ff"/>
+                  <stop offset="0.88" stop-color="#bd99fe"/>
+                  <stop offset="1" stop-color="#ee4d5d"/>
+                </linearGradient>
+              </defs>
+              <path d="M183.65,95.66c-12.07,0-23.22-2.29-33.83-6.79-10.62-4.65-19.98-11-27.83-18.85-7.85-7.85-14.19-17.22-18.85-27.83-4.51-10.61-6.79-21.77-6.79-33.84,0-.19-.15-.35-.35-.35s-.35.16-.35.35c0,12.07-2.36,23.22-7.01,33.84-4.51,10.62-10.78,19.98-18.63,27.83-7.85,7.85-17.22,14.19-27.83,18.85-10.61,4.51-21.77,6.79-33.84,6.79-.19,0-.35.16-.35.35s.16.35.35.35c12.07,0,23.22,2.36,33.84,7.01,10.62,4.51,19.98,10.78,27.83,18.63,7.85,7.85,14.12,17.22,18.63,27.84,4.65,10.61,7.01,21.76,7.01,33.83,0,.19.16.35.35.35s.35-.15.35-.35c0-12.07,2.28-23.22,6.79-33.83,4.65-10.62,10.99-19.98,18.85-27.84,7.85-7.85,17.21-14.12,27.83-18.63,10.61-4.65,21.76-7.01,33.83-7.01.19,0,.35-.15.35-.35s-.16-.35-.35-.35Z" fill="url(#geminiOfficialSparkGrad)"/>
+            </svg>
+          </div>
+          <div class="header-brand-text">
+            <div class="header-brand-title-row">
+              <span class="header-brand-gemini">Gemini</span>
+              <span class="header-brand-product">Robotic ER2</span>
+              <span class="header-brand-badge">LIVE</span>
+            </div>
+            <span class="header-brand-subtitle">Embodied Reasoning &amp; Real-Time Robot Control</span>
+          </div>
+        </div>
+        <div class="agent-selector-wrapper">
+          <button id="agentSelectorBtn" class="agent-selector-btn">
+            <span id="agentSelectorLabel">Spot</span>
+            <span class="agent-selector-caret">&#9662;</span>
+          </button>
+          <div id="agentDropdown" class="agent-dropdown hidden">
+            <div class="agent-option" data-agent="human">Human</div>
+            <div class="agent-option active" data-agent="spot">Spot</div>
+            <div class="agent-option" data-agent="tinybot">Tinybot</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="help-popover-wrapper">
+            <button id="helpGuideBtn" class="btn help-guide-icon-btn" title="Quick Start &amp; Demo Prompts">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </button>
+            <div id="helpGuidePopover" class="help-guide-popover hidden">
+              <div class="help-popover-header">
+                <div class="help-popover-title">Quick Start &amp; Demo Guide</div>
+                <button id="helpGuideCloseBtn" class="help-popover-close" title="Close">&times;</button>
+              </div>
+              <div class="help-popover-body">
+                <div class="help-section">
+                  <div class="help-section-title">⚡ How It Works (Human-in-the-Loop Simulation)</div>
+                  <ol class="help-steps-list">
+                    <li><strong>Select Embodiment &amp; Model</strong>: Choose <code>Spot</code> at the top center, and select <code>gemini-robotics-er-2</code> or <code>gemini-3.8-live</code> below the video feed.</li>
+                    <li><strong>Connect &amp; Speak</strong>: Click the <strong>Power</strong> button to start the session and webcam, then enable the <strong>Microphone</strong> to give voice commands (or type in the chat panel).</li>
+                    <li><strong>Manually Simulate Robot Actions</strong>: When the model issues tool commands such as <code>detect</code>, <code>pick</code>, or <code>place</code> (shown on the video overlay &amp; Plan HUD), <strong>please manually act as the robot arm by picking up or moving the physical object in front of the camera</strong> as instructed. The model continuously observes the live video feed to visually verify that the action succeeded before advancing to the next step in its plan!</li>
+                  </ol>
+                </div>
+                <div class="help-section">
+                  <div class="help-section-title">🎯 Recommended Pick &amp; Place Prompts <span class="help-click-hint">(Click to fill input, or say out loud)</span></div>
+                  <div class="help-prompt-group">
+                    <div class="help-prompt-category">📦 Single-Object Pick</div>
+                    <div class="help-prompt-chips">
+                      <button type="button" class="help-prompt-chip" data-prompt="Pick up the phone on the table">“Pick up the phone on the table”</button>
+                      <button type="button" class="help-prompt-chip" data-prompt="Pick up the cup in front of you">“Pick up the cup in front of you”</button>
+                    </div>
+                  </div>
+                  <div class="help-prompt-group">
+                    <div class="help-prompt-category">📍 Pick &amp; Place (Multi-Step Plan + Visual Verification)</div>
+                    <div class="help-prompt-chips">
+                      <button type="button" class="help-prompt-chip" data-prompt="Pick up the phone and place it next to the laptop">“Pick up the phone and place it next to the laptop”</button>
+                      <button type="button" class="help-prompt-chip" data-prompt="Grab the bottle on the left and move it to the right side of the desk">“Grab the bottle on the left and move it to the right side of the desk”</button>
+                      <button type="button" class="help-prompt-chip" data-prompt="Pick up the mouse and put it next to the keyboard">“Pick up the mouse and put it next to the keyboard”</button>
+                    </div>
+                  </div>
+                  <div class="help-prompt-group">
+                    <div class="help-prompt-category">🔄 Multi-Object Sequential Sorting</div>
+                    <div class="help-prompt-chips">
+                      <button type="button" class="help-prompt-chip" data-prompt="Help me tidy up the desk: first move the mouse to the right, then place the phone in the center">“Help me tidy up the desk: first move the mouse to the right, then place the phone in the center”</button>
+                      <button type="button" class="help-prompt-chip" data-prompt="What objects do you see on the table? Detect where the phone is.">“What objects do you see on the table? Detect where the phone is.”</button>
+                    </div>
+                  </div>
+                  <div class="help-prompt-group">
+                    <div class="help-prompt-category">🐕 Spot Posture &amp; Gripper Commands</div>
+                    <div class="help-prompt-chips">
+                      <button type="button" class="help-prompt-chip" data-prompt="Stand up and open your gripper">“Stand up and open your gripper”</button>
+                      <button type="button" class="help-prompt-chip" data-prompt="Close your gripper and sit down">“Close your gripper and sit down”</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button id="chatToggle" class="btn" title="Toggle chat panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></button>
+        </div>
+      </header>
+
+      <div id="main-content">
+        <div class="main-body">
+          <main>
+            <div class="app-section" id="app-section">
+
+              <div class="app-grid">
+                <div class="left-panel">
+                  <div class="video-container">
+                    <div id="video-placeholder">Start camera to send video</div>
+                    <video id="video-preview" autoplay playsinline muted></video>
+                    <img id="robot-cam-img" class="robot-cam-img hidden" alt="Robot Camera" />
+                    <canvas id="video-canvas" style="display: none"></canvas>
+                    <canvas id="overlay-canvas"></canvas>
+                  </div>
+                  <div id="plan-hud" class="plan-hud hidden" title="Current plan step">
+                    <div class="hud-dots"></div>
+                    <div class="hud-line"><span class="hud-idx"></span><span class="hud-text"></span></div>
+                    <div class="hud-watchdog hidden"></div>
+                  </div>
+                  <div id="status-label" class="status-label disconnected">Disconnected</div>
+
+                  <div class="controls-grid">
+                    <div class="controls-row">
+                      <div class="model-selector-wrapper" style="display: none;">
+                        <button id="endpointSelectorBtn" class="btn model-selector-btn">
+                          <span id="endpointSelectorLabel">Gemini Live API</span>
+                          <span class="model-selector-caret">&#9662;</span>
+                        </button>
+                        <div id="endpointDropdown" class="model-dropdown hidden">
+                          <div class="model-option active" data-endpoint="gemini_live_api">Gemini Live API</div>
+                        </div>
+                      </div>
+                      <div class="model-selector-wrapper">
+                        <button id="modelSelectorBtn" class="btn model-selector-btn">
+                          <span id="modelSelectorLabel">models/gemini-robotics-er-2-streaming-preview</span>
+                          <span class="model-selector-caret">&#9662;</span>
+                        </button>
+                        <div id="modelDropdown" class="model-dropdown hidden">
+                          <!-- Filled dynamically by JS -->
+                        </div>
+                      </div>
+                      <button id="connectBtn" class="btn" title="Connect to Agent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
+                      <button id="micBtn" class="btn" title="Start Microphone"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+                      <button id="audioToggleBtn" class="btn active" title="Toggle Audio (Mute/Unmute)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          
+
+          </main>
+        </div>
+
+        <div id="chat-sidebar" class="chat-sidebar">
+          <div class="sidebar-header" style="padding: 10px; border-bottom: 1px solid var(--border-color); font-weight: bold;">Chat</div>
+          <div id="plan-panel" class="plan-panel hidden">
+            <div class="plan-header">
+              <span class="plan-title">📋 Plan</span>
+              <span id="plan-status" class="plan-status">planning</span>
+              <span id="plan-progress" class="plan-progress"></span>
+              <button id="plan-stop-btn" class="plan-stop-btn" title="Stop the current task (or just say “stop” / “停止”)" style="margin-left:auto;border:1px solid #d33;background:#fff0f0;color:#c00;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;line-height:1.4;">⏹ Stop</button>
+            </div>
+            <div class="plan-progressbar"><div id="plan-progressbar-fill" class="plan-progressbar-fill"></div></div>
+            <div id="plan-goal" class="plan-goal"></div>
+            <ol id="plan-steps" class="plan-steps"></ol>
+            <div id="plan-watchdog" class="plan-watchdog hidden" title="Action watchdog: command → visual confirmation → retry → abort">
+              <span class="wd-icon"></span><span class="wd-text"></span>
+              <div class="wd-bar"><div class="wd-bar-fill"></div></div>
+            </div>
+            <div id="plan-note" class="plan-note hidden"></div>
+          </div>
+          <div class="sidebar-content" style="flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative;">
+            <div class="chat-log" id="chat-log"></div>
+          </div>
+          <div class="input-area">
+            <input type="text" id="textInput" placeholder="Type a message..." />
+            <button id="sendBtn" class="btn">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content modal-content-lg">
+        <div class="modal-sidebar">
+          <ul>
+            <li id="modal-tab-config" class="active" data-tab="config">Agent Config</li>
+            <li id="modal-tab-appearance" data-tab="appearance">Appearance</li>
+          </ul>
+        </div>
+        <div class="modal-body">
+          <!-- Agent Config Tab -->
+          <div id="modal-panel-config" class="modal-panel">
+            <h2 id="config-title">Agent Config</h2>
+            <div class="config-grid">
+              <div class="config-item">
+                <label>Model</label>
+                <code id="config-model">—</code>
+              </div>
+              <div class="config-item">
+                <label>Response Modality</label>
+                <code id="config-modality">—</code>
+              </div>
+              <div class="config-item">
+                <label>TTS</label>
+                <code id="config-tts">—</code>
+              </div>
+              <div class="config-item">
+                <label>TTS Voice</label>
+                <code id="config-tts-voice">—</code>
+              </div>
+              <div class="config-item">
+                <label>Endpoint</label>
+                <code id="config-endpoint">—</code>
+              </div>
+              <div class="config-item">
+                <label>Service Address</label>
+                <code id="config-service">—</code>
+              </div>
+            </div>
+            <h3>Tools</h3>
+            <div id="config-tools" class="config-tools">—</div>
+            <h3>Thinking Level</h3>
+            <div class="config-help-text" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; margin-top: -5px;">Controls how much the model thinks before responding.</div>
+            <div style="margin-bottom: 10px;">
+              <select id="config-thinking-level" class="form-select" style="width: 100%;">
+                <option value="none">None (disabled)</option>
+                <option value="minimal">Minimal</option>
+                <option value="low" selected>Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <h3>Developer Instruction</h3>
+            <div class="config-help-text" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; margin-top: -5px;">Persistent across turns and queries, but mutable by developers (e.g. "You are a chatbot for Uber.")</div>
+            <textarea id="config-developer-prompt" class="config-prompt" style="width: 100%; height: 300px; resize: vertical; box-sizing: border-box;"></textarea>
+            <h3>Heartbeat Text</h3>
+            <div class="config-help-text" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; margin-top: -5px;">The text sent as <code>realtime_input.text</code> with each heartbeat. The built-in default is shown until overridden.</div>
+            <textarea id="config-heartbeat-text" class="config-prompt" style="width: 100%; height: 100px; resize: vertical; box-sizing: border-box;"></textarea>
+            <h3>Heartbeat Settings</h3>
+            <div class="config-grid" style="margin-bottom: 15px;">
+              <div class="config-item">
+                <label>Interval (seconds)</label>
+                <input type="number" id="config-heartbeat-interval" step="0.1" min="0.1" />
+              </div>
+              <div class="config-item">
+                <label>Min Delay (seconds)</label>
+                <input type="number" id="config-heartbeat-min-delay" step="0.1" min="0.0" />
+              </div>
+              <div class="config-item" style="grid-column: span 2; flex-direction: row; align-items: center; gap: 8px; margin-top: 5px;">
+                <input type="checkbox" id="config-use-event-driven-heartbeat" style="margin: 0;" />
+                <label style="margin: 0; font-weight: normal;">Use Event-Driven Heartbeat</label>
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+              <button id="update-prompt-btn" class="btn btn-primary">Update Instructions</button>
+              <button id="reset-prompt-btn" class="btn" disabled>Reset to Default</button>
+            </div>
+          </div>
+          <!-- Appearance Tab -->
+          <div id="modal-panel-appearance" class="modal-panel hidden">
+            <h2>Appearance</h2>
+            <div class="theme-options">
+              <label>
+                <input type="radio" name="theme" value="light" checked> Light
+              </label>
+              <label>
+                <input type="radio" name="theme" value="dark"> Dark
+              </label>
+            </div>
+          </div>
+          <button id="close-modal-btn" class="btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Model Modal -->
+    <div id="custom-model-modal" class="modal hidden">
+      <div class="modal-content modal-content-sm">
+        <div class="modal-body">
+          <h2>Custom Model</h2>
+          <div class="custom-model-form">
+            <div class="form-group">
+              <label for="custom-model-input">Model Name</label>
+              <input type="text" id="custom-model-input" placeholder="e.g. models/gemini-2.5-flash-native-audio-latest" />
+            </div>
+            <div class="form-group">
+              <label for="custom-modality-select">Model Type</label>
+              <select id="custom-modality-select" class="form-select">
+                <option value="TEXT">Text Model (uses TTS)</option>
+                <option value="AUDIO">Audio Model (direct Live audio)</option>
+              </select>
+            </div>
+          </div>
+          <div class="custom-model-actions">
+            <button id="custom-model-cancel" class="btn">Cancel</button>
+            <button id="custom-model-apply" class="btn btn-primary">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Keyboard Shortcuts</h2>
+        <table class="shortcuts-table">
+          <tr><td><kbd>Space</kbd></td><td>Toggle microphone</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close modal / Send stop</td></tr>
+          <tr><td><kbd>1-3</kbd></td><td>Switch agent</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Toggle theme</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show shortcuts</td></tr>
+        </table>
+        <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="btn">Close</button>
+      </div>
+    </div>
+    <!-- Latency Detail Panel (expands above footer) -->
+    <div id="latency-detail" class="latency-detail hidden">
+      <div class="latency-detail-section">
+        <h4>Server Breakdown</h4>
+        <div class="metric-row"><span class="metric-label">① Client OH</span> <span id="srv-client-val" class="metric-value">--</span> <span id="srv-client-count" class="metric-count"></span></div>
+        <div class="metric-row"><span class="metric-label">② Server OH</span> <span id="srv-server-val" class="metric-value">--</span> <span id="srv-server-count" class="metric-count"></span></div>
+        <div class="metric-row"><span class="metric-label">③ Prefill</span> <span id="srv-prefill-val" class="metric-value">--</span> <span id="srv-prefill-count" class="metric-count"></span></div>
+        <div class="metric-row"><span class="metric-label">④ Decode</span> <span id="srv-decode-val" class="metric-value">--</span> <span id="srv-decode-count" class="metric-count"></span></div>
+        <hr>
+        <div class="metric-row"><span class="metric-label">Srv TTFT</span> <span id="srv-ttft-val" class="metric-value">--</span> <span id="srv-ttft-count" class="metric-count"></span></div>
+        <div class="metric-row"><span class="metric-label">Client TTFT</span> <span id="srv-client-ttft-val" class="metric-value">--</span> <span id="srv-client-ttft-count" class="metric-count"></span></div>
+      </div>
+      <div class="latency-detail-section">
+        <h4>Token Usage</h4>
+        <div class="metric-row"><span class="metric-label">Prompt (input)</span> <span id="tok-prompt-val" class="metric-value">--</span></div>
+        <div class="metric-row"><span class="metric-label">Response (output)</span> <span id="tok-response-val" class="metric-value">--</span></div>
+        <div class="metric-row"><span class="metric-label">Thoughts</span> <span id="tok-thoughts-val" class="metric-value">--</span></div>
+        <div class="metric-row"><span class="metric-label">Total</span> <span id="tok-total-val" class="metric-value">--</span></div>
+        <hr>
+        <div class="metric-row"><span class="metric-label">Cumulative Output</span> <span id="tok-cumulative-val" class="metric-value">--</span></div>
+        <div class="metric-row"><span class="metric-label">By Modality (input)</span> <span id="tok-modality-val" class="metric-value" style="font-size: 10px;">--</span></div>
+      </div>
+    </div>
+    <!-- Debug Footer -->
+    <div id="debug-footer" class="debug-footer">
+      <button id="settings-btn" class="eval-toggle-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</button>
+      <div id="latency-bar" class="latency-bar">
+        <button id="latencyScopeBtn" class="latency-scope-btn scope-user" title="Latency scope">&#128100; USER</button>
+        <span class="latency-bar-item">TTFT <span id="ttft-val" class="metric-value">--</span> <span id="ttft-count" class="metric-count"></span></span>
+        <span class="latency-bar-item">TTFC <span id="ttfc-val" class="metric-value">--</span> <span id="ttfc-count" class="metric-count"></span></span>
+        <span class="latency-bar-item">TTLT <span id="ttlt-val" class="metric-value">--</span> <span id="ttlt-count" class="metric-count"></span></span>
+        <span class="latency-bar-item latency-bar-divider">|</span>
+        <span class="latency-bar-item" title="Thinking level">&#129504; <span id="think-val" class="metric-value">--</span></span>
+        <span class="latency-bar-item latency-bar-divider">|</span>
+        <span class="latency-bar-item" title="Context window utilization">CTX <span id="tok-ctx-pct" class="metric-value">--</span></span>
+        <span class="latency-bar-item" title="Input (prompt) tokens">IN <span id="tok-input-bar" class="metric-value">--</span></span>
+        <span class="latency-bar-item" title="Output (response) tokens">OUT <span id="tok-output-bar" class="metric-value">--</span></span>
+        <button id="latencyDetailToggle" class="debug-toggle-btn" title="Server breakdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
+      </div>
+    </div>
+    <script src="/static/media-handler.js?v=6"></script>
+    <script src="/static/agent-client.js?v=2"></script>
+    <script src="/static/agent-ui.js?v=35"></script>
+  </body>
+</html>

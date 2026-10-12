@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spot Detection</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f6f3;
+      --panel: #ffffff;
+      --ink: #1e2326;
+      --muted: #647075;
+      --border: #d8ddda;
+      --accent: #197064;
+      --accent-2: #315f9d;
+      --danger: #b3261e;
+      --button: #edf1ef;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      display: grid;
+      grid-template-rows: 50px minmax(0, 1fr);
+    }
+
+    header {
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    #status {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    main {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
+
+    aside {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    .workspace {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .viewer {
+      min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      background: #101314;
+      position: relative;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .image-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+    }
+
+    .image-stage:focus-visible {
+      outline: 2px solid #f4f7f4;
+      outline-offset: -4px;
+    }
+
+    #cameraImage {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .view-controls {
+      position: absolute;
+      left: 50%;
+      bottom: 12px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: end;
+      gap: 20px;
+      padding: 8px;
+      background: rgba(16, 19, 20, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      z-index: 2;
+    }
+
+    #cloudCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      background: #11171a;
+    }
+
+    #cloudCanvas:active { cursor: grabbing; }
+
+    .row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .connect-grid {
+      display: grid;
+      grid-template-columns: 1fr 0.62fr;
+      gap: 8px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    select,
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      padding: 8px 9px;
+    }
+
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+
+    button {
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--button);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .actions button,
+    .view-controls button {
+      min-width: 0;
+    }
+
+    .control-group {
+      display: grid;
+      gap: 6px;
+    }
+
+    .key-cluster {
+      grid-template-columns: repeat(3, 34px);
+      grid-template-rows: repeat(2, 32px);
+    }
+
+    .key-up { grid-column: 2; grid-row: 1; }
+    .key-left { grid-column: 1; grid-row: 2; }
+    .key-down { grid-column: 2; grid-row: 2; }
+    .key-right { grid-column: 3; grid-row: 2; }
+
+    .forward-cluster {
+      grid-template-columns: 34px;
+      grid-template-rows: repeat(2, 32px);
+    }
+
+    .roll-cluster {
+      grid-template-columns: repeat(2, 42px);
+      grid-template-rows: 32px;
+    }
+
+    .view-controls button {
+      height: 32px;
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(237, 241, 239, 0.94);
+      font-size: 12px;
+      padding: 0;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .readout {
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .readout > div {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+
+    .readout strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .readout span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    #robotReadout {
+      display: block;
+      max-height: 64px;
+      overflow: auto;
+    }
+
+    pre {
+      margin: 0;
+      max-height: 120px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #f8faf9;
+      color: var(--ink);
+      padding: 8px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
+      }
+
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .workspace {
+        min-height: 0;
+        grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Spot Detection</h1>
+    <div id="status">idle</div>
+  </header>
+  <main>
+    <aside>
+      <div class="row">
+        <label><span>Robot</span></label>
+        <div class="connect-grid">
+          <input id="hostname" value="192.168.80.3" autocomplete="off" aria-label="hostname">
+          <input id="username" value="user" autocomplete="username" aria-label="username">
+          <input id="password" class="wide" type="password" autocomplete="current-password" placeholder="password" aria-label="password">
+          <button id="connect" class="wide">Connect</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="instruction"><span>Target</span></label>
+        <textarea id="instruction">the soda can</textarea>
+      </div>
+
+      <div class="row">
+        <label for="colorSource"><span>Color Camera</span></label>
+        <select id="colorSource"></select>
+      </div>
+
+      <div class="row">
+        <label for="depthSource"><span>Depth Camera</span></label>
+        <select id="depthSource"></select>
+      </div>
+
+      <div class="row">
+        <label for="model"><span>Model</span></label>
+        <input id="model" value="gemini-robotics-er-1.6-preview">
+      </div>
+
+      <div class="row">
+        <label for="apiKey"><span>Gemini Key</span><span>optional</span></label>
+        <input id="apiKey" type="password" autocomplete="off">
+      </div>
+
+      <div class="row">
+        <label for="stride"><span>Point Stride</span><span id="strideValue">4</span></label>
+        <input id="stride" type="range" min="1" max="16" step="1" value="4">
+      </div>
+
+      <div class="row">
+        <label for="approachDistance"><span>Approach cm</span><span id="approachDistanceValue">0</span></label>
+        <input id="approachDistance" type="range" min="-10" max="10" step="1" value="0">
+      </div>
+
+      <div class="actions">
+        <button id="refresh">Refresh</button>
+        <button id="autoRefresh">Auto Refresh</button>
+        <button id="cameraView">Camera View</button>
+        <button id="detect" class="primary">Detect</button>
+        <button id="armReady">Ready</button>
+        <button id="armCarry">Carry</button>
+        <button id="armStow">Stow</button>
+        <button id="armApproach" disabled>Approach</button>
+        <button id="waitDelivery">Wait Delivery</button>
+        <button id="armFreeze">Freeze Arm</button>
+        <button id="oscMonitor">Osc Monitor</button>
+        <button id="gripperToggle">Open Grip</button>
+      </div>
+
+      <div class="readout">
+        <div><strong>2D</strong> <span id="detectionReadout">none</span></div>
+        <div><strong>Camera 3D</strong> <span id="cameraReadout">none</span></div>
+        <div><strong>Vision Pose</strong> <span id="poseReadout">none</span></div>
+        <div><strong>Cloud</strong> <span id="cloudReadout">none</span></div>
+        <div><strong>Robot</strong> <span id="robotReadout">none</span></div>
+        <div><strong>Errors</strong> <span id="errorReadout">none</span></div>
+      </div>
+
+      <div class="row">
+        <label><span>Model Raw Output</span></label>
+        <pre id="modelRaw">none</pre>
+      </div>
+
+      <div class="row">
+        <label><span>Parsed JSON</span></label>
+        <pre id="modelParsed">none</pre>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="viewer">
+        <div class="image-stage" id="imageStage" tabindex="0">
+          <img id="cameraImage" alt="Spot camera">
+          <canvas id="overlay"></canvas>
+          <div class="view-controls" aria-label="gripper camera jog controls">
+            <div class="control-group key-cluster" aria-label="pan gripper camera">
+              <button class="key-up" data-key="w" data-jog="forward" title="pan gripper camera up">W</button>
+              <button class="key-left" data-key="a" data-jog="pan-down" title="pan gripper camera left">A</button>
+              <button class="key-down" data-key="s" data-jog="backward" title="pan gripper camera down">S</button>
+              <button class="key-right" data-key="d" data-jog="pan-up" title="pan gripper camera right">D</button>
+            </div>
+            <div class="control-group forward-cluster" aria-label="move gripper camera forward and backward">
+              <button data-key="t" data-jog="pan-right" title="move gripper camera forward">T</button>
+              <button data-key="g" data-jog="pan-left" title="move gripper camera backward">G</button>
+            </div>
+            <div class="control-group key-cluster" aria-label="rotate gripper camera">
+              <button class="key-up" data-key="i" data-jog="rot-up" title="pitch gripper camera up">I</button>
+              <button class="key-left" data-key="j" data-jog="rot-left" title="yaw gripper camera left">J</button>
+              <button class="key-down" data-key="k" data-jog="rot-down" title="pitch gripper camera down">K</button>
+              <button class="key-right" data-key="l" data-jog="rot-right" title="yaw gripper camera right">L</button>
+            </div>
+            <div class="control-group roll-cluster" aria-label="roll gripper camera">
+              <button data-key="q" data-jog="roll-ccw" title="roll camera counterclockwise">Q</button>
+              <button data-key="e" data-jog="roll-cw" title="roll camera clockwise">E</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="viewer">
+        <canvas id="cloudCanvas"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const colorSource = document.getElementById("colorSource");
+    const depthSource = document.getElementById("depthSource");
+    const hostname = document.getElementById("hostname");
+    const username = document.getElementById("username");
+    const password = document.getElementById("password");
+    const connectButton = document.getElementById("connect");
+    const instruction = document.getElementById("instruction");
+    const model = document.getElementById("model");
+    const apiKey = document.getElementById("apiKey");
+    const stride = document.getElementById("stride");
+    const strideValue = document.getElementById("strideValue");
+    const approachDistance = document.getElementById("approachDistance");
+    const approachDistanceValue = document.getElementById("approachDistanceValue");
+    const cameraImage = document.getElementById("cameraImage");
+    const imageStage = document.getElementById("imageStage");
+    const overlay = document.getElementById("overlay");
+    const cloudCanvas = document.getElementById("cloudCanvas");
+    const detectionReadout = document.getElementById("detectionReadout");
+    const cameraReadout = document.getElementById("cameraReadout");
+    const poseReadout = document.getElementById("poseReadout");
+    const cloudReadout = document.getElementById("cloudReadout");
+    const robotReadout = document.getElementById("robotReadout");
+    const errorReadout = document.getElementById("errorReadout");
+    const modelRaw = document.getElementById("modelRaw");
+    const modelParsed = document.getElementById("modelParsed");
+    const detectButton = document.getElementById("detect");
+    const autoRefreshButton = document.getElementById("autoRefresh");
+    const oscMonitorButton = document.getElementById("oscMonitor");
+    const armApproachButton = document.getElementById("armApproach");
+    const gripperToggle = document.getElementById("gripperToggle");
+
+    let scene = null;
+    const CAMERA_VIEW = { yaw: 0, pitch: 0, zoom: 210 };
+    let yaw = CAMERA_VIEW.yaw;
+    let pitch = CAMERA_VIEW.pitch;
+    let zoom = CAMERA_VIEW.zoom;
+    let panX = 0;
+    let panY = 0;
+    let dragging = false;
+    let dragStart = null;
+    let colorSampler = null;
+    let gripperOpen = false;
+    let jogInFlight = false;
+    let autoRefreshTimer = null;
+    let oscMonitorEnabled = false;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function errorMessage(error) {
+      if (!error || !error.message) return "request failed";
+      try {
+        const parsed = JSON.parse(error.message);
+        if (parsed.detail) return parsed.detail;
+      } catch (_ignored) {
+        return error.message;
+      }
+      return error.message;
+    }
+
+    function formatPoint(point) {
+      if (!point) return "none";
+      return `${point.frame_name || ""} x ${point.x.toFixed(3)} y ${point.y.toFixed(3)} z ${point.z.toFixed(3)}`;
+    }
+
+    async function getJson(path) {
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    }
+
+    async function postJson(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    }
+
+    function disabledOption(text) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = text;
+      option.disabled = true;
+      option.selected = true;
+      return option;
+    }
+
+    function sourceOption(source) {
+      const option = document.createElement("option");
+      option.value = source.name;
+      option.textContent = `${source.name} (${source.cols}x${source.rows})`;
+      return option;
+    }
+
+    function setSelectDefault(select, value) {
+      if ([...select.options].some((option) => option.value === value)) {
+        select.value = value;
+      }
+    }
+
+    function detectionPixel() {
+      const point = scene?.detection?.grasp_px;
+      if (!Array.isArray(point) || point.length !== 2) return null;
+      return { x: Number(point[0]), y: Number(point[1]) };
+    }
+
+    function clamp(value, low, high) {
+      return Math.max(low, Math.min(high, value));
+    }
+
+    function boundedDetectionPixel() {
+      const point = detectionPixel();
+      if (!point || !scene?.image?.width || !scene?.image?.height) return null;
+      const x = clamp(point.x, 0, scene.image.width - 1);
+      const y = clamp(point.y, 0, scene.image.height - 1);
+      return {
+        x,
+        y,
+        clamped: x !== point.x || y !== point.y,
+      };
+    }
+
+    async function loadSources() {
+      try {
+        setStatus("loading cameras");
+        const sources = await getJson("/images/sources");
+        const colorSources = sources.filter((source) => source.image_type !== 2 || source.name.includes("color"));
+        const depthSources = sources.filter((source) => source.name.includes("depth"));
+        colorSource.replaceChildren(...(colorSources.length ? colorSources : sources).map(sourceOption));
+        depthSource.replaceChildren(...(depthSources.length ? depthSources : sources).map(sourceOption));
+        setSelectDefault(colorSource, "hand_color_image");
+        setSelectDefault(depthSource, "hand_depth_in_hand_color_frame");
+        detectButton.disabled = !colorSource.value || !depthSource.value;
+        setStatus(`${sources.length} cameras`);
+        refreshCamera();
+      } catch (error) {
+        const message = errorMessage(error);
+        colorSource.replaceChildren(disabledOption("Connect to Spot to load cameras"));
+        depthSource.replaceChildren(disabledOption("Connect to Spot to load depth"));
+        detectButton.disabled = true;
+        setStatus(message);
+      }
+    }
+
+    async function connectRobot() {
+      connectButton.disabled = true;
+      setStatus("connecting");
+      try {
+        await postJson("/connect", {
+          hostname: hostname.value.trim(),
+          username: username.value.trim(),
+          password: password.value,
+          take_lease: false,
+        });
+        password.value = "";
+        await loadSources();
+      } catch (error) {
+        setStatus(errorMessage(error));
+      } finally {
+        connectButton.disabled = false;
+      }
+    }
+
+    function refreshCamera({ clearScene = true } = {}) {
+      if (!colorSource.value) return;
+      cameraImage.src = `/images/${encodeURIComponent(colorSource.value)}?t=${Date.now()}`;
+      if (clearScene) {
+        scene = null;
+        armApproachButton.disabled = true;
+      }
+      drawOverlay();
+    }
+
+    function setJogButtonsDisabled(disabled) {
+      document.querySelectorAll(".view-controls button[data-jog]").forEach((button) => {
+        button.disabled = disabled;
+      });
+    }
+
+    function setAutoRefresh(enabled) {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (enabled) {
+        refreshCamera({ clearScene: false });
+        autoRefreshTimer = setInterval(() => refreshCamera({ clearScene: false }), 300);
+        autoRefreshButton.textContent = "Stop Refresh";
+        autoRefreshButton.classList.add("primary");
+        setStatus("camera auto refresh on");
+      } else {
+        autoRefreshButton.textContent = "Auto Refresh";
+        autoRefreshButton.classList.remove("primary");
+        setStatus("camera auto refresh off");
+      }
+    }
+
+    function toggleAutoRefresh() {
+      setAutoRefresh(!autoRefreshTimer);
+    }
+
+    function imageRect() {
+      const stage = cameraImage.parentElement.getBoundingClientRect();
+      const image = cameraImage.getBoundingClientRect();
+      return {
+        x: image.left - stage.left,
+        y: image.top - stage.top,
+        width: image.width,
+        height: image.height,
+      };
+    }
+
+    function drawOverlay() {
+      const rect = overlay.getBoundingClientRect();
+      overlay.width = Math.max(1, Math.round(rect.width * devicePixelRatio));
+      overlay.height = Math.max(1, Math.round(rect.height * devicePixelRatio));
+      const ctx = overlay.getContext("2d");
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      if (!scene || !cameraImage.naturalWidth) return;
+
+      const point = boundedDetectionPixel();
+      if (!point) return;
+
+      const image = imageRect();
+      const x = image.x + point.x * image.width / scene.image.width;
+      const y = image.y + point.y * image.height / scene.image.height;
+
+      ctx.strokeStyle = "#f4f7f4";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#d73027";
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#d73027";
+      ctx.beginPath();
+      ctx.moveTo(x - 14, y);
+      ctx.lineTo(x + 14, y);
+      ctx.moveTo(x, y - 14);
+      ctx.lineTo(x, y + 14);
+      ctx.stroke();
+
+      if (point.clamped) {
+        ctx.fillStyle = "#f4f7f4";
+        ctx.font = "12px Arial";
+        ctx.fillText("clamped to image edge", clamp(x + 10, image.x, image.x + image.width - 120), clamp(y - 10, image.y + 14, image.y + image.height - 6));
+      }
+    }
+
+    function rotatePoint(point) {
+      const [x, y, z] = point;
+      const cy = Math.cos(yaw);
+      const sy = Math.sin(yaw);
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+      const x1 = cy * x + sy * z;
+      const z1 = -sy * x + cy * z;
+      const y1 = cp * y - sp * z1;
+      const z2 = sp * y + cp * z1;
+      return [x1, y1, z2];
+    }
+
+    function project(point, width, height) {
+      const [x, y, z] = rotatePoint(point);
+      const scale = zoom / Math.max(0.2, z + 2.8);
+      return [width / 2 + panX + x * scale, height / 2 + panY + y * scale, z];
+    }
+
+    function rebuildColorSampler() {
+      colorSampler = null;
+      if (!scene || !cameraImage.complete || !cameraImage.naturalWidth || !cameraImage.naturalHeight) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = cameraImage.naturalWidth;
+      canvas.height = cameraImage.naturalHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(cameraImage, 0, 0, canvas.width, canvas.height);
+      colorSampler = {
+        width: canvas.width,
+        height: canvas.height,
+        data: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+      };
+    }
+
+    function pointRgb(point) {
+      if (!colorSampler || point.length < 5 || !scene?.depth?.width || !scene?.depth?.height) return null;
+      const u = clamp(Math.round(point[3] * (colorSampler.width - 1) / Math.max(1, scene.depth.width - 1)), 0, colorSampler.width - 1);
+      const v = clamp(Math.round(point[4] * (colorSampler.height - 1) / Math.max(1, scene.depth.height - 1)), 0, colorSampler.height - 1);
+      const offset = (v * colorSampler.width + u) * 4;
+      return [colorSampler.data[offset], colorSampler.data[offset + 1], colorSampler.data[offset + 2]];
+    }
+
+    function drawCloud() {
+      const rect = cloudCanvas.getBoundingClientRect();
+      cloudCanvas.width = Math.max(1, Math.round(rect.width * devicePixelRatio));
+      cloudCanvas.height = Math.max(1, Math.round(rect.height * devicePixelRatio));
+      const ctx = cloudCanvas.getContext("2d");
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.fillStyle = "#11171a";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      if (!scene || !scene.point_cloud.points.length) {
+        ctx.fillStyle = "#7f8a8f";
+        ctx.font = "13px Arial";
+        ctx.fillText(scene ? "No point cloud; 2D detection may still be valid" : "No point cloud", 16, 24);
+        return;
+      }
+
+      const points = scene.point_cloud.points;
+      const sorted = points.map((point) => {
+        const projected = project(point, rect.width, rect.height);
+        return { point, projected };
+      }).sort((a, b) => b.projected[2] - a.projected[2]);
+
+      for (const item of sorted) {
+        const [x, y, z] = item.projected;
+        if (x < -10 || y < -10 || x > rect.width + 10 || y > rect.height + 10) continue;
+        const rgb = pointRgb(item.point);
+        if (rgb) {
+          ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+        } else {
+          const shade = Math.max(70, Math.min(210, 230 - z * 38));
+          ctx.fillStyle = `rgb(${Math.round(shade * 0.72)},${Math.round(shade * 0.9)},${shade})`;
+        }
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      const grasp = scene.grasp_camera;
+      if (!grasp) return;
+      const center = project([grasp.x, grasp.y, grasp.z], rect.width, rect.height);
+      ctx.fillStyle = "#d73027";
+      ctx.beginPath();
+      ctx.arc(center[0], center[1], 6, 0, Math.PI * 2);
+      ctx.fill();
+      drawAxis([grasp.x, grasp.y, grasp.z], [0.12, 0, 0], "#f6f7f7", rect);
+      drawAxis([grasp.x, grasp.y, grasp.z], [0, 0.12, 0], "#37a36b", rect);
+      drawAxis([grasp.x, grasp.y, grasp.z], [0, 0, 0.16], "#d73027", rect);
+    }
+
+    function drawAxis(origin, delta, color, rect) {
+      const a = project(origin, rect.width, rect.height);
+      const b = project([origin[0] + delta[0], origin[1] + delta[1], origin[2] + delta[2]], rect.width, rect.height);
+      const ctx = cloudCanvas.getContext("2d");
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    }
+
+    function resetCameraView() {
+      yaw = CAMERA_VIEW.yaw;
+      pitch = CAMERA_VIEW.pitch;
+      zoom = CAMERA_VIEW.zoom;
+      panX = 0;
+      panY = 0;
+      drawCloud();
+      setStatus("3D camera view");
+    }
+
+    function nudgeView(action) {
+      const panStep = 26;
+      const turnStep = 0.12;
+      const pitchStep = 0.1;
+      if (action === "pan-left") panX -= panStep;
+      if (action === "pan-right") panX += panStep;
+      if (action === "pan-up") panY -= panStep;
+      if (action === "pan-down") panY += panStep;
+      if (action === "forward") zoom = Math.min(520, zoom + 24);
+      if (action === "backward") zoom = Math.max(60, zoom - 24);
+      if (action === "rot-left") yaw -= turnStep;
+      if (action === "rot-right") yaw += turnStep;
+      if (action === "rot-up") pitch = Math.max(-1.3, pitch - pitchStep);
+      if (action === "rot-down") pitch = Math.min(1.3, pitch + pitchStep);
+      drawCloud();
+    }
+
+    function jogBody(action) {
+      const move = 0.03;
+      const turn = 0.105;
+      const body = { take_lease: true, seconds: 0.7, timeout: 3 };
+      if (action === "pan-left") body.dx = -move;
+      if (action === "pan-right") body.dx = move;
+      if (action === "pan-up") body.dy = -move;
+      if (action === "pan-down") body.dy = move;
+      if (action === "forward") body.dz = move;
+      if (action === "backward") body.dz = -move;
+      if (action === "rot-left") body.dyaw = turn;
+      if (action === "rot-right") body.dyaw = -turn;
+      if (action === "rot-up") body.dpitch = -turn;
+      if (action === "rot-down") body.dpitch = turn;
+      return body;
+    }
+
+    function rollBody(action) {
+      return {
+        direction: action === "roll-cw" ? "clockwise" : "counterclockwise",
+        angle_rad: 0.105,
+        seconds: 0.7,
+        take_lease: true,
+        timeout: 3,
+      };
+    }
+
+    async function jogGripperCamera(action, button = null) {
+      if (jogInFlight) return;
+      jogInFlight = true;
+      setJogButtonsDisabled(true);
+      setStatus(`jog ${action}`);
+      robotReadout.textContent = `jog ${action} running`;
+      try {
+        const isRoll = action === "roll-cw" || action === "roll-ccw";
+        const result = isRoll
+          ? await postJson("/arm/camera-roll", rollBody(action))
+          : await postJson("/arm/jog", jogBody(action));
+        robotReadout.textContent = `jog ${action}: ${JSON.stringify(result)}`;
+        setStatus("jog done");
+      } catch (error) {
+        const message = errorMessage(error);
+        robotReadout.textContent = message;
+        setStatus(message);
+      } finally {
+        jogInFlight = false;
+        setJogButtonsDisabled(false);
+      }
+    }
+
+    async function sendRobotAction(path, body, doneText, button = null) {
+      if (button) button.disabled = true;
+      setStatus(doneText.replace("done", "running"));
+      robotReadout.textContent = `${path} running`;
+      try {
+        const result = await postJson(path, body);
+        setStatus(doneText);
+        robotReadout.textContent = `${doneText}: ${JSON.stringify(result)}`;
+        return result;
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
+    async function goReady() {
+      await sendRobotAction("/arm/deploy", { power_on: true, take_lease: true, timeout: 10 }, "ready done", document.getElementById("armReady"));
+    }
+
+    async function goCarry() {
+      await sendRobotAction("/arm/carry", { take_lease: true, timeout: 10 }, "carry done", document.getElementById("armCarry"));
+    }
+
+    async function goStow() {
+      await sendRobotAction("/arm/stow", { take_lease: true, timeout: 10 }, "stow done", document.getElementById("armStow"));
+    }
+
+    async function waitForDelivery() {
+      await sendRobotAction("/delivery/wait", {
+        monitor_sec: 30,
+        upward_threshold_m: 0.02,
+        sample_interval: 0.1,
+        open_duration_sec: 3,
+        take_lease: true,
+        gripper_timeout: 5,
+        stow_timeout: 10,
+      }, "delivery wait done", document.getElementById("waitDelivery"));
+    }
+
+    async function freezeArm() {
+      await sendRobotAction("/arm/freeze", { take_lease: true }, "arm frozen", document.getElementById("armFreeze"));
+    }
+
+    async function approachDetectedPose() {
+      if (!scene?.pose) {
+        setStatus("run detection first");
+        return;
+      }
+      await sendRobotAction("/arm/approach", {
+        pose: scene.pose,
+        standoff_m: Number(approachDistance.value) / 100,
+        max_step_m: 0.45,
+        seconds: 1.2,
+        take_lease: true,
+        timeout: 5,
+      }, "approach done", armApproachButton);
+    }
+
+    function setOscMonitorButton(status) {
+      oscMonitorEnabled = Boolean(status?.enabled);
+      oscMonitorButton.textContent = oscMonitorEnabled ? "Stop Osc Mon" : "Osc Monitor";
+      oscMonitorButton.classList.toggle("primary", oscMonitorEnabled);
+      if (status) {
+        robotReadout.textContent = `osc monitor: ${JSON.stringify(status)}`;
+      }
+    }
+
+    async function refreshOscMonitorStatus() {
+      try {
+        setOscMonitorButton(await getJson("/arm/oscillation-monitor"));
+      } catch (error) {
+        setStatus(errorMessage(error));
+      }
+    }
+
+    async function toggleOscMonitor() {
+      oscMonitorButton.disabled = true;
+      const enabled = !oscMonitorEnabled;
+      setStatus(enabled ? "starting osc monitor" : "stopping osc monitor");
+      try {
+        const status = await postJson("/arm/oscillation-monitor", {
+          enabled,
+          take_lease: true,
+        });
+        setOscMonitorButton(status);
+        setStatus(enabled ? "osc monitor on" : "osc monitor off");
+      } catch (error) {
+        const message = errorMessage(error);
+        robotReadout.textContent = message;
+        setStatus(message);
+      } finally {
+        oscMonitorButton.disabled = false;
+      }
+    }
+
+    async function toggleGripper() {
+      const path = gripperOpen ? "/gripper/close" : "/gripper/open";
+      await sendRobotAction(path, { take_lease: true, timeout: 5 }, gripperOpen ? "gripper closed" : "gripper open", gripperToggle);
+      gripperOpen = !gripperOpen;
+      gripperToggle.textContent = gripperOpen ? "Close Grip" : "Open Grip";
+    }
+
+    async function runDetection() {
+      if (!colorSource.value || !depthSource.value) {
+        setStatus("connect to Spot and choose cameras first");
+        return;
+      }
+      setAutoRefresh(false);
+      detectButton.disabled = true;
+      setStatus("detecting");
+      try {
+        const body = {
+          instruction: instruction.value.trim(),
+          model: model.value.trim(),
+          api_key: apiKey.value.trim() || null,
+          color_source: colorSource.value,
+          depth_source: depthSource.value,
+          include_point_cloud: true,
+          point_cloud_stride: Number(stride.value),
+          max_point_cloud_points: 9000,
+        };
+        scene = await postJson("/detect", body);
+        cameraImage.src = scene.image.data_url;
+        const point = detectionPixel();
+        const boundedPoint = boundedDetectionPixel();
+        detectionReadout.textContent = point
+          ? `${scene.detection.label || "target"} px x ${point.x.toFixed(1)} y ${point.y.toFixed(1)}${boundedPoint?.clamped ? " (clamped for display)" : ""}`
+          : `${scene.detection.label || "target"} px unavailable`;
+        cameraReadout.textContent = scene.grasp_camera ? formatPoint(scene.grasp_camera) : "none";
+        poseReadout.textContent = scene.pose ? formatPoint(scene.pose) : "none";
+        armApproachButton.disabled = !scene.pose;
+        cloudReadout.textContent = `${scene.point_cloud.points.length} points, ${scene.depth.frame_name}`;
+        errorReadout.textContent = Object.keys(scene.errors || {}).length ? JSON.stringify(scene.errors) : "none";
+        modelRaw.textContent = scene.model?.raw_response || "empty response";
+        modelParsed.textContent = JSON.stringify(scene.model?.parsed_json || null, null, 2);
+        setStatus("done");
+        rebuildColorSampler();
+        drawOverlay();
+        drawCloud();
+      } catch (error) {
+        const message = errorMessage(error);
+        setStatus(message);
+        errorReadout.textContent = message;
+        modelRaw.textContent = "request failed before a parsed model result was returned";
+        modelParsed.textContent = "none";
+        armApproachButton.disabled = true;
+      } finally {
+        detectButton.disabled = false;
+      }
+    }
+
+    stride.addEventListener("input", () => {
+      strideValue.textContent = stride.value;
+    });
+    approachDistance.addEventListener("input", () => {
+      approachDistanceValue.textContent = approachDistance.value;
+    });
+    connectButton.addEventListener("click", connectRobot);
+    document.getElementById("refresh").addEventListener("click", refreshCamera);
+    autoRefreshButton.addEventListener("click", toggleAutoRefresh);
+    document.getElementById("cameraView").addEventListener("click", resetCameraView);
+    document.getElementById("armReady").addEventListener("click", () => goReady().catch((error) => setStatus(errorMessage(error))));
+    document.getElementById("armCarry").addEventListener("click", () => goCarry().catch((error) => setStatus(errorMessage(error))));
+    document.getElementById("armStow").addEventListener("click", () => goStow().catch((error) => setStatus(errorMessage(error))));
+    document.getElementById("waitDelivery").addEventListener("click", () => waitForDelivery().catch((error) => setStatus(errorMessage(error))));
+    armApproachButton.addEventListener("click", () => approachDetectedPose().catch((error) => setStatus(errorMessage(error))));
+    document.getElementById("armFreeze").addEventListener("click", () => freezeArm().catch((error) => setStatus(errorMessage(error))));
+    oscMonitorButton.addEventListener("click", toggleOscMonitor);
+    gripperToggle.addEventListener("click", () => toggleGripper().catch((error) => setStatus(errorMessage(error))));
+    detectButton.addEventListener("click", runDetection);
+    colorSource.addEventListener("change", refreshCamera);
+    cameraImage.addEventListener("load", () => {
+      rebuildColorSampler();
+      drawOverlay();
+      drawCloud();
+    });
+    window.addEventListener("resize", () => {
+      drawOverlay();
+      drawCloud();
+    });
+
+    cloudCanvas.addEventListener("pointerdown", (event) => {
+      dragging = true;
+      dragStart = { x: event.clientX, y: event.clientY, yaw, pitch };
+      cloudCanvas.setPointerCapture(event.pointerId);
+    });
+    cloudCanvas.addEventListener("pointermove", (event) => {
+      if (!dragging) return;
+      yaw = dragStart.yaw + (event.clientX - dragStart.x) * 0.008;
+      pitch = Math.max(-1.3, Math.min(1.3, dragStart.pitch + (event.clientY - dragStart.y) * 0.008));
+      drawCloud();
+    });
+    cloudCanvas.addEventListener("pointerup", () => {
+      dragging = false;
+    });
+    cloudCanvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      zoom = Math.max(60, Math.min(420, zoom - event.deltaY * 0.2));
+      drawCloud();
+    }, { passive: false });
+
+    imageStage.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest("button")) imageStage.focus();
+    });
+
+    imageStage.addEventListener("keydown", (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      const key = event.key.toLowerCase();
+      if (key === "r") {
+        event.preventDefault();
+        toggleAutoRefresh();
+        return;
+      }
+
+      const button = imageStage.querySelector(`.view-controls button[data-key="${CSS.escape(key)}"]`);
+      if (!button || button.disabled) return;
+      event.preventDefault();
+      jogGripperCamera(button.dataset.jog, button);
+    });
+
+    document.querySelectorAll(".view-controls button[data-jog]").forEach((button) => {
+      button.addEventListener("click", () => jogGripperCamera(button.dataset.jog, button));
+    });
+
+    loadSources();
+    refreshOscMonitorStatus();
+    drawCloud();
+  </script>
+</body>
+</html>

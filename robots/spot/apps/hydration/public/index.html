@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemini Robotics Hydration Service</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f3;
+      --panel: #ffffff;
+      --ink: #172024;
+      --muted: #667176;
+      --border: #d7ded9;
+      --accent: #197064;
+      --button: #edf2ef;
+      --danger: #b3261e;
+      --warn: #9d6b11;
+      --ok: #237a45;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    #root {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 58px minmax(0, 1fr);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 1px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    aside,
+    section {
+      min-width: 0;
+      min-height: 0;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    aside {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    section {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) 190px;
+    }
+
+    .row {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    select,
+    button {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    button {
+      background: var(--button);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.danger {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #fff;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .drink-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .drink {
+      border: 1px solid var(--border);
+      border-left: 6px solid var(--drink-accent);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      text-align: left;
+      height: auto;
+      min-height: 66px;
+    }
+
+    .drink.active {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .drink strong,
+    .order-title {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .status-bar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfb;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 18px;
+    }
+
+    .camera-monitor {
+      min-height: 0;
+      margin-top: auto;
+      display: grid;
+      gap: 8px;
+    }
+
+    .camera-frame {
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #101417;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+      display: grid;
+      place-items: center;
+    }
+
+    .camera-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .orders {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .order {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .order-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: #eef2ef;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.running { background: #e3f1ec; color: var(--accent); }
+    .badge.finished { background: #e6f2e9; color: var(--ok); }
+    .badge.failed { background: #f7e6e4; color: var(--danger); }
+    .badge.pending { background: #fff2d8; color: var(--warn); }
+
+    .steps {
+      display: grid;
+      gap: 6px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #b7c0ba;
+      justify-self: center;
+    }
+
+    .step.running .dot { background: var(--accent); }
+    .step.finished .dot { background: var(--ok); }
+    .step.failed .dot { background: var(--danger); }
+
+    .events {
+      min-height: 0;
+      overflow: auto;
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      background: #fbfcfb;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 10px;
+      padding: 3px 0;
+    }
+
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      #root { min-height: 100vh; height: auto; }
+      main { grid-template-columns: 1fr; overflow: visible; }
+      section { min-height: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
+    import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+
+    const e = React.createElement;
+
+    function App() {
+      const [bootstrap, setBootstrap] = useState({ drinks: [], waypoints: [], config: {} });
+      const [state, setState] = useState({ orders: [], events: [], serviceRunning: false, paused: false });
+      const [drinkId, setDrinkId] = useState("");
+      const [destination, setDestination] = useState("");
+      const [busy, setBusy] = useState(false);
+      const [cameraTick, setCameraTick] = useState(Date.now());
+
+      useEffect(() => {
+        refreshBootstrap();
+        refreshState();
+        const timer = setInterval(refreshState, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        const timer = setInterval(() => setCameraTick(Date.now()), 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        if (!drinkId && bootstrap.drinks.length) setDrinkId(bootstrap.drinks[0].id);
+        if (!destination && bootstrap.waypoints.length) setDestination(bootstrap.waypoints[0]);
+      }, [bootstrap, drinkId, destination]);
+
+      const counts = useMemo(() => {
+        const orders = state.orders || [];
+        return {
+          pending: orders.filter((order) => order.status === "pending").length,
+          running: orders.filter((order) => order.status === "running").length,
+          finished: orders.filter((order) => order.status === "finished").length,
+          failed: orders.filter((order) => order.status === "failed").length,
+        };
+      }, [state.orders]);
+
+      async function refreshBootstrap() {
+        setBootstrap(await apiGet("/api/bootstrap"));
+      }
+
+      async function refreshState() {
+        setState(await apiGet("/api/orders"));
+      }
+
+      async function submitOrder() {
+        setBusy(true);
+        try {
+          setState(await apiPost("/api/orders", { drinkId, destination }));
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function serviceAction(path) {
+        setBusy(true);
+        try {
+          setState(await apiPost(path, {}));
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      const cameraUrl = `/api/camera/gripper?t=${cameraTick}`;
+
+      return e(React.Fragment, null,
+        e("header", null,
+          e("h1", null, "Gemini Robotics Hydration Service"),
+          e("div", { className: "muted" }, serviceLabel(state))
+        ),
+        e("main", null,
+          e("aside", null,
+            e("div", { className: "row" },
+              e("label", null, e("span", null, "Drink")),
+              e("div", { className: "drink-grid" },
+                bootstrap.drinks.map((drink) => e("button", {
+                  key: drink.id,
+                  className: `drink ${drink.id === drinkId ? "active" : ""}`,
+                  style: { "--drink-accent": drink.accent },
+                  onClick: () => setDrinkId(drink.id),
+                },
+                  e("strong", null, drink.name),
+                  e("span", { className: "muted" }, drink.subtitle),
+                  e("span", { className: "muted" }, `Detect: ${drink.detectInstruction}`)
+                ))
+              )
+            ),
+            e("div", { className: "row" },
+              e("label", null, e("span", null, "Delivery Position"), e("span", null, `${bootstrap.waypoints.length} places`)),
+              e("select", { value: destination, onChange: (event) => setDestination(event.target.value) },
+                bootstrap.waypoints.map((name) => e("option", { key: name, value: name }, name))
+              )
+            ),
+            e("button", { className: "primary", disabled: busy || !drinkId || !destination, onClick: submitOrder }, "Order"),
+            e("div", { className: "controls" },
+              e("button", { disabled: busy, onClick: () => serviceAction("/api/service/connect") }, "Connect"),
+              e("button", { disabled: busy, onClick: () => serviceAction(state.paused ? "/api/service/resume" : "/api/service/start") }, state.paused ? "Resume" : "Start"),
+              e("button", { disabled: busy, onClick: () => serviceAction("/api/service/pause") }, "Pause")
+            ),
+            e("button", { className: "danger", disabled: busy, onClick: () => serviceAction("/api/service/stop-actions") }, "Stop Actions"),
+            e("div", { className: "status-bar" },
+              metric("Pending", counts.pending),
+              metric("Running", counts.running),
+              metric("Done", counts.finished),
+              metric("Failed", counts.failed)
+            ),
+            e("div", { className: "muted" }, bootstrap.config?.hasGeminiKey ? "Gemini key loaded" : "Gemini key missing from .config"),
+            state.lastError ? e("div", { className: "muted", style: { color: "var(--danger)" } }, state.lastError) : null,
+            e("div", { className: "camera-monitor" },
+              e("label", null, e("span", null, "Gripper Camera"), e("span", null, "Live")),
+              e("div", { className: "camera-frame" },
+                e("img", { src: cameraUrl, alt: "Gripper camera live view" })
+              )
+            )
+          ),
+          e("section", null,
+            e("div", { className: "orders" },
+              (state.orders || []).length
+                ? state.orders.slice().reverse().map((order) => e(OrderCard, { key: order.id, order }))
+                : e("div", { className: "muted" }, "No orders yet.")
+            ),
+            e("div", { className: "events" },
+              (state.events || []).slice().reverse().map((event, index) => e("div", { className: "event", key: index },
+                e("span", null, new Date(event.at).toLocaleTimeString()),
+                e("span", null, event.message)
+              ))
+            )
+          )
+        )
+      );
+    }
+
+    function OrderCard({ order }) {
+      return e("article", { className: "order" },
+        e("div", { className: "order-head" },
+          e("div", null,
+            e("span", { className: "order-title" }, `#${order.id} ${order.drinkName}`),
+            e("span", { className: "muted" }, `To ${order.destination}`)
+          ),
+          e("span", { className: `badge ${order.status}` }, order.status)
+        ),
+        e("div", { className: "steps" },
+          (order.steps || []).map((step, index) => e("div", { className: `step ${step.status}`, key: index },
+            e("span", { className: "dot" }),
+            e("span", null, step.label),
+            e("span", null, step.status)
+          ))
+        ),
+        order.error ? e("div", { className: "muted", style: { color: "var(--danger)", marginTop: "8px" } }, order.error) : null
+      );
+    }
+
+    function metric(label, value) {
+      return e("div", { className: "metric" }, e("strong", null, value), e("span", { className: "muted" }, label));
+    }
+
+    function serviceLabel(state) {
+      if (state.paused) return "Paused";
+      if (state.workerActive) return "Serving orders";
+      if (state.serviceRunning) return "Ready";
+      return "Stopped";
+    }
+
+    async function apiGet(path) {
+      const response = await fetch(path);
+      return responseJson(response);
+    }
+
+    async function apiPost(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return responseJson(response);
+    }
+
+    async function responseJson(response) {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.detail || response.statusText);
+      return data;
+    }
+
+    createRoot(document.getElementById("root")).render(e(App));
+  </script>
+</body>
+</html>

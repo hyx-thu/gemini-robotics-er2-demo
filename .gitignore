@@ -1,0 +1,38 @@
+# ---- Secrets: NEVER commit ----
+.env
+.env.*
+!.env.example
+*.key
+*_API_KEY
+API_KEY
+credentials*.json
+service-account*.json
+
+# ---- Python ----
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv-cache/
+
+# ---- Tooling / editor ----
+*.metadata.json
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Runtime output ----
+*.log
+captures/
+dump_video/
+
+# uv venv symlink / file
+.venv

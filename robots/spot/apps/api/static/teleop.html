@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spot Teleop</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f5f2;
+      --panel: #ffffff;
+      --ink: #202426;
+      --muted: #687075;
+      --border: #d8ddda;
+      --accent: #1f7a6d;
+      --danger: #b3261e;
+      --button: #edf2ef;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    header {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    #status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+    }
+
+    .camera {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+    }
+
+    .camera img {
+      width: min(100%, 1100px);
+      max-height: calc(100vh - 78px);
+      object-fit: contain;
+      background: #101314;
+      border: 1px solid var(--border);
+    }
+
+    aside {
+      min-height: 0;
+      overflow: auto;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    .pad {
+      display: grid;
+      grid-template-columns: repeat(3, 72px);
+      grid-template-rows: repeat(3, 72px);
+      gap: 8px;
+      justify-content: center;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--button);
+      color: var(--ink);
+      border-radius: 8px;
+      font-size: 24px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    button:active,
+    button.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .stop {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: white;
+      font-size: 14px;
+    }
+
+    .row {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .actions button {
+      height: 42px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 820px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) auto;
+      }
+
+      aside {
+        border-left: 0;
+        border-top: 1px solid var(--border);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Spot Teleop</h1>
+    <div id="status">idle</div>
+  </header>
+  <main>
+    <section class="camera">
+      <img id="camera" src="/images/hand_color_image" alt="Spot camera">
+    </section>
+    <aside>
+      <div class="pad">
+        <div></div>
+        <button data-vx="1" aria-label="forward">^</button>
+        <div></div>
+        <button data-rot="1" aria-label="turn left">&lt;</button>
+        <button class="stop" id="stop" aria-label="stop">STOP</button>
+        <button data-rot="-1" aria-label="turn right">&gt;</button>
+        <button data-vy="1" aria-label="left">A</button>
+        <button data-vx="-1" aria-label="back">v</button>
+        <button data-vy="-1" aria-label="right">D</button>
+      </div>
+
+      <div class="row">
+        <label><span>Linear</span><span id="linearValue">0.35 m/s</span></label>
+        <input id="linear" type="range" min="0.05" max="0.8" step="0.05" value="0.35">
+      </div>
+      <div class="row">
+        <label><span>Turn</span><span id="turnValue">0.55 rad/s</span></label>
+        <input id="turn" type="range" min="0.1" max="1.0" step="0.05" value="0.55">
+      </div>
+
+      <div class="actions">
+        <button id="stand">Stand</button>
+        <button id="refresh">Camera</button>
+        <button id="lease">Take Lease</button>
+        <button id="openGripper">Open Grip</button>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const camera = document.getElementById("camera");
+    const linear = document.getElementById("linear");
+    const turn = document.getElementById("turn");
+    const linearValue = document.getElementById("linearValue");
+    const turnValue = document.getElementById("turnValue");
+    const activeKeys = new Set();
+    let driveTimer = null;
+    let cameraTimer = null;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    async function post(path, body = {}) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text);
+      }
+      return response.json();
+    }
+
+    function refreshLabels() {
+      linearValue.textContent = `${Number(linear.value).toFixed(2)} m/s`;
+      turnValue.textContent = `${Number(turn.value).toFixed(2)} rad/s`;
+    }
+
+    function commandFromState() {
+      let vx = 0;
+      let vy = 0;
+      let vrot = 0;
+      if (activeKeys.has("w")) vx += Number(linear.value);
+      if (activeKeys.has("s")) vx -= Number(linear.value);
+      if (activeKeys.has("a")) vy += Number(linear.value) * 0.7;
+      if (activeKeys.has("d")) vy -= Number(linear.value) * 0.7;
+      if (activeKeys.has("q")) vrot += Number(turn.value);
+      if (activeKeys.has("e")) vrot -= Number(turn.value);
+      return { v_x: vx, v_y: vy, v_rot: vrot };
+    }
+
+    async function sendVelocity() {
+      const command = commandFromState();
+      if (!command.v_x && !command.v_y && !command.v_rot) return;
+      await post("/teleop/velocity", { ...command, duration: 0.45, take_lease: false });
+      setStatus(`vx ${command.v_x.toFixed(2)} vy ${command.v_y.toFixed(2)} rot ${command.v_rot.toFixed(2)}`);
+    }
+
+    async function stop() {
+      activeKeys.clear();
+      document.querySelectorAll("button.active").forEach((button) => button.classList.remove("active"));
+      clearInterval(driveTimer);
+      driveTimer = null;
+      await post("/teleop/stop", { take_lease: false });
+      setStatus("stopped");
+    }
+
+    function startDrive() {
+      if (driveTimer) return;
+      sendVelocity().catch((error) => setStatus(error.message));
+      driveTimer = setInterval(() => sendVelocity().catch((error) => setStatus(error.message)), 250);
+    }
+
+    function refreshCamera() {
+      camera.src = `/images/hand_color_image?t=${Date.now()}`;
+    }
+
+    function bindPadButton(button) {
+      button.addEventListener("pointerdown", () => {
+        const vx = Number(button.dataset.vx || 0);
+        const vy = Number(button.dataset.vy || 0);
+        const rot = Number(button.dataset.rot || 0);
+        button.classList.add("active");
+        post("/teleop/velocity", {
+          v_x: vx * Number(linear.value),
+          v_y: vy * Number(linear.value) * 0.7,
+          v_rot: rot * Number(turn.value),
+          duration: 0.45,
+          take_lease: false,
+        }).catch((error) => setStatus(error.message));
+      });
+      button.addEventListener("pointerup", () => stop().catch((error) => setStatus(error.message)));
+      button.addEventListener("pointerleave", () => {
+        if (button.classList.contains("active")) stop().catch((error) => setStatus(error.message));
+      });
+    }
+
+    document.querySelectorAll(".pad button[data-vx], .pad button[data-vy], .pad button[data-rot]").forEach(bindPadButton);
+    document.getElementById("stop").addEventListener("click", () => stop().catch((error) => setStatus(error.message)));
+    document.getElementById("stand").addEventListener("click", () => post("/stand", { power_on: true, take_lease: false }).then(() => setStatus("standing")).catch((error) => setStatus(error.message)));
+    document.getElementById("lease").addEventListener("click", () => post("/lease/take").then(() => setStatus("lease held")).catch((error) => setStatus(error.message)));
+    document.getElementById("openGripper").addEventListener("click", () => post("/gripper/open", { take_lease: false }).then(() => setStatus("gripper open")).catch((error) => setStatus(error.message)));
+    document.getElementById("refresh").addEventListener("click", refreshCamera);
+    linear.addEventListener("input", refreshLabels);
+    turn.addEventListener("input", refreshLabels);
+
+    window.addEventListener("keydown", (event) => {
+      const key = event.key.toLowerCase();
+      if (!["w", "a", "s", "d", "q", "e"].includes(key)) return;
+      event.preventDefault();
+      activeKeys.add(key);
+      startDrive();
+    });
+
+    window.addEventListener("keyup", (event) => {
+      const key = event.key.toLowerCase();
+      if (!["w", "a", "s", "d", "q", "e"].includes(key)) return;
+      activeKeys.delete(key);
+      if (!activeKeys.size) stop().catch((error) => setStatus(error.message));
+    });
+
+    window.addEventListener("blur", () => stop().catch(() => {}));
+    cameraTimer = setInterval(refreshCamera, 800);
+    refreshLabels();
+  </script>
+</body>
+</html>
