@@ -268,9 +268,11 @@ function init() {
   function clearQueue() { queue = []; step = null; }
   const wait = (dur, enter) => ({ dur, enter: enter || (() => {}) });
 
+  // Back on four legs (from sitting or from the reared-up "stand" pose)
+  // before any action that needs the arm, walking, etc.
   function ensureStanding() {
-    if (!sitting) return [];
-    return [wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; })];
+    if (!sitting && tgt.rear < 0.5) return [];
+    return [wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 0; })];
   }
   function ensureDeployed() {
     if (!armStowed) return [];
@@ -280,16 +282,15 @@ function init() {
   let pendingTarget = null;   // latest detect target (robot frame)
 
   const actions = {
-    // Stand: get up on four legs, then rear up on the hind legs with the front
-    // feet lifted so the motion reads clearly, hold, and come back down.
+    // Stand: get up (if sitting), then rear up on the hind legs with the front
+    // feet lifted, and STAY up until the next action brings it back down.
     stand: () => enqueue([
-      wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; tgt.roll = 0; tgt.rear = 0; }),
+      ...(sitting ? [wait(0.9, () => { sitting = false; tgt.h = STAND_H; tgt.pitch = 0; tgt.roll = 0; })] : []),
       wait(1.1, () => { tgt.rear = 1; }),
-      wait(0.9, () => {}),
-      wait(1.0, () => { tgt.rear = 0; }),
     ]),
     sit: () => enqueue([
       ...(armStowed ? [] : [wait(0.8, () => { armStowed = true; setArm(STOW); tgt.grip = 0; })]),
+      ...(tgt.rear > 0.5 ? [wait(0.9, () => { tgt.rear = 0; })] : []),
       wait(1.0, () => { sitting = true; tgt.h = SIT_H; tgt.pitch = 0.36; }),
     ]),
     stow: () => enqueue([wait(0.9, () => { armStowed = true; setArm(STOW); if (!itemHeld) tgt.grip = 0; })]),

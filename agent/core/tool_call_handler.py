@@ -41,14 +41,37 @@ _USER_STOP_RE = re.compile(
 
 
 _NEGATED_SIT_PATTERN = re.compile(
-    r"(?:\b(?:do\s+not|don't|never)\b[^.!?]{0,40}\bsit\b|\bnot\s+to\s+sit\b)",
+    r"(?:\b(?:do\s+not|don't|never)\b[^.!?]{0,40}\bsit\b|\bnot\s+to\s+sit\b"
+    # zh / ja / ko
+    r"|(?:不要|别|不准|不许|不用|不必|无需)\s*(?:坐|趴)"
+    r"|座らないで|すわらないで|앉지\s*마"
+    # es / pt / fr / de / it / ru
+    r"|\bno\s+te\s+sientes\b|\bnão\s+(?:se\s+)?sente\b|\bne\s+t['’]assieds\s+pas\b"
+    r"|\bsetz\s+dich\s+nicht\b|\bnicht\s+(?:hin)?setzen\b|\bnon\s+sederti\b|\bне\s+садись\b)",
     re.IGNORECASE,
 )
-_SIT_PATTERN = re.compile(r"\b(?:sit(?:\s+down)?|take\s+a\s+seat)\b", re.IGNORECASE)
+# Sit requests in any common language. Latin-script words use \b; CJK phrases
+# cannot (no word boundaries), and ASR often inserts spaces between CJK
+# characters ("坐 下 来"), which user_requested_sit() strips first.
+_SIT_PATTERN = re.compile(
+    r"\b(?:sit(?:\s+down)?|take\s+a\s+seat)\b"
+    r"|坐下|坐好|坐着|坐吧|请坐|坐一下|趴下|蹲下"
+    r"|座って|すわって|お座り|おすわり|座れ|座る"
+    r"|앉아|앉으"
+    r"|\bsi[eé]ntat[e]\b|\bsi[eé]ntese\b|\bsentad[oa]\b"
+    r"|\bsenta\b|\bsente-se\b|\bsentar\b"
+    r"|\bassieds-toi\b|\basseyez-vous\b|\bassis\b"
+    r"|\bsetz\s+dich\b|\bhinsetzen\b|\bsitz\b"
+    r"|\bsiediti\b|\bsedut[oa]\b"
+    r"|\bсядь\b|\bсадись\b|\bсидеть\b",
+    re.IGNORECASE,
+)
+_CJK_GAP_RE = re.compile(r"(?<=[^\x00-\x7f])\s+(?=[^\x00-\x7f])")
 
 
 def user_requested_sit(text: str) -> bool:
-  """Return whether a user utterance explicitly asks Spot to sit."""
+  """Return whether a user utterance explicitly asks Spot to sit (any language)."""
+  text = _CJK_GAP_RE.sub("", text or "")
   return bool(_SIT_PATTERN.search(text)) and not bool(
       _NEGATED_SIT_PATTERN.search(text)
   )

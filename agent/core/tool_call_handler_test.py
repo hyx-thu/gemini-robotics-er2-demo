@@ -315,6 +315,15 @@ class ToolCallHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(tool_call_handler.user_requested_sit("Never ask Spot to sit"))
     self.assertTrue(tool_call_handler.user_requested_sit("Please sit down"))
 
+  def test_multilingual_sit_requests_are_authorized(self):
+    for text in ("坐 下 来 。", "请坐下", "趴下吧", "お座りして", "座って", "앉아",
+                 "Siéntate por favor", "Assieds-toi", "Setz dich", "Siediti",
+                 "Сядь"):
+      self.assertTrue(tool_call_handler.user_requested_sit(text), text)
+    for text in ("不要坐下", "别 坐", "站起来", "座らないで", "앉지 마",
+                 "No te sientes", "Setz dich nicht", "presentation"):
+      self.assertFalse(tool_call_handler.user_requested_sit(text), text)
+
   def test_extracts_all_declared_blocking_tools(self):
     tools = [{
         "functionDeclarations": [
