@@ -456,7 +456,8 @@ header h1 {
 .video-container {
   width: 100%;
   aspect-ratio: 1/1;
-  max-height: calc(100vh - 280px);
+  /* Leave room for the 3D robot twin below the video. */
+  max-height: max(240px, calc(100vh - 560px));
   background: var(--bg-dark);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -512,6 +513,91 @@ video {
   z-index: 10;
   pointer-events: none;
 }
+
+/* Animated pick/place/detect FX, above the static overlay. */
+#fx-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 11;
+  pointer-events: none;
+}
+
+/* 3D robot twin panel (below the video). */
+.robot-twin {
+  position: relative;
+  width: 100%;
+  height: clamp(200px, 30vh, 320px);
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 30%, #f8fafd 0%, #e3e8ef 100%);
+}
+.dark-theme .robot-twin {
+  background: radial-gradient(ellipse at 50% 30%, #2a2f37 0%, #15181d 100%);
+}
+#robot-twin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+#robot-twin-canvas:active { cursor: grabbing; }
+.twin-hud {
+  position: absolute;
+  top: 8px; left: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  font-size: 12px;
+}
+.twin-title {
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+.twin-action {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(95, 99, 104, 0.12);
+  color: var(--text-secondary);
+  font-weight: 600;
+  transition: background 0.2s, color 0.2s;
+}
+.twin-action.active {
+  background: rgba(66, 133, 244, 0.16);
+  color: #1a73e8;
+}
+.dark-theme .twin-action.active { color: #8ab4f8; }
+.twin-status {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.twin-status.pending { background: rgba(249, 171, 0, 0.18); color: #b06000; }
+.twin-status.ok      { background: rgba(52, 168, 83, 0.18); color: #188038; }
+.twin-status.bad     { background: rgba(234, 67, 53, 0.18); color: #c5221f; }
+.dark-theme .twin-status.pending { color: #fdd663; }
+.dark-theme .twin-status.ok      { color: #81c995; }
+.dark-theme .twin-status.bad     { color: #f28b82; }
+.twin-btn {
+  position: absolute;
+  top: 6px; right: 8px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.twin-btn:hover { filter: brightness(1.1); }
 
 .controls-grid {
   display: flex;

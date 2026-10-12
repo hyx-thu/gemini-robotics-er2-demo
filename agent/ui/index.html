@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=16" />
+    <link rel="stylesheet" href="/static/style.css?v=17" />
   </head>
   <body>
     <div class="container">
@@ -115,6 +115,16 @@
                     <img id="robot-cam-img" class="robot-cam-img hidden" alt="Robot Camera" />
                     <canvas id="video-canvas" style="display: none"></canvas>
                     <canvas id="overlay-canvas"></canvas>
+                    <canvas id="fx-canvas"></canvas>
+                  </div>
+                  <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
+                    <canvas id="robot-twin-canvas"></canvas>
+                    <div class="twin-hud">
+                      <span class="twin-title">🤖 Robot Twin</span>
+                      <span id="twin-action" class="twin-action">Idle</span>
+                      <span id="twin-status" class="twin-status hidden"></span>
+                    </div>
+                    <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                   </div>
                   <div id="plan-hud" class="plan-hud hidden" title="Current plan step">
                     <div class="hud-dots"></div>
@@ -363,6 +373,8 @@
     </div>
     <script src="/static/media-handler.js?v=6"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=36"></script>
+    <script src="/static/agent-ui.js?v=37"></script>
+    <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
+    <script type="module" src="/static/robot-twin.js?v=1"></script>
   </body>
 </html>

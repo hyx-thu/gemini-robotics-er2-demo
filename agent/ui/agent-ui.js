@@ -1025,6 +1025,7 @@ function renderActionStatus(msg) {
   const hudRow = document.querySelector('#plan-hud .hud-watchdog');
   if (!row) return;
   const state = (msg && msg.state) || 'idle';
+  window.dispatchEvent(new CustomEvent('robot-twin:status', { detail: msg || { state } }));
   if (state === 'cleared' || state === 'idle') {
     actionStatus = null;
     stopActionTicker();
@@ -1196,6 +1197,9 @@ function selectAgent(type) {
   if (typeof selectedAgentName !== 'undefined') {
     selectedAgentName = type;
   }
+  // The 3D twin models a quadruped with an arm — only meaningful for Spot.
+  const twin = document.getElementById('robot-twin');
+  if (twin) twin.classList.toggle('hidden', type !== 'spot');
 
   // Clear active state from all agent dropdown options
   if (agentDropdown) {
@@ -1455,6 +1459,11 @@ function handleJsonMessage(msg) {
         if (!rejected) renderPlan(msg.args || {});
       } else {
         recordToolVisual(msg);
+        // 3D robot twin + animated camera FX (pick/place/detect).
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', {
+          detail: { name: msg.name, args: msg.args || {}, result: msg.result },
+        }));
+        startToolFx(msg);
       }
 
       if (msg.name === 'run_instruction') {
@@ -1528,6 +1537,11 @@ function drawPointsOverlay(points, layer = 'annotation', meta = {}) {
     // A fresh detect starts a new target step: clear any stale trajectory until
     // pick/place is called for this new target.
     overlayLayers.trajectory = [];
+    const tp = overlayLayers[key][0];
+    window.dispatchEvent(new CustomEvent('robot-twin:target', {
+      detail: { x: tp.x, y: tp.y, label: tp.label },
+    }));
+    startDetectFx(tp);
   } else if (key === 'trajectory') {
     const refinedTarget = normalizeOverlayPoint(meta.target);
     overlayMeta.trajectory = {
@@ -1553,8 +1567,278 @@ function clearOverlay(layer) {
   } else {
     Object.keys(overlayLayers).forEach(k => { overlayLayers[k] = []; });
     lastToolVisual = null;
+    clearToolFx();
   }
   redrawOverlay();
+}
+
+// --- Animated camera FX (separate canvas above the static overlay) ---------
+//
+//   detect → a reticle that spins and locks onto the target point
+//   pick   → a gripper claw travels the recommended trajectory, closes at the
+//            grasp waypoint (ripple), then lifts along the remaining path
+//   place  → the claw (holding) travels the transport path and releases at
+//            the end with a green drop ripple + down arrow
+// Purely cosmetic: it reads the same 0-1000 points the static overlay uses.
+// `var` (not let/const): clearOverlay() may run before this point executes.
+var fxCanvas = document.getElementById('fx-canvas');
+var fxItems = [];
+var fxRaf = null;
+
+function clearToolFx() {
+  fxItems = [];
+  if (fxCanvas) {
+    const ctx = fxCanvas.getContext('2d');
+    ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  }
+}
+
+function startDetectFx(p) {
+  if (!p) return;
+  fxItems = fxItems.filter(f => f.kind !== 'detect');
+  fxItems.push({ kind: 'detect', p: { x: p.x, y: p.y }, t0: performance.now(), dur: 4500 });
+  ensureFxLoop();
+}
+
+function startToolFx(msg) {
+  if (!msg || (msg.name !== 'pick' && msg.name !== 'place')) {
+    if (msg && msg.name === 'stop') clearToolFx();
+    return;
+  }
+  const r = (msg.result && typeof msg.result === 'object') ? msg.result : {};
+  if (r.error) return;
+  const a = msg.args || {};
+  let pts = overlayLayers.trajectory.length >= 2 ? overlayLayers.trajectory : null;
+  if (!pts) {
+    const raw = (Array.isArray(r.trajectory) && r.trajectory) || (Array.isArray(a.trajectory) && a.trajectory) || [];
+    pts = raw.map(normalizeOverlayPoint).filter(Boolean);
+  }
+  if (pts.length < 2) {
+    const tgt = overlayLayers.target[0];
+    if (!tgt) return;
+    pts = [{ x: tgt.x, y: Math.max(0, tgt.y - 120) }, { x: tgt.x, y: tgt.y }];
+  }
+  pts = pts.map(p => ({ x: p.x, y: p.y, label: (p.label || '').toLowerCase() }));
+  // Where the gripper acts: the 'grasp' waypoint for pick, the last for place.
+  let actIdx = pts.length - 1;
+  if (msg.name === 'pick') {
+    const gi = pts.findIndex(p => p.label.includes('grasp'));
+    if (gi >= 0) actIdx = gi;
+    else {
+      const tgt = overlayLayers.target[0];
+      if (tgt) {
+        let best = Infinity;
+        pts.forEach((p, i) => { const d = Math.hypot(p.x - tgt.x, p.y - tgt.y); if (d < best) { best = d; actIdx = i; } });
+      }
+    }
+  }
+  fxItems = [];  // a new pick/place replaces any running detect/pick FX
+  fxItems.push({ kind: msg.name, pts, actIdx, t0: performance.now(), dur: 5200 });
+  ensureFxLoop();
+}
+
+function ensureFxLoop() {
+  if (!fxCanvas || fxRaf) return;
+  const loop = () => {
+    fxRaf = null;
+    drawToolFx();
+    if (fxItems.length) fxRaf = requestAnimationFrame(loop);
+  };
+  fxRaf = requestAnimationFrame(loop);
+}
+
+function fxPathLength(pts) {
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return L;
+}
+
+function fxPointAt(pts, s) {  // s in [0, total length]
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    if (s <= seg || i === pts.length - 1) {
+      const u = seg > 0 ? Math.min(1, s / seg) : 1;
+      return {
+        x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * u,
+        y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * u,
+        ang: Math.atan2(pts[i].y - pts[i - 1].y, pts[i].x - pts[i - 1].x),
+      };
+    }
+    s -= seg;
+  }
+  return { x: pts[0].x, y: pts[0].y, ang: 0 };
+}
+
+function drawClaw(ctx, x, y, open, color, scale = 1) {
+  // A top-down two-jaw gripper icon pointing "down" into the image.
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3.2;
+  // wrist
+  ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(0, -14); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-14, -14); ctx.lineTo(14, -14); ctx.stroke();
+  // jaws
+  const spread = 4 + open * 10;
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * 14, -14);
+    ctx.quadraticCurveTo(s * (spread + 8), -4, s * spread, 6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRipple(ctx, x, y, u, color) {
+  for (let k = 0; k < 3; k++) {
+    const v = (u + k / 3) % 1;
+    ctx.beginPath();
+    ctx.arc(x, y, 8 + v * 38, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = (1 - v) * 0.85;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawToolFx() {
+  if (!fxCanvas) return;
+  const rect = fxCanvas.parentElement.getBoundingClientRect();
+  if (fxCanvas.width !== Math.round(rect.width) || fxCanvas.height !== Math.round(rect.height)) {
+    fxCanvas.width = Math.round(rect.width);
+    fxCanvas.height = Math.round(rect.height);
+  }
+  const ctx = fxCanvas.getContext('2d');
+  ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  const m = mediaDisplayRect();
+  const toPx = (nx, ny) => [m.x + (nx / 1000) * m.w, m.y + (ny / 1000) * m.h];
+  const now = performance.now();
+  fxItems = fxItems.filter(f => now - f.t0 < f.dur);
+  const ease = u => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+
+  for (const f of fxItems) {
+    const el = now - f.t0;
+    const fade = Math.min(1, (f.dur - el) / 600);
+    ctx.globalAlpha = fade;
+    if (f.kind === 'detect') {
+      const [x, y] = toPx(f.p.x, f.p.y);
+      const lock = Math.min(1, el / 900);
+      const R = 70 - 46 * ease(lock);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(el / 380);
+      ctx.strokeStyle = '#ffb300';
+      ctx.shadowColor = '#ffb300';
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let q = 0; q < 4; q++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.beginPath(); ctx.moveTo(R + 4, 0); ctx.lineTo(R + 14, 0); ctx.stroke();
+      }
+      ctx.restore();
+      if (lock >= 1) drawRipple(ctx, x, y, ((el - 900) / 1400) % 1, '#ffb300');
+      continue;
+    }
+    // pick / place
+    const isPick = f.kind === 'pick';
+    const color = isPick ? '#00e5ff' : '#00e676';
+    const pts = f.pts;
+    const total = fxPathLength(pts);
+    const actLen = fxPathLength(pts.slice(0, f.actIdx + 1));
+    const tApproach = 1700, tAct = 700, tRest = 1300;
+    let s, open, phaseAct = 0;
+    if (el < tApproach) {
+      s = actLen * ease(el / tApproach);
+      open = isPick ? 1 : 0;
+    } else if (el < tApproach + tAct) {
+      s = actLen;
+      phaseAct = (el - tApproach) / tAct;
+      open = isPick ? 1 - phaseAct : phaseAct;
+    } else {
+      const u = Math.min(1, (el - tApproach - tAct) / tRest);
+      s = actLen + (total - actLen) * ease(u);
+      open = isPick ? 0 : 1;
+    }
+    // Travelled path glow.
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.globalAlpha = 0.35 * fade;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    let acc = 0;
+    let [px0, py0] = toPx(pts[0].x, pts[0].y);
+    ctx.moveTo(px0, py0);
+    for (let i = 1; i < pts.length; i++) {
+      const seg = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      if (acc + seg >= s) {
+        const p = fxPointAt(pts, s);
+        const [qx, qy] = toPx(p.x, p.y);
+        ctx.lineTo(qx, qy);
+        break;
+      }
+      acc += seg;
+      const [qx, qy] = toPx(pts[i].x, pts[i].y);
+      ctx.lineTo(qx, qy);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = fade;
+    // Action point ripple (grasp / release).
+    const ap = pts[f.actIdx];
+    const [ax, ay] = toPx(ap.x, ap.y);
+    if (el >= tApproach) drawRipple(ctx, ax, ay, ((el - tApproach) / 900) % 1, color);
+    if (!isPick && el >= tApproach) {
+      // Down arrow above the drop point.
+      const bob = Math.sin(el / 160) * 4;
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay - 16 + bob);
+      ctx.lineTo(ax - 10, ay - 30 + bob);
+      ctx.lineTo(ax - 4, ay - 30 + bob);
+      ctx.lineTo(ax - 4, ay - 44 + bob);
+      ctx.lineTo(ax + 4, ay - 44 + bob);
+      ctx.lineTo(ax + 4, ay - 30 + bob);
+      ctx.lineTo(ax + 10, ay - 30 + bob);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    // The claw itself (+ a held "item" dot while carrying).
+    const cp = fxPointAt(pts, s);
+    const [cx, cy] = toPx(cp.x, cp.y);
+    const holding = isPick ? (el >= tApproach + tAct * 0.6) : (el < tApproach + tAct * 0.4);
+    if (holding) {
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff7043';
+      ctx.fill();
+    }
+    drawClaw(ctx, cx, cy, open, color, 1);
+    // Caption.
+    const cap = isPick
+      ? (el < tApproach ? '🤏 approach' : el < tApproach + tAct ? '✊ grasp' : '⬆ lift')
+      : (el < tApproach ? '📦 carry' : el < tApproach + tAct ? '🖐 release' : '✅ placed');
+    ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+    const tw = ctx.measureText(cap).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(cx + 18, cy - 40, tw + 12, 20);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(cap, cx + 24, cy - 26);
+  }
+  ctx.globalAlpha = 1;
 }
 
 function recordToolVisual(msg) {
@@ -2359,6 +2643,8 @@ function resetUI() {
   robotCamImg.src = '';
   videoPlaceholder.classList.remove('hidden');
   clearOverlay();
+  clearToolFx();
+  window.dispatchEvent(new CustomEvent('robot-twin:reset'));
 
   updateMicUI();
   connectBtn.disabled = false;
