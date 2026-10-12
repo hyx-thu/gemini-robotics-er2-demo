@@ -539,8 +539,14 @@ function renderLatencyBar() {
     btn.classList.toggle('scope-user', isUser);
     btn.classList.toggle('scope-all', !isUser);
     btn.title = isUser ?
-      'Latency of user-initiated turns only (click: show user + heartbeat)' :
-      'Latency of all turns incl. heartbeats (click: show user only)';
+      'Latency of user-initiated turns only (auto-rotates every 5 s; click to switch now)' :
+      'Latency of all turns incl. heartbeats (auto-rotates every 5 s; click to switch now)';
+    // Colour the TTFT/TTFC/TTLT values to match the active scope.
+    const bar = btn.closest('.latency-bar');
+    if (bar) {
+      bar.classList.toggle('scope-user', isUser);
+      bar.classList.toggle('scope-all', !isUser);
+    }
   }
 }
 
@@ -549,6 +555,20 @@ function cycleLatencyScope() {
   latencyScope = LATENCY_SCOPES[(i + 1) % LATENCY_SCOPES.length];
   localStorage.setItem('lite_latency_scope', latencyScope);
   renderLatencyBar();
+}
+
+// Auto-rotate the latency scope (USER <-> ALL) so both views are visible
+// without clicking. A manual click switches immediately and restarts the
+// rotation timer so the chosen view stays up for a full period.
+const LATENCY_SCOPE_ROTATE_MS = 5000;
+let latencyScopeTimer = null;
+function startLatencyScopeRotation() {
+  if (latencyScopeTimer) clearInterval(latencyScopeTimer);
+  latencyScopeTimer = setInterval(cycleLatencyScope, LATENCY_SCOPE_ROTATE_MS);
+}
+function onLatencyScopeClick() {
+  cycleLatencyScope();
+  startLatencyScopeRotation();
 }
 // Server-reported latency breakdown histories (milliseconds).
 let srvClientHistory = [];
@@ -2579,8 +2599,9 @@ themeRadios.forEach(radio => {
 // --- Latency scope toggle (USER ⇄ ALL) ---
 {
   const scopeBtn = document.getElementById('latencyScopeBtn');
-  if (scopeBtn) scopeBtn.onclick = cycleLatencyScope;
+  if (scopeBtn) scopeBtn.onclick = onLatencyScopeClick;
   renderLatencyBar();
+  startLatencyScopeRotation();
 }
 
 // --- Keyboard Shortcuts ---

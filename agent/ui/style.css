@@ -1364,9 +1364,14 @@ kbd {
   background: rgba(46, 204, 113, 0.08);
 }
 .latency-scope-btn.scope-all {
-  color: #f1c40f;
-  border-color: rgba(241, 196, 15, 0.5);
-  background: rgba(241, 196, 15, 0.08);
+  color: #b8860b;  /* dark goldenrod — readable on light bg */
+  border-color: rgba(184, 134, 11, 0.6);
+  background: rgba(184, 134, 11, 0.10);
+}
+.dark-theme .latency-scope-btn.scope-all {
+  color: #e0a800;
+  border-color: rgba(224, 168, 0, 0.6);
+  background: rgba(224, 168, 0, 0.10);
 }
 
 .latency-bar-item {
@@ -1380,6 +1385,18 @@ kbd {
   font-size: 11px;
   font-weight: 600;
   color: #2ecc71;
+}
+
+/* ALL scope: TTFT / TTFC / TTLT values follow the scope button colour. */
+.latency-bar.scope-all #ttft-val,
+.latency-bar.scope-all #ttfc-val,
+.latency-bar.scope-all #ttlt-val {
+  color: #b8860b;
+}
+.dark-theme .latency-bar.scope-all #ttft-val,
+.dark-theme .latency-bar.scope-all #ttfc-val,
+.dark-theme .latency-bar.scope-all #ttlt-val {
+  color: #e0a800;
 }
 
 .latency-bar #think-val.stale {
