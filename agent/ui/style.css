@@ -537,8 +537,9 @@ video {
 .robot-twin {
   position: relative;
   flex: 0 0 auto;
-  width: 200px;
-  height: 200px;
+  /* Square that grows into the free space under the video. */
+  height: clamp(220px, calc(100vh - 600px), 380px);
+  aspect-ratio: 1 / 1;
   margin-bottom: 0.5rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
