@@ -2858,10 +2858,23 @@ function applyTheme(theme) {
   } else {
     document.body.classList.remove('dark-theme');
   }
+  const tbtn = document.getElementById('themeToggleBtn');
+  if (tbtn) tbtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  themeRadios.forEach(r => { r.checked = r.value === theme; });
+}
+
+// Header light/dark toggle (same storage as the Settings radios).
+{
+  const tbtn = document.getElementById('themeToggleBtn');
+  if (tbtn) tbtn.onclick = () => {
+    const next = document.body.classList.contains('dark-theme') ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem('theme', next);
+  };
 }
 
 // Load theme on startup
-let savedTheme = localStorage.getItem('theme') || 'dark';  // layout v2: dark by default
+let savedTheme = localStorage.getItem('theme') || 'light';
 applyTheme(savedTheme);
 
 // Update radio button state

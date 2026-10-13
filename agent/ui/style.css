@@ -2485,3 +2485,12 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .lower-left .debug-toggle-btn { align-self: center; }
 @media (max-width: 1300px) { .lower-left .latency-bar { grid-template-columns: auto repeat(4, minmax(0, 1fr)) auto; } .lower-left .latency-bar-item:nth-child(n+7) { display: none; } }
 .lower-left .latency-bar-item.latency-bar-divider { display: none; }
+
+/* Theme toggle icon swap + metrics back in the footer. */
+#themeToggleBtn .icon-sun { display: none; }
+.dark-theme #themeToggleBtn .icon-sun { display: inline; }
+.dark-theme #themeToggleBtn .icon-moon { display: none; }
+.debug-footer .latency-bar { display: flex; }
+.debug-footer .latency-bar-item { font-size: 11px; }
+.lower-row { height: clamp(180px, 22vh, 250px); }
+.lower-left { justify-content: center; gap: 14px; }
