@@ -53,6 +53,7 @@ CATS = [
     ('🧍 Posture', 'body pose', 'stand · sit', 'c-pose'),
     ('👁️ Perception', 'see & locate', 'look · detect', 'c-see'),
     ('🦾 Manipulation', 'arm & gripper', 'pick · place · stow · wait_for_pick_up', 'c-arm'),
+    ('🤝 Gestures', 'greet & interact', 'make_gesture', 'c-gest'),
     ('💬 Communication', 'talk to people', 'send_message · ack', 'c-talk'),
     ('🌐 World knowledge', 'grounded lookup', 'get_current_location · google_search · google_maps_search', 'c-web'),
 ]

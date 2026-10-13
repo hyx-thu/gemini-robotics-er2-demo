@@ -681,6 +681,45 @@ def close_gripper_tool() -> dict[str, Any]:
   )
 
 
+SPOT_GESTURES = ("high_wave", "shake_hand")
+
+
+def spot_gesture_tool() -> dict[str, Any]:
+  """Social arm gestures for greeting / introductions (Spot)."""
+  return _tool(
+      name="make_gesture",
+      description=(
+          "Perform a friendly social gesture with the arm. Use it naturally"
+          " while you talk, not as a task step:"
+          " 'high_wave' = a big, high wave to say hello or goodbye - call it"
+          " when the user greets you (e.g. 'hello', '你好', 'こんにちは'), when"
+          " you introduce yourself or are asked who you are, and when the user"
+          " says goodbye;"
+          " 'shake_hand' = extend the gripper for a handshake - call it when"
+          " the user offers or asks for a handshake ('let's shake hands',"
+          " '握个手') or says 'nice to meet you'."
+          " Call it at most once per greeting and keep talking in the same"
+          " turn; never interrupt an ongoing pick/place task for a gesture"
+          " unless the user explicitly asks. No visual confirmation is needed."
+      ),
+      parameters={
+          "type": "OBJECT",
+          "properties": {
+              "gesture": {
+                  "type": "STRING",
+                  "enum": list(SPOT_GESTURES),
+                  "description": (
+                      "'high_wave' (greeting / introduction / goodbye) or"
+                      " 'shake_hand' (handshake)."
+                  ),
+              },
+          },
+          "required": ["gesture"],
+      },
+      behavior="BLOCKING",
+  )
+
+
 def stand_tool() -> dict[str, Any]:
   """Stand up."""
   return _tool(
@@ -1120,6 +1159,7 @@ def spot_sim_tools() -> list[dict[str, Any]]:
       wait_for_pick_up_tool(),
       stand_tool(),
       sit_tool(),
+      spot_gesture_tool(),
       stow_tool(),
       draw_points_tool(),
       clear_overlay_tool(),

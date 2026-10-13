@@ -148,10 +148,20 @@ function buildDog() {
       else if (dir === 'up') tgt.w += ang; else if (dir === 'down') tgt.w -= ang;
     },
     detectEnter: (tgt, setArm) => setArm(ik(0.66, STAND_H + 0.3, 0, -0.75)),
-    gesture: (setArm, tgt) => [
-      [0.5, () => setArm(ik(0.6, STAND_H + 0.55, -0.1, 0.6))],
-      [0.4, () => { tgt.w += 0.5; }], [0.4, () => { tgt.w -= 1.0; }], [0.4, () => { tgt.w += 1.0; }],
-    ],
+    gestures: {
+      // Big wave: arm straight up, open gripper, sweep side to side.
+      high_wave: (setArm, tgt) => [
+        [0.7, () => { setArm(ik(0.42, STAND_H + 1.05, -0.12, 1.35)); tgt.grip = 1; }],
+        ...[0.55, -1.1, 1.1, -1.1, 1.1, -0.55].map(d => [0.32, () => { tgt.yaw += d; tgt.w += d * 0.35; }]),
+      ],
+      // Handshake: reach forward at hand height, grip, pump three times, let go.
+      shake_hand: (setArm, tgt) => [
+        [0.8, () => { setArm(ik(0.9, 0.78, -0.08, 0)); tgt.grip = 1; }],
+        [0.45, () => { tgt.grip = 0.35; }],
+        ...[0.12, -0.24, 0.24, -0.24, 0.24, -0.12].map(d => [0.22, () => { tgt.s += d; }]),
+        [0.4, () => { tgt.grip = 1; }],
+      ],
+    },
     update(c) {
       const { cur, t, walkAmt, gaitPhase, gait } = c;
       const breathe = Math.sin(t * 2.2) * 0.006 * (1 - walkAmt);
@@ -271,10 +281,21 @@ function buildHumanoid() {
       else if (dir === 'up') tgt.hp += ang; else if (dir === 'down') tgt.hp -= ang;
     },
     detectEnter: (tgt, setArm) => { tgt.hp = -0.45; setArm(ik(0.62, STAND_H + 0.5, 0.2, -0.6)); },
-    gesture: (setArm, tgt) => [
-      [0.5, () => setArm(ik(0.25, STAND_H + 1.1, 0.4, 1.2))],
-      [0.35, () => { tgt.w += 0.6; }], [0.35, () => { tgt.w -= 1.2; }], [0.35, () => { tgt.w += 1.2; }], [0.35, () => { tgt.w -= 0.6; }],
-    ],
+    gestures: {
+      // Big wave: right hand high above the head, swinging side to side.
+      high_wave: (setArm, tgt) => [
+        [0.6, () => { setArm(ik(0.12, STAND_H + 1.2, 0.5, 1.45)); tgt.grip = 1; tgt.hp = 0.1; }],
+        ...[0.35, -0.7, 0.7, -0.7, 0.7, -0.35].map(d => [0.3, () => { tgt.yaw += d * 0.5; tgt.w += d; }]),
+        [0.2, () => { tgt.hp = 0; }],
+      ],
+      // Handshake: right hand forward at waist height, grip, pump, release.
+      shake_hand: (setArm, tgt) => [
+        [0.7, () => { setArm(ik(0.48, STAND_H + 0.22, 0.22, 0)); tgt.grip = 1; tgt.hp = -0.15; }],
+        [0.4, () => { tgt.grip = 0.35; }],
+        ...[0.1, -0.2, 0.2, -0.2, 0.2, -0.1].map(d => [0.22, () => { tgt.s += d; }]),
+        [0.4, () => { tgt.grip = 1; tgt.hp = 0; }],
+      ],
+    },
     update(c) {
       const { cur, t, walkAmt, gaitPhase, gait } = c;
       const breathe = Math.sin(t * 1.8) * 0.005 * (1 - walkAmt);
@@ -475,8 +496,12 @@ function init() {
     navigate: () => enqueue([...ensureStanding(), ...stowSteps(),
       wait(3.0, () => { hideTable(); gait = { vx: 0.5, vy: 0, vrot: 0.15 }; }),
       wait(0.3, () => { gait = null; })]),
-    make_gesture: () => enqueue([...ensureStanding(), ...ensureDeployed(),
-      ...R.gesture(setArm, tgt).map(([d, f]) => wait(d, f)), wait(0.6, () => setArm(R.ready()))]),
+    make_gesture: (a) => {
+      const g = R.gestures[a.gesture] || R.gestures.high_wave;
+      enqueue([...ensureStanding(), ...ensureDeployed(),
+        ...g(setArm, tgt).map(([d, f]) => wait(d, f)),
+        wait(0.6, () => { setArm(R.ready()); tgt.grip = 0.2; })]);
+    },
     stop: () => { clearQueue(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
   };
 
@@ -523,6 +548,7 @@ function init() {
     if (name === 'pick' && a.grasp_part) label += ' · ' + String(a.grasp_part).slice(0, 24);
     if (name === 'look' && a.direction) label += ' · ' + a.direction;
     if (name === 'navigate' && a.waypoint) label += ' → ' + String(a.waypoint).slice(0, 30);
+    if (name === 'make_gesture') label = a.gesture === 'shake_hand' ? '🤝 Shake hand' : '👋 High wave';
     actionEl.textContent = label; actionEl.classList.add('active');
   }
   window.addEventListener('robot-twin:tool', (ev) => {

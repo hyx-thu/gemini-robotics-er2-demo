@@ -333,6 +333,16 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       s["standing"] = False
       return {"status": "sitting", "note": _VERIFY}
 
+    if action_name == "make_gesture":
+      gesture = str(kwargs.get("gesture", "")).strip()
+      if gesture not in tools_lib.SPOT_GESTURES:
+        return {"error": f"Unknown gesture '{gesture}'. Use one of {list(tools_lib.SPOT_GESTURES)}."}
+      return {
+          "status": "completed",
+          "gesture": gesture,
+          "note": "Social gesture performed; no visual confirmation needed. Keep the conversation going.",
+      }
+
     if action_name == "stow":
       s["arm"] = "carry" if s["holding"] else "stowed"
       return {"status": s["arm"], "holding": s["holding"], "note": _VERIFY}

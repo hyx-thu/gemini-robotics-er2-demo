@@ -2567,3 +2567,5 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .tool-tip .tt-params code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
 .tool-tip .tt-type { margin-left: 6px; font-size: 10.5px; color: var(--text-secondary); }
 .tool-tip .tt-pdesc { color: var(--text-secondary); font-size: 11.5px; }
+.c-gest { --cat: #e8710a; }
+.dark-theme .c-gest { --cat: #fcad70; }
