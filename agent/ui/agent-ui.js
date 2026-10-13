@@ -395,12 +395,16 @@ function getResolvedSessionConfig() {
 
 // Fetch server defaults if not in localStorage
 
+// Browser key for the Maps Embed API (restricted to Embed + our domains).
+var mapsEmbedKey = '';
+
 async function initServerDefaults() {
   try {
     const resp = await fetch('/api/server_defaults');
     if (!resp.ok) throw new Error();
     const defaults = await resp.json();
     if (defaults.thinking) modelThinkingInfo = defaults.thinking;
+    mapsEmbedKey = defaults.maps_embed_key || '';
     if (defaults.video_sources) {
       agentVideoSources = Object.assign({}, agentVideoSources, defaults.video_sources);
       if (defaults.spot_simulated) {
@@ -1460,6 +1464,7 @@ function handleJsonMessage(msg) {
         if (!rejected) renderPlan(msg.args || {});
       } else {
         recordToolVisual(msg);
+        renderRichToolCard(msg);
         // 3D robot twin + animated camera FX (pick/place/detect).
         window.dispatchEvent(new CustomEvent('robot-twin:tool', {
           detail: { name: msg.name, args: msg.args || {}, result: msg.result },
@@ -3126,3 +3131,129 @@ if (helpGuideBtn && helpGuidePopover) {
   });
 }
 
+// --- Rich cards in the chat: maps + place photos ---------------------------
+//
+// Rendered from the results of the information tools, so what the user sees
+// is exactly what the tool returned (no model-generated images):
+//   google_maps_search   -> map card with a pin per place (chips to switch)
+//   get_current_location -> map card pinned at the device location
+//   get_place_photos     -> photo strip with author attributions + map link
+function _mapsEmbedUrl(q, zoom) {
+  if (!mapsEmbedKey) return '';
+  const lang = (navigator.language || 'en').slice(0, 5);
+  let u = 'https://www.google.com/maps/embed/v1/place?key=' + encodeURIComponent(mapsEmbedKey) +
+    '&q=' + encodeURIComponent(q) + '&language=' + encodeURIComponent(lang);
+  if (zoom) u += '&zoom=' + zoom;
+  return u;
+}
+
+function _appendCard(el) {
+  const isAtBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 80;
+  chatLog.appendChild(el);
+  if (isAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
+  // Images / iframes load after insertion; keep the log pinned to the bottom.
+  el.querySelectorAll('img, iframe').forEach(m => m.addEventListener('load', () => {
+    if (chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 400) chatLog.scrollTop = chatLog.scrollHeight;
+  }, { once: true }));
+}
+
+function _el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function appendMapCard(title, places, centerQuery) {
+  const card = _el('div', 'rich-card map-card');
+  const head = _el('div', 'rich-head');
+  head.appendChild(_el('span', 'rich-icon', '🗺️'));
+  head.appendChild(_el('span', 'rich-title', title));
+  card.appendChild(head);
+  const first = places[0];
+  const firstQ = first ? (first.place_id ? 'place_id:' + first.place_id : first.q) : centerQuery;
+  const url = _mapsEmbedUrl(firstQ, first && first.zoom);
+  let frame = null;
+  if (url) {
+    frame = document.createElement('iframe');
+    frame.className = 'map-frame';
+    frame.loading = 'lazy';
+    frame.referrerPolicy = 'no-referrer-when-downgrade';
+    frame.allowFullscreen = true;
+    frame.src = url;
+    card.appendChild(frame);
+  }
+  if (places.length) {
+    const chips = _el('div', 'place-chips');
+    places.forEach((p, i) => {
+      const chip = _el('button', 'place-chip' + (i === 0 ? ' active' : ''), '📍 ' + (p.name || p.q));
+      chip.title = 'Show on map';
+      chip.onclick = () => {
+        chips.querySelectorAll('.place-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        if (frame) frame.src = _mapsEmbedUrl(p.place_id ? 'place_id:' + p.place_id : p.q, p.zoom);
+        else if (p.uri) window.open(p.uri, '_blank', 'noopener');
+      };
+      chips.appendChild(chip);
+    });
+    card.appendChild(chips);
+  }
+  const link = first && (first.uri || (first.place_id ? 'https://www.google.com/maps/place/?q=place_id:' + first.place_id : ''));
+  if (link) {
+    const a = _el('a', 'rich-link', 'Open in Google Maps ↗');
+    a.href = link; a.target = '_blank'; a.rel = 'noopener';
+    card.appendChild(a);
+  }
+  _appendCard(card);
+}
+
+function appendPhotoCard(r) {
+  const card = _el('div', 'rich-card photo-card');
+  const head = _el('div', 'rich-head');
+  head.appendChild(_el('span', 'rich-icon', '📷'));
+  head.appendChild(_el('span', 'rich-title', r.name || 'Photos'));
+  if (r.rating) head.appendChild(_el('span', 'rich-meta', `★ ${r.rating}${r.rating_count ? ' (' + r.rating_count + ')' : ''}`));
+  card.appendChild(head);
+  if (r.address) card.appendChild(_el('div', 'rich-sub', r.address));
+  const strip = _el('div', 'photo-strip');
+  (r.photos || []).forEach(ph => {
+    const fig = _el('figure', 'photo');
+    const a = document.createElement('a');
+    a.href = ph.uri; a.target = '_blank'; a.rel = 'noopener';
+    const img = document.createElement('img');
+    img.src = ph.uri; img.loading = 'lazy'; img.alt = r.name || 'place photo';
+    a.appendChild(img); fig.appendChild(a);
+    const att = (ph.attributions || [])[0];
+    if (att && att.name) {
+      const cap = _el('figcaption', 'photo-attr');
+      const al = _el('a', '', '© ' + att.name);
+      if (att.uri) { al.href = att.uri; al.target = '_blank'; al.rel = 'noopener'; }
+      cap.appendChild(al); fig.appendChild(cap);
+    }
+    strip.appendChild(fig);
+  });
+  card.appendChild(strip);
+  if (r.google_maps_url) {
+    const a = _el('a', 'rich-link', 'Open in Google Maps ↗');
+    a.href = r.google_maps_url; a.target = '_blank'; a.rel = 'noopener';
+    card.appendChild(a);
+  }
+  _appendCard(card);
+}
+
+function renderRichToolCard(msg) {
+  const r = (msg && msg.result && typeof msg.result === 'object') ? msg.result : null;
+  if (!r || r.error) return;
+  try {
+    if (msg.name === 'google_maps_search' && Array.isArray(r.places) && r.places.length) {
+      appendMapCard(r.query || 'Map', r.places, '');
+    } else if (msg.name === 'get_current_location' && r.available && r.latitude != null) {
+      const q = `${r.latitude},${r.longitude}`;
+      appendMapCard('📍 You are here', [{ q, name: r.place_description ? r.place_description.split(/[。.,，]/)[0] : q, zoom: 16, uri: r.google_maps_url }], q);
+    } else if (msg.name === 'get_place_photos' && Array.isArray(r.photos) && r.photos.length) {
+      appendPhotoCard(r);
+    }
+  } catch (e) {
+    console.warn('rich card failed', e);
+  }
+}

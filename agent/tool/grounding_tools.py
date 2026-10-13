@@ -34,6 +34,7 @@ GROUNDING_TOOL_NAMES = frozenset({
     "get_current_location",
     "google_search",
     "google_maps_search",
+    "get_place_photos",
 })
 
 _DEFAULT_GROUNDING_MODEL = "gemini-3.5-flash-lite"
@@ -134,12 +135,47 @@ def google_maps_search_tool() -> dict[str, Any]:
   )
 
 
+def get_place_photos_tool() -> dict[str, Any]:
+  return _decl(
+      "get_place_photos",
+      "Fetch real photos of a place / point of interest (restaurant, cafe,"
+      " shop, landmark, venue ...) and SHOW them to the user in the chat."
+      " Use it when the user asks what a place looks like or wants to see"
+      " pictures of it (e.g. '给我看看这家店的照片', 'show me photos of it'),"
+      " typically right after google_maps_search: pass the place_id of the"
+      " place from that result. The photos are displayed automatically; just"
+      " describe briefly what they show, never read out URLs.",
+      {
+          "place_id": {
+              "type": "STRING",
+              "description": (
+                  "Google Maps place_id (e.g. 'ChIJ...') from a previous"
+                  " google_maps_search result. Preferred when available."
+              ),
+          },
+          "place_name": {
+              "type": "STRING",
+              "description": (
+                  "Name (and optionally city) of the place when no place_id"
+                  " is known, e.g. 'Red Rock Coffee Mountain View'."
+              ),
+          },
+          "max_photos": {
+              "type": "INTEGER",
+              "description": "How many photos to show (1-6, default 4).",
+          },
+      },
+      [],
+  )
+
+
 def grounding_tool_declarations() -> list[dict[str, Any]]:
   """All shared information tools, in a stable order."""
   return [
       get_current_location_tool(),
       google_search_tool(),
       google_maps_search_tool(),
+      get_place_photos_tool(),
   ]
 
 
@@ -291,6 +327,9 @@ def run_grounding_tool(
         result["place_description"] = ""
       return result
 
+    if func_name == "get_place_photos":
+      return _place_photos(args, fix)
+
     query = str(args.get("query") or "").strip()
     if not query:
       return {"error": "query is required"}
@@ -330,6 +369,18 @@ def run_grounding_tool(
       )
       out["query"] = query
       out["anchored_on_device_location"] = anchor is not None and anchor == fix
+      # Distinct places (for the UI map card and for get_place_photos).
+      places, seen = [], set()
+      for src in out.get("sources", []):
+        pid = src.get("place_id")
+        title = re.sub(r"\s*-\s*Google Maps$", "", src.get("title", ""))
+        if not pid or pid in seen or title.lower().startswith("review of"):
+          continue
+        seen.add(pid)
+        places.append({"place_id": pid, "name": title, "uri": src.get("uri", "")})
+      out["places"] = places[:5]
+      if anchor is not None:
+        out["map_center"] = {"latitude": anchor[0], "longitude": anchor[1]}
       return out
 
     return {"error": f"Unknown information tool: {func_name}"}
@@ -346,3 +397,98 @@ def run_grounding_tool(
   except Exception as e:  # pylint: disable=broad-except
     logger.exception("%s failed", func_name)
     return {"error": f"{func_name} failed: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# Place photos (Places API (New), server-side key; photo URLs carry no key)
+# ---------------------------------------------------------------------------
+
+_PLACES_FIELDS = (
+    "id,displayName,formattedAddress,rating,userRatingCount,location,"
+    "googleMapsUri,photos"
+)
+
+
+def _places_request(url: str, key: str, field_mask: str | None,
+                    body: dict[str, Any] | None = None) -> dict[str, Any]:
+  # Solution ID = usage attribution required by the Places API agent skill.
+  headers = {"X-Goog-Api-Key": key, "X-Goog-Maps-Solution-ID": "gmp_git_agentskills_v1"}
+  if field_mask:
+    headers["X-Goog-FieldMask"] = field_mask
+  data = None
+  if body is not None:
+    headers["Content-Type"] = "application/json"
+    data = json.dumps(body).encode("utf-8")
+  req = urllib.request.Request(url, data=data, headers=headers,
+                               method="POST" if body is not None else "GET")
+  with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_S) as resp:
+    return json.loads(resp.read().decode("utf-8"))
+
+
+def _place_photos(args: dict[str, Any],
+                  fix: tuple[float, float] | None) -> dict[str, Any]:
+  key = os.getenv("MAPS_API_KEY")
+  if not key:
+    return {"error": "MAPS_API_KEY (Places API) is not configured on the server."}
+  place_id = str(args.get("place_id") or "").strip().removeprefix("places/")
+  name = str(args.get("place_name") or "").strip()
+  try:
+    n = int(args.get("max_photos") or 4)
+  except (TypeError, ValueError):
+    n = 4
+  n = max(1, min(6, n))
+  t0 = time.monotonic()
+  if place_id:
+    place = _places_request(
+        f"https://places.googleapis.com/v1/places/{place_id}", key, _PLACES_FIELDS)
+  elif name:
+    body: dict[str, Any] = {"textQuery": name, "pageSize": 1}
+    if fix is not None:
+      body["locationBias"] = {"circle": {
+          "center": {"latitude": fix[0], "longitude": fix[1]}, "radius": 20000.0}}
+    found = _places_request(
+        "https://places.googleapis.com/v1/places:searchText", key,
+        ",".join("places." + f for f in _PLACES_FIELDS.split(",")), body)
+    if not found.get("places"):
+      return {"error": f"No place found for '{name}'.", "photos": []}
+    place = found["places"][0]
+  else:
+    return {"error": "place_id or place_name is required"}
+
+  photos = []
+  for ph in (place.get("photos") or [])[:n]:
+    try:
+      media = _places_request(
+          f"https://places.googleapis.com/v1/{ph['name']}/media"
+          "?maxWidthPx=900&skipHttpRedirect=true", key, None)
+    except Exception as e:  # pylint: disable=broad-except
+      logger.warning("place photo media failed: %s", e)
+      continue
+    if media.get("photoUri"):
+      photos.append({
+          "uri": media["photoUri"],
+          "width": ph.get("widthPx"),
+          "height": ph.get("heightPx"),
+          "attributions": [
+              {"name": a.get("displayName", ""), "uri": a.get("uri", "")}
+              for a in ph.get("authorAttributions") or []
+          ],
+      })
+  loc = place.get("location") or {}
+  return {
+      "place_id": place.get("id", place_id),
+      "name": (place.get("displayName") or {}).get("text", name),
+      "address": place.get("formattedAddress", ""),
+      "rating": place.get("rating"),
+      "rating_count": place.get("userRatingCount"),
+      "latitude": loc.get("latitude"),
+      "longitude": loc.get("longitude"),
+      "google_maps_url": place.get("googleMapsUri", ""),
+      "photos": photos,
+      "photo_count": len(photos),
+      "latency_ms": int((time.monotonic() - t0) * 1000),
+      "note": (
+          "The photos are already displayed to the user in the chat. Describe"
+          " them in one or two sentences; do not read URLs aloud."
+      ),
+  }

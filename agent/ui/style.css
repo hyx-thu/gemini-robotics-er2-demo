@@ -2521,3 +2521,23 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 #connectBtn.connected { background: #34a853 !important; border-color: #34a853 !important; color: #fff !important; }
 #connectBtn.connected:hover { background: #ea4335 !important; border-color: #ea4335 !important; }
 .dark-theme #connectBtn.connecting { color: #fdd663; }
+
+/* ---- Rich chat cards: maps + place photos ---- */
+.rich-card { align-self: stretch; margin: 6px 0; padding: 10px; border-radius: 14px; background: var(--bg-surface); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.rich-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.rich-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rich-meta { font-size: 12px; color: #e37400; font-weight: 600; }
+.rich-sub { font-size: 11.5px; color: var(--text-secondary); margin-top: -4px; }
+.map-frame { width: 100%; height: 220px; border: 0; border-radius: 10px; background: var(--accent-bg); }
+.place-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.place-chip { font-size: 11.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-color); background: var(--bg-panel); color: var(--text-primary); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.place-chip.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.dark-theme .place-chip.active { color: #0b0f14; }
+.rich-link { font-size: 12px; color: var(--blue); text-decoration: none; align-self: flex-start; }
+.rich-link:hover { text-decoration: underline; }
+.photo-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.photo { margin: 0; position: relative; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; background: var(--accent-bg); }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s; }
+.photo img:hover { transform: scale(1.04); }
+.photo-attr { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 6px; font-size: 10px; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+.photo-attr a { color: #fff; text-decoration: none; }

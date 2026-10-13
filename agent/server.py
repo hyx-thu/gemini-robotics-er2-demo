@@ -290,6 +290,9 @@ async def api_server_defaults(request: fastapi.Request):
           for name, spec in session_config.KNOWN_MODELS.items()
       },
       "default_model": config.model,
+      # Browser key restricted to the Maps Embed API + our domains (it is
+      # visible in iframe URLs by design). Empty -> UI shows link-only cards.
+      "maps_embed_key": os.environ.get("MAPS_EMBED_KEY", ""),
       "default_modality": config.response_modality,
       "use_tts": config.use_tts,
       "spot_simulated": agent_lib.spot_simulated(),
