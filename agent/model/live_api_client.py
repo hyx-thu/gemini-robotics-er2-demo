@@ -11,9 +11,9 @@ Usage:
   client = GeminiLiveApiClient(api_key="YOUR_API_KEY")
   stream = client.create_stream()
 
-WebSocket endpoint:
-  wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta
-      .GenerativeService.BidiGenerateContent?key=API_KEY
+WebSocket endpoint (API key sent as the x-goog-api-key header):
+  wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha
+      .GenerativeService.BidiGenerateContent
 """
 
 import logging
@@ -186,7 +186,9 @@ class GeminiLiveApiClient:
     if not api_key:
       raise ValueError("api_key is required for the Gemini Live API endpoint.")
     self._api_key = api_key
-    self._url = f"{_LIVE_API_WSS_URL}?key={api_key}"
+    # The key travels in the x-goog-api-key header, never in the URL, so it
+    # cannot leak through URL logging, proxies or exception messages.
+    self._url = _LIVE_API_WSS_URL
     logger.info(
         "GeminiLiveApiClient initialized -> %s",
         _LIVE_API_WSS_URL,
@@ -196,7 +198,10 @@ class GeminiLiveApiClient:
     """Create a new WebSocket connection and return a stream wrapper."""
     ws = websocket.create_connection(
         self._url,
-        header={"Content-Type": "application/json"},
+        header={
+            "Content-Type": "application/json",
+            "x-goog-api-key": self._api_key,
+        },
     )
     logger.info("WebSocket connection established to Gemini Live API")
     return GeminiLiveApiStream(ws)

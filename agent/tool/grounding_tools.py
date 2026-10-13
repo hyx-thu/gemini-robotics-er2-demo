@@ -181,12 +181,13 @@ def _generate(
     }
   url = (
       "https://generativelanguage.googleapis.com/v1beta/models/"
-      f"{model}:generateContent?key={api_key}"
+      f"{model}:generateContent"
   )
   req = urllib.request.Request(
       url,
       data=json.dumps(payload).encode("utf-8"),
-      headers={"Content-Type": "application/json"},
+      # API key in a header, never in the URL (keeps it out of logs / proxies).
+      headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
       method="POST",
   )
   t0 = time.monotonic()

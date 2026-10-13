@@ -120,7 +120,7 @@ def transcribe_audio_pcm(
   wav_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
   url = (
       "https://generativelanguage.googleapis.com/v1beta/models/"
-      f"{model}:generateContent?key={resolved_key}"
+      f"{model}:generateContent"
   )
   payload = {
       "contents": [{
@@ -142,7 +142,7 @@ def transcribe_audio_pcm(
   req = urllib.request.Request(
       url,
       data=json.dumps(payload).encode("utf-8"),
-      headers={"Content-Type": "application/json"},
+      headers={"Content-Type": "application/json", "x-goog-api-key": resolved_key},
       method="POST",
   )
   try:
@@ -217,13 +217,12 @@ class Tts3pClient:
   def _build_request(self, text: str, stream_sse: bool = False) -> urllib.request.Request:
     if not self._api_key:
       raise ValueError("api_key is required for Tts3pClient")
-    headers = {"Content-Type": "application/json"}
+    # API key in a header, never in the URL (keeps it out of logs / proxies).
+    headers = {"Content-Type": "application/json", "x-goog-api-key": self._api_key}
 
     if self._provider == "gemini":
       method_suffix = (
-          f"streamGenerateContent?alt=sse&key={self._api_key}"
-          if stream_sse
-          else f"generateContent?key={self._api_key}"
+          "streamGenerateContent?alt=sse" if stream_sse else "generateContent"
       )
       url = (
           "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -231,10 +230,7 @@ class Tts3pClient:
       )
       body = self._gemini_body(text)
     else:
-      url = (
-          "https://texttospeech.googleapis.com/v1/text:synthesize"
-          f"?key={self._api_key}"
-      )
+      url = "https://texttospeech.googleapis.com/v1/text:synthesize"
       body = {
           "input": {"text": text},
           "voice": {
