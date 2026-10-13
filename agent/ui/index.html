@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=25" />
+    <link rel="stylesheet" href="/static/style.css?v=26" />
   </head>
   <body>
     <div class="container">
@@ -162,6 +162,7 @@
                         <span id="twin-action" class="twin-action">Idle</span>
                         <span id="twin-status" class="twin-status hidden"></span>
                       </div>
+                      <button id="twin-switch" class="twin-btn twin-switch" title="Switch robot">🐕</button>
                       <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                     </div>
                   </div>
@@ -397,6 +398,6 @@
     <script src="/static/agent-client.js?v=2"></script>
     <script src="/static/agent-ui.js?v=38"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=3"></script>
+    <script type="module" src="/static/robot-twin.js?v=5"></script>
   </body>
 </html>

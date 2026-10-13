@@ -2349,3 +2349,4 @@ details.message.thought summary {
 .skills-card { width: min(1240px, 100%); }
 .c-pose { --cat: #c5221f; }
 .dark-theme .c-pose { --cat: #f28b82; }
+.twin-btn.twin-switch { right: 36px; font-size: 13px; }
