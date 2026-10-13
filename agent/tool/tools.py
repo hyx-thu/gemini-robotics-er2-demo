@@ -689,7 +689,8 @@ def spot_gesture_tool() -> dict[str, Any]:
   return _tool(
       name="make_gesture",
       description=(
-          "Perform a friendly social gesture with the arm. Use it naturally"
+          "Perform a friendly social greeting gesture (the robot lifts a front"
+          " paw; a humanoid uses its hand). Use it naturally"
           " while you talk, not as a task step:"
           " 'high_wave' = a big, high wave to say hello or goodbye - call it"
           " when the user greets you (e.g. 'hello', '你好', 'こんにちは'), when"

@@ -38,6 +38,7 @@ def _decls():
             "type": str(spec.get("type", "")).lower(),
             "required": name in req,
             "desc": _first_sentences(spec.get("description", ""), 1, 120),
+            "enum": list(spec.get("enum") or []),
         })
       out[d["name"]] = {"desc": _first_sentences(d.get("description", "")), "params": plist}
   return out
@@ -53,7 +54,7 @@ CATS = [
     ('🧍 Posture', 'body pose', 'stand · sit', 'c-pose'),
     ('👁️ Perception', 'see & locate', 'look · detect', 'c-see'),
     ('🦾 Manipulation', 'arm & gripper', 'pick · place · stow · wait_for_pick_up', 'c-arm'),
-    ('🤝 Gestures', 'greet & interact', 'make_gesture', 'c-gest'),
+    ('🤝 Gestures', 'greet & interact', 'make_gesture(high_wave|shake_hand)', 'c-gest'),
     ('💬 Communication', 'talk to people', 'send_message · ack', 'c-talk'),
     ('🌐 World knowledge', 'grounded lookup', 'get_current_location · google_search · google_maps_search', 'c-web'),
 ]
@@ -131,13 +132,19 @@ for i, (a, b, sk, c) in enumerate(CATS):
     f'<tspan class="fc-s" dx="8">{html.escape(b)}</tspan></text>')
   # One hoverable <text> per tool (monospace -> width ~= 0.6em per char).
   cw, tx = 6.95, sx + 16
-  for j, name in enumerate([n.strip() for n in sk.split('·')]):
+  for j, token in enumerate([n.strip() for n in sk.split('·')]):
     if j:
       A(f'<text class="fc-code fc-sep" x="{tx:.1f}" y="{y + 44}">·</text>')
       tx += cw * 2
+    m = re.match(r'^(\w+)(?:\((.*)\))?$', token)
+    name, values = m.group(1), (m.group(2) or '')
     missing = '' if name in TIPS else ' fc-notip'
     A(f'<text class="fc-code fc-tool{missing}" data-tool="{html.escape(name)}" x="{tx:.1f}" y="{y + 44}">{html.escape(name)}</text>')
     tx += cw * (len(name) + 1)
+    if values:  # e.g. the gesture names, shown as small chips after the tool
+      label = '→ ' + '  ·  '.join(v.strip() for v in values.split('|'))
+      A(f'<text class="fc-s fc-vals" x="{tx:.1f}" y="{y + 44}">{html.escape(label)}</text>')
+      tx += 6.2 * (len(label) + 1)
   A('</g>')
   line([(sx + sw, cy[i]), (rbus, cy[i])], 'fc-loop', arrow=False)
 
@@ -161,7 +168,7 @@ a = s.index('<svg class="fc-svg"')
 b = s.index('</svg>', a) + 6
 s = s[:a] + svg + s[b:]
 # Tool tips JSON next to the SVG (consumed by agent-ui.js).
-used = {n.strip() for c in CATS for n in c[2].split('·')}
+used = {re.match(r'^(\w+)', n.strip()).group(1) for c in CATS for n in c[2].split('·')}
 tips = {k: v for k, v in TIPS.items() if k in used}
 blob = '<script type="application/json" id="tool-tips">' + json.dumps(tips, ensure_ascii=False).replace('</', '<\\/') + '</script>'
 s = re.sub(r'<script type="application/json" id="tool-tips">.*?</script>', '', s, flags=re.S)

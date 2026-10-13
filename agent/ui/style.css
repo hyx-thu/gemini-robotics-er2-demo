@@ -2569,3 +2569,6 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .tool-tip .tt-pdesc { color: var(--text-secondary); font-size: 11.5px; }
 .c-gest { --cat: #e8710a; }
 .dark-theme .c-gest { --cat: #fcad70; }
+.fc-vals { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--cat) !important; opacity: .8; }
+.tool-tip .tt-enum { margin: 2px 0; display: flex; gap: 4px; flex-wrap: wrap; }
+.tool-tip .tt-enum code { font-size: 10.5px; padding: 0 6px; border-radius: 6px; background: var(--accent-bg); }

@@ -3273,6 +3273,7 @@ function renderRichToolCard(msg) {
     if (!t) return;
     const params = (t.params || []).map(p =>
       `<li><code>${esc(p.name)}</code><span class="tt-type">${esc(p.type)}${p.required ? ' · required' : ''}</span>` +
+      ((p.enum && p.enum.length) ? `<div class="tt-enum">${p.enum.map(v => `<code>${esc(v)}</code>`).join(' ')}</div>` : '') +
       (p.desc ? `<div class="tt-pdesc">${esc(p.desc)}</div>` : '') + '</li>').join('');
     tipEl.innerHTML = `<div class="tt-name">${esc(name)}()</div><div class="tt-desc">${esc(t.desc)}</div>` +
       (params ? `<div class="tt-h">Parameters</div><ul class="tt-params">${params}</ul>` : '<div class="tt-h">No parameters</div>');
