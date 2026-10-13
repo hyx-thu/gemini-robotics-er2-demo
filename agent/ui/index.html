@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=26" />
+    <link rel="stylesheet" href="/static/style.css?v=29" />
   </head>
   <body>
     <div class="container">
@@ -119,11 +119,11 @@
                     <canvas id="video-canvas" style="display: none"></canvas>
                     <canvas id="overlay-canvas"></canvas>
                     <canvas id="fx-canvas"></canvas>
+                    <div id="plan-hud" class="plan-hud hidden" title="Current plan step">
+                      <div class="hud-dots"></div>
+                      <div class="hud-line"><span class="hud-idx"></span><span class="hud-text"></span></div>
+                      <div class="hud-watchdog hidden"></div>
                   </div>
-                  <div id="plan-hud" class="plan-hud hidden" title="Current plan step">
-                    <div class="hud-dots"></div>
-                    <div class="hud-line"><span class="hud-idx"></span><span class="hud-text"></span></div>
-                    <div class="hud-watchdog hidden"></div>
                   </div>
                   <div class="lower-row">
                     <div class="lower-left">
@@ -153,6 +153,19 @@
                           <button id="micBtn" class="btn" title="Start Microphone"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
                           <button id="audioToggleBtn" class="btn active" title="Toggle Audio (Mute/Unmute)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg></button>
                         </div>
+                      </div>
+                      <div id="latency-bar" class="latency-bar">
+                        <button id="latencyScopeBtn" class="latency-scope-btn scope-user" title="Latency scope">&#128100; USER</button>
+                        <span class="latency-bar-item">TTFT <span id="ttft-val" class="metric-value">--</span> <span id="ttft-count" class="metric-count"></span></span>
+                        <span class="latency-bar-item">TTFC <span id="ttfc-val" class="metric-value">--</span> <span id="ttfc-count" class="metric-count"></span></span>
+                        <span class="latency-bar-item">TTLT <span id="ttlt-val" class="metric-value">--</span> <span id="ttlt-count" class="metric-count"></span></span>
+                        <span class="latency-bar-item latency-bar-divider">|</span>
+                        <span class="latency-bar-item" title="Thinking level">&#129504; <span id="think-val" class="metric-value">--</span></span>
+                        <span class="latency-bar-item latency-bar-divider">|</span>
+                        <span class="latency-bar-item" title="Context window utilization">CTX <span id="tok-ctx-pct" class="metric-value">--</span></span>
+                        <span class="latency-bar-item" title="Input (prompt) tokens">IN <span id="tok-input-bar" class="metric-value">--</span></span>
+                        <span class="latency-bar-item" title="Output (response) tokens">OUT <span id="tok-output-bar" class="metric-value">--</span></span>
+                        <button id="latencyDetailToggle" class="debug-toggle-btn" title="Server breakdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
                       </div>
                     </div>
                     <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
@@ -380,23 +393,10 @@
     <!-- Debug Footer -->
     <div id="debug-footer" class="debug-footer">
       <button id="settings-btn" class="eval-toggle-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</button>
-      <div id="latency-bar" class="latency-bar">
-        <button id="latencyScopeBtn" class="latency-scope-btn scope-user" title="Latency scope">&#128100; USER</button>
-        <span class="latency-bar-item">TTFT <span id="ttft-val" class="metric-value">--</span> <span id="ttft-count" class="metric-count"></span></span>
-        <span class="latency-bar-item">TTFC <span id="ttfc-val" class="metric-value">--</span> <span id="ttfc-count" class="metric-count"></span></span>
-        <span class="latency-bar-item">TTLT <span id="ttlt-val" class="metric-value">--</span> <span id="ttlt-count" class="metric-count"></span></span>
-        <span class="latency-bar-item latency-bar-divider">|</span>
-        <span class="latency-bar-item" title="Thinking level">&#129504; <span id="think-val" class="metric-value">--</span></span>
-        <span class="latency-bar-item latency-bar-divider">|</span>
-        <span class="latency-bar-item" title="Context window utilization">CTX <span id="tok-ctx-pct" class="metric-value">--</span></span>
-        <span class="latency-bar-item" title="Input (prompt) tokens">IN <span id="tok-input-bar" class="metric-value">--</span></span>
-        <span class="latency-bar-item" title="Output (response) tokens">OUT <span id="tok-output-bar" class="metric-value">--</span></span>
-        <button id="latencyDetailToggle" class="debug-toggle-btn" title="Server breakdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
-      </div>
     </div>
     <script src="/static/media-handler.js?v=6"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=38"></script>
+    <script src="/static/agent-ui.js?v=39"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
     <script type="module" src="/static/robot-twin.js?v=5"></script>
   </body>

@@ -2861,7 +2861,7 @@ function applyTheme(theme) {
 }
 
 // Load theme on startup
-let savedTheme = localStorage.getItem('theme') || 'light';
+let savedTheme = localStorage.getItem('theme') || 'dark';  // layout v2: dark by default
 applyTheme(savedTheme);
 
 // Update radio button state

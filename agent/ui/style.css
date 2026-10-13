@@ -2350,3 +2350,138 @@ details.message.thought summary {
 .c-pose { --cat: #c5221f; }
 .dark-theme .c-pose { --cat: #f28b82; }
 .twin-btn.twin-switch { right: 36px; font-size: 13px; }
+
+/* =====================================================================
+   Layout v2 — "Mission Control": camera hero, twin + control card below,
+   conversation rail on the right. Overrides the legacy rules above.
+   ===================================================================== */
+:root {
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --card-radius: 16px;
+  --blue: #1a73e8;
+  --green: #188038;
+  --yellow: #b8860b;
+}
+.dark-theme {
+  --bg-dark: #0b0f14;
+  --bg-surface: #0e131a;
+  --bg-panel: #121821;
+  --text-primary: #e8eaed;
+  --text-secondary: #9aa0a6;
+  --border-color: #27303c;
+  --accent: #e8eaed;
+  --accent-bg: #1b222c;
+  --red: #f28b82;
+  --blue: #8ab4f8;
+  --green: #81c995;
+  --yellow: #e0a800;
+}
+body { font-family: "Google Sans", Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg-dark); }
+.container { background: var(--bg-dark); padding: 10px 16px 0; }
+
+/* Header */
+.app-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color); }
+.header-actions .btn, .help-guide-icon-btn {
+  width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-panel); border: 1px solid var(--border-color);
+}
+.agent-selector-btn { border-radius: 999px; padding: 6px 14px; background: var(--bg-panel); border: 1px solid var(--border-color); }
+
+/* Three-region grid */
+#main-content { padding-left: 0; gap: 14px; min-height: 0; }
+.main-body, main, .app-section, .app-grid, .left-panel { height: 100%; min-height: 0; }
+main { overflow: hidden; }
+.app-grid { gap: 0; }
+.left-panel { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+
+/* Camera hero */
+.video-container {
+  aspect-ratio: auto !important;
+  height: 100%; max-height: none; width: 100%; min-height: 0;
+  margin: 0; border-radius: var(--card-radius);
+  background: #000; border: 1px solid var(--border-color);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+.video-container video, .video-container .robot-cam-img { background: #000; }
+#video-placeholder { font-size: 14px; color: #9aa0a6; background: radial-gradient(ellipse at 50% 40%, #1b232e 0%, #0b0f14 100%); }
+body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse at 50% 40%, #f1f3f6 0%, #dfe3e8 100%); color: #5f6368; }
+/* Plan HUD becomes a glass strip on the camera */
+.video-container .plan-hud {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; width: auto; margin: 0; z-index: 12;
+  background: rgba(14, 19, 26, 0.72); color: #fff; border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 4px solid #4285f4; border-radius: 12px; backdrop-filter: blur(10px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.video-container .plan-hud .hud-text { color: #fff; }
+.video-container .plan-hud .hud-idx { color: #8ab4f8; }
+
+/* Bottom row: control card + twin */
+.lower-row { gap: 12px; height: clamp(190px, 25vh, 290px); align-items: stretch; }
+.lower-left {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  background: var(--bg-panel); border: 1px solid var(--border-color);
+  border-radius: var(--card-radius); padding: 12px 14px;
+}
+.lower-left .status-label { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.3px; }
+.lower-left .controls-grid { margin: 0; gap: 0; }
+.lower-left .controls-row { gap: 10px; flex-wrap: nowrap; }
+.lower-left .controls-row > .btn {
+  height: 44px; min-width: 44px; padding: 0; border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-bg); border: 1px solid var(--border-color); color: var(--text-primary);
+}
+.lower-left .controls-row > .btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.dark-theme .lower-left .controls-row > .btn.active { color: #0b0f14; }
+.lower-left .controls-row > .btn.danger { background: rgba(217, 48, 37, 0.12); color: var(--red); border-color: rgba(217, 48, 37, 0.35); }
+.lower-left .model-selector-wrapper { flex: 1; min-width: 0; order: 10; }
+.lower-left .model-selector-btn {
+  width: 100%; height: 44px; border-radius: 12px; padding: 0 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--accent-bg); border: 1px solid var(--border-color); font-size: 12.5px;
+}
+.lower-left .model-selector-btn > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Metrics strip inside the card */
+.lower-left .latency-bar { margin: auto 0 0; flex-wrap: wrap; gap: 6px 8px; }
+.lower-left .latency-bar-item { font-size: 11px; padding: 4px 9px; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border-color); }
+.lower-left .latency-bar-divider { display: none; }
+.lower-left .latency-bar .metric-value { font-size: 12px; }
+.lower-left .debug-toggle-btn { margin-left: auto; }
+.robot-twin { height: 100%; aspect-ratio: 1 / 1; width: auto; margin: 0; border-radius: var(--card-radius); }
+
+/* Conversation rail */
+.chat-sidebar {
+  width: 400px; min-width: 400px; padding: 0; border-left: none; gap: 0;
+  background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: var(--card-radius); overflow: hidden;
+}
+.chat-sidebar .sidebar-header { font-size: 13px; }
+.chat-sidebar .plan-panel { margin: 0; border-radius: 0; border-left: none; border-right: none; }
+.chat-sidebar .chat-log { padding: 12px; }
+.chat-sidebar .input-area { padding: 10px; border-top: 1px solid var(--border-color); }
+.chat-sidebar .input-area input { border-radius: 999px; padding: 10px 14px; background: var(--bg-surface); }
+.chat-sidebar .input-area .btn { border-radius: 999px; background: var(--blue); color: #fff; border-color: var(--blue); }
+.message { border-radius: 14px; }
+.message.user { border-bottom-right-radius: 4px; }
+.message.gemini { border-bottom-left-radius: 4px; }
+
+/* Footer: slimmer, quieter */
+.debug-footer { height: 30px; background: var(--bg-dark); font-size: 11px; }
+.debug-footer .latency-bar { display: none; }
+.container { height: calc(100vh - 30px); }
+
+@media (max-width: 1200px) { .chat-sidebar { width: 340px; min-width: 340px; } }
+
+/* Metric tiles inside the control card (label on top, value below). */
+.lower-left .latency-bar { display: grid; grid-template-columns: auto repeat(7, minmax(0, 1fr)) auto; gap: 8px; align-items: stretch; }
+.lower-left .latency-bar-item {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 8px 10px; border-radius: 10px; font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--text-secondary); min-height: 54px;
+}
+.lower-left .latency-bar .metric-value { font-size: 15px; text-transform: none; letter-spacing: 0; }
+.lower-left .latency-bar .metric-count { font-size: 9px; }
+.lower-left .latency-scope-btn { align-self: center; }
+.lower-left .debug-toggle-btn { align-self: center; }
+@media (max-width: 1300px) { .lower-left .latency-bar { grid-template-columns: auto repeat(4, minmax(0, 1fr)) auto; } .lower-left .latency-bar-item:nth-child(n+7) { display: none; } }
+.lower-left .latency-bar-item.latency-bar-divider { display: none; }
