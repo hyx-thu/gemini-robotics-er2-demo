@@ -50,6 +50,7 @@ from embodiment.spot import robot_client as spot_robot_client_lib
 from embodiment.spot import spot_embodiment as spot_embodiment_lib
 from embodiment.spot import spot_sim_embodiment as spot_sim_embodiment_lib
 from embodiment.tinybot import tinybot_embodiment as tinybot_embodiment_lib
+from model import live_api_client
 from model import tts_client as tts_client_lib
 from tool import tools as tools_lib
 
@@ -432,7 +433,15 @@ async def api_agent_config(
     else:
       decls.append(t)
 
-  service_address = "generativelanguage.googleapis.com"
+  # Which backend serves the selected model (Vertex AI via OAuth, or the
+  # Gemini Developer API via API key) — shown in Settings → Agent Config.
+  if live_api_client.uses_vertex(config.model):
+    service_address = (
+        f"{os.environ.get('VERTEX_LOCATION', 'us-central1')}-aiplatform.googleapis.com"
+        " (Vertex AI · OAuth)"
+    )
+  else:
+    service_address = "generativelanguage.googleapis.com (Developer API · key)"
 
   return {
       "name": agent.name,

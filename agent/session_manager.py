@@ -283,7 +283,8 @@ class SessionManager:
     self._endpoint_type = endpoint_type
 
     # Create the API client.
-    self.client = live_api_client.GeminiLiveApiClient(api_key=api_key)
+    # Vertex AI (OAuth) for gemini-3.8-live; Developer API key for the rest.
+    self.client = live_api_client.make_client(model, api_key)
     self.stream = None
     self._stream_lock = asyncio.Lock()
     # --- Stream health (see _stream_health_loop / _reconnect) ---

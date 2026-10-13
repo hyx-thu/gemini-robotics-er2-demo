@@ -54,6 +54,8 @@ class GeminiLiveApiStream:
     self.closed_locally: bool = False
     # Set by the owner to tell streams apart across reconnects.
     self.generation: int = 0
+    # Vertex AI only: "projects/P/locations/L/publishers/google/models".
+    self.model_resource_prefix: str | None = None
 
   def Start(
       self, on_message: Callable[[dict], None],
@@ -148,6 +150,13 @@ class GeminiLiveApiStream:
     """Send a client message (must be a JSON-serializable dict)."""
     try:
       import json  # pylint: disable=g-import-not-at-top
+      if self.model_resource_prefix and isinstance(msg, dict) and "setup" in msg:
+        # Vertex AI wants a full publisher-model resource name, not models/X.
+        setup = dict(msg["setup"])
+        name = str(setup.get("model", "")).removeprefix("models/")
+        if name and not name.startswith("projects/"):
+          setup["model"] = f"{self.model_resource_prefix}/{name}"
+        msg = {**msg, "setup": setup}
       json_str = json.dumps(msg)
       self._ws.send(json_str)
     except Exception as e:  # pylint: disable=broad-except
@@ -205,3 +214,106 @@ class GeminiLiveApiClient:
     )
     logger.info("WebSocket connection established to Gemini Live API")
     return GeminiLiveApiStream(ws)
+
+
+_VERTEX_SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
+
+
+class VertexLiveApiClient:
+  """Client for the Vertex AI Live API (LlmBidiService over WSS).
+
+  Auth is OAuth 2.0 via Application Default Credentials: on Cloud Run that is
+  the service's runtime service account (needs roles/aiplatform.user); locally
+  run ``gcloud auth application-default login``. No API key is involved.
+
+  The wire protocol (setup / realtimeInput / toolResponse / serverContent) is
+  the same JSON as the Gemini Developer API, so the same GeminiLiveApiStream
+  wrapper is reused; only the URL, the Authorization header and the model
+  resource name differ.
+  """
+
+  def __init__(
+      self,
+      project: str | None = None,
+      location: str = "us-central1",
+      token_provider: Callable[[], str] | None = None,
+  ):
+    self._location = location
+    self._token_provider = token_provider
+    self._credentials = None
+    if token_provider is None:
+      import google.auth  # pylint: disable=g-import-not-at-top
+      self._credentials, adc_project = google.auth.default(scopes=_VERTEX_SCOPES)
+      project = project or adc_project
+    if not project:
+      raise ValueError(
+          "Vertex AI project is unknown: set VERTEX_PROJECT (or"
+          " GOOGLE_CLOUD_PROJECT)."
+      )
+    self._project = project
+    host = (
+        "aiplatform.googleapis.com"
+        if location == "global"
+        else f"{location}-aiplatform.googleapis.com"
+    )
+    self._url = (
+        f"wss://{host}/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/"
+        "BidiGenerateContent"
+    )
+    self.model_resource_prefix = (
+        f"projects/{project}/locations/{location}/publishers/google/models"
+    )
+    logger.info(
+        "VertexLiveApiClient initialized -> %s (project=%s, location=%s)",
+        self._url, project, location,
+    )
+
+  def _access_token(self) -> str:
+    if self._token_provider is not None:
+      return self._token_provider()
+    import google.auth.transport.requests  # pylint: disable=g-import-not-at-top
+    creds = self._credentials
+    if not creds.valid:
+      creds.refresh(google.auth.transport.requests.Request())
+    return creds.token
+
+  def create_stream(self) -> GeminiLiveApiStream:
+    """Open a new Vertex Live WebSocket (fresh token each time)."""
+    ws = websocket.create_connection(
+        self._url,
+        header={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._access_token()}",
+        },
+    )
+    logger.info("WebSocket connection established to Vertex AI Live API")
+    stream = GeminiLiveApiStream(ws)
+    stream.model_resource_prefix = self.model_resource_prefix
+    return stream
+
+
+# Models served from Vertex AI (OAuth). Everything else stays on the Gemini
+# Developer API (API key). gemini-robotics-er-2 is not on Vertex yet;
+# gemini-3.8-live-extended-thinking is not a Vertex publisher model and Vertex
+# rejects custom thinking levels on gemini-3.8-live unless allowlisted.
+VERTEX_LIVE_MODELS = frozenset({"gemini-3.8-live"})
+
+
+def uses_vertex(model: str) -> bool:
+  """Whether this model should be served from Vertex AI."""
+  import os  # pylint: disable=g-import-not-at-top
+  if os.environ.get("LIVE_BACKEND", "").lower() == "aistudio":
+    return False
+  return model.removeprefix("models/") in VERTEX_LIVE_MODELS
+
+
+def make_client(model: str, api_key: str | None):
+  """Return the Live client (Vertex or Developer API) for ``model``."""
+  import os  # pylint: disable=g-import-not-at-top
+  if uses_vertex(model):
+    return VertexLiveApiClient(
+        project=os.environ.get("VERTEX_PROJECT")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT"),
+        location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+    )
+  return GeminiLiveApiClient(api_key=api_key)
