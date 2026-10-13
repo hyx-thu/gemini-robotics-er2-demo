@@ -3257,3 +3257,40 @@ function renderRichToolCard(msg) {
     console.warn('rich card failed', e);
   }
 }
+
+// --- Tools map: hover tips for each tool name ------------------------------
+// Data = <script id="tool-tips"> generated from the real function
+// declarations by agent/scripts/gen_tools_map.py.
+{
+  let tips = {};
+  try { tips = JSON.parse((document.getElementById('tool-tips') || {}).textContent || '{}'); } catch (e) { tips = {}; }
+  const tipEl = document.createElement('div');
+  tipEl.className = 'tool-tip hidden';
+  document.body.appendChild(tipEl);
+  const esc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function show(name, x, y) {
+    const t = tips[name];
+    if (!t) return;
+    const params = (t.params || []).map(p =>
+      `<li><code>${esc(p.name)}</code><span class="tt-type">${esc(p.type)}${p.required ? ' · required' : ''}</span>` +
+      (p.desc ? `<div class="tt-pdesc">${esc(p.desc)}</div>` : '') + '</li>').join('');
+    tipEl.innerHTML = `<div class="tt-name">${esc(name)}()</div><div class="tt-desc">${esc(t.desc)}</div>` +
+      (params ? `<div class="tt-h">Parameters</div><ul class="tt-params">${params}</ul>` : '<div class="tt-h">No parameters</div>');
+    tipEl.classList.remove('hidden');
+    const r = tipEl.getBoundingClientRect();
+    let left = x + 14, top = y + 16;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+    if (top + r.height > window.innerHeight - 8) top = Math.max(8, y - r.height - 12);
+    tipEl.style.left = left + 'px'; tipEl.style.top = top + 'px';
+  }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest && e.target.closest('.fc-tool');
+    if (el) show(el.dataset.tool, e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!tipEl.classList.contains('hidden') && e.target.closest && e.target.closest('.fc-tool')) show(e.target.closest('.fc-tool').dataset.tool, e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest && e.target.closest('.fc-tool')) tipEl.classList.add('hidden');
+  });
+}

@@ -2550,3 +2550,20 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   text-align: center; overflow: hidden;
 }
 .twin-btn.twin-switch { right: 38px; font-size: 13px; }
+
+/* Tools map: hoverable tool names + tooltip */
+.fc-tool { cursor: help; }
+.fc-tool:hover { text-decoration: underline; text-decoration-style: dotted; }
+.fc-sep { fill: var(--text-secondary, #9aa0a6) !important; }
+.tool-tip {
+  position: fixed; z-index: 3000; max-width: 380px; pointer-events: none;
+  background: var(--bg-surface, #fff); color: var(--text-primary); border: 1px solid var(--border-color);
+  border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.22); padding: 10px 12px; font-size: 12px; line-height: 1.45;
+}
+.tool-tip .tt-name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
+.tool-tip .tt-desc { color: var(--text-primary); }
+.tool-tip .tt-h { margin-top: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-secondary); }
+.tool-tip .tt-params { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.tool-tip .tt-params code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+.tool-tip .tt-type { margin-left: 6px; font-size: 10.5px; color: var(--text-secondary); }
+.tool-tip .tt-pdesc { color: var(--text-secondary); font-size: 11.5px; }
