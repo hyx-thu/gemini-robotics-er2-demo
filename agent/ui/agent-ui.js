@@ -817,10 +817,11 @@ let geminiClient = new GeminiClient({
     window._userTranscriptDivsByUtterance = new Map();
     window._lastUserTranscriptDiv = null;
     statusLabel.className = 'status-label connected';
-    connectBtn.classList.add('danger');
-    connectBtn.title = 'Disconnect from Agent';
+    // Keep the power icon; the state is shown by colour only.
+    connectBtn.classList.remove('connecting');
+    connectBtn.classList.add('connected');
+    connectBtn.title = 'Connected — click to disconnect';
     connectBtn.disabled = false;
-    connectBtn.textContent = 'Disconnect';
     if (modelSelectorBtn) modelSelectorBtn.disabled = true;
     if (audioToggleBtn) audioToggleBtn.disabled = true;
     if (agentSelectorBtn) agentSelectorBtn.disabled = true;
@@ -2532,6 +2533,7 @@ connectBtn.onclick = async () => {
     statusLabel.className = 'status-label connecting';
     statusLabel.textContent = 'Connecting…';
     connectBtn.disabled = true;
+    connectBtn.classList.add('connecting');
 
     try {
       await mediaHandler.initializeAudio();
@@ -2553,6 +2555,7 @@ connectBtn.onclick = async () => {
       statusLabel.className = 'status-label error';
       statusLabel.textContent = 'Error';
       connectBtn.disabled = false;
+      connectBtn.classList.remove('connecting');
     }
   }
 };
@@ -2629,8 +2632,7 @@ function sendText() {
 }
 
 function resetUI() {
-  connectBtn.classList.remove('danger');
-  connectBtn.textContent = 'Connect';
+  connectBtn.classList.remove('danger', 'connected', 'connecting');
   connectBtn.title = 'Connect to Agent';
   if (modelSelectorBtn) modelSelectorBtn.disabled = false;
   if (audioToggleBtn) audioToggleBtn.disabled = false;

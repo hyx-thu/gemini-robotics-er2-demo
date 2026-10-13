@@ -2494,3 +2494,30 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .debug-footer .latency-bar-item { font-size: 11px; }
 .lower-row { height: clamp(180px, 22vh, 250px); }
 .lower-left { justify-content: center; gap: 14px; }
+
+/* Plan progress = one thin segmented bar under the camera (no overlay).
+   Step text lives in the right-hand plan panel; hover a segment for its step. */
+.left-panel { grid-template-rows: minmax(0, 1fr) auto auto; }
+.left-panel > .plan-hud {
+  position: static; margin: -4px 0 0; padding: 0; width: 100%;
+  background: none; border: none; box-shadow: none; backdrop-filter: none;
+  display: block;
+}
+.left-panel > .plan-hud.hidden { display: none !important; }
+.left-panel > .plan-hud .hud-line,
+.left-panel > .plan-hud .hud-watchdog { display: none !important; }
+.left-panel > .plan-hud .hud-dots { display: flex; gap: 4px; height: 6px; }
+.left-panel > .plan-hud .hud-dot {
+  flex: 1; height: 6px; width: auto; border-radius: 3px;
+  background: var(--border-color); cursor: help;
+}
+.left-panel > .plan-hud .hud-dot.done { background: #34a853; }
+.left-panel > .plan-hud .hud-dot.current { background: var(--blue); animation: hud-pulse 1.2s ease-in-out infinite; }
+.left-panel > .plan-hud.done .hud-dot { background: #34a853; animation: none; }
+.left-panel > .plan-hud.failed .hud-dot.current { background: #ea4335; animation: none; }
+
+/* Connect button: icon only, state by colour. */
+#connectBtn.connecting { background: rgba(249, 171, 0, 0.18); border-color: #f9ab00; color: #b06000; animation: hud-pulse 1s ease-in-out infinite; }
+#connectBtn.connected { background: #34a853 !important; border-color: #34a853 !important; color: #fff !important; }
+#connectBtn.connected:hover { background: #ea4335 !important; border-color: #ea4335 !important; }
+.dark-theme #connectBtn.connecting { color: #fdd663; }
