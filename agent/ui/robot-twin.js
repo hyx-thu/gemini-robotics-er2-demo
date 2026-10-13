@@ -136,7 +136,7 @@ function buildDog() {
     ready: () => ik(0.62, STAND_H + 0.32, 0, -0.25),
     carry: () => ik(0.7, STAND_H + 0.36, 0, -0.35),
     table: { x: 1.05, top: 0.36, half: { x: 0.26, z: 0.42 } },
-    homeCam: new THREE.Vector3(2.0, 1.55, 2.75), homeTarget: new THREE.Vector3(0.38, 0.5, 0),
+    homeCam: new THREE.Vector3(2.75, 1.55, -1.95), homeTarget: new THREE.Vector3(0.4, 0.45, 0),
     defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: 0, le: 0 },
     // Stand = rear up on the hind legs and stay there. Sit = hind legs down.
     standEnter: (tgt) => { tgt.rear = 1; },
@@ -259,7 +259,7 @@ function buildHumanoid() {
     ready: () => ik(0.45, STAND_H + 0.55, 0.25, -0.3),
     carry: () => ik(0.42, STAND_H + 0.62, 0.22, -0.2),
     table: { x: 0.72, top: 0.78, half: { x: 0.26, z: 0.42 } },
-    homeCam: new THREE.Vector3(2.4, 1.9, 3.1), homeTarget: new THREE.Vector3(0.3, 0.85, 0),
+    homeCam: new THREE.Vector3(3.15, 1.9, -2.3), homeTarget: new THREE.Vector3(0.3, 0.85, 0),
     defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: -1.5, le: -0.15 },
     // Stand = upright, chest out, arms at the sides. Sit = squat.
     standEnter: (tgt) => { tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 1; tgt.ls = -1.5; tgt.le = -0.15; },
@@ -322,7 +322,7 @@ function init() {
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9bb0, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(2.5, 4, 2); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  sun.position.set(2.5, 4, -2);   // key light from the camera side sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5, near: 0.5, far: 10 });
   scene.add(sun);
   const world = new THREE.Group(); scene.add(world);
