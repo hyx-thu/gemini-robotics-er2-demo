@@ -129,6 +129,7 @@ function buildDog() {
   const base = () => new THREE.Vector3(ARM_BASE.x, STAND_H + ARM_BASE.y + 0.05, 0);
   const ik = (x, y, z, p) => ik2(base(), A1, A2, GRIP_LEN, x, y, z, p);
   const tmpV = new THREE.Vector3(), tmpM = new THREE.Matrix4();
+  let pawMode = 'shake';
 
   return {
     name: 'dog', icon: '🐕', group, gripPoint, cone, flashMat: stripe.material,
@@ -137,7 +138,7 @@ function buildDog() {
     carry: () => ik(0.7, STAND_H + 0.36, 0, -0.35),
     table: { x: 1.05, top: 0.36, half: { x: 0.26, z: 0.42 } },
     homeCam: new THREE.Vector3(2.75, 1.55, -1.95), homeTarget: new THREE.Vector3(0.4, 0.45, 0),
-    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: 0, le: 0 },
+    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: 0, le: 0, paw: 0, pawAmp: 0 },
     // Stand = rear up on the hind legs and stay there. Sit = hind legs down.
     standEnter: (tgt) => { tgt.rear = 1; },
     isUp: (tgt) => tgt.rear > 0.5,
@@ -148,18 +149,21 @@ function buildDog() {
       else if (dir === 'up') tgt.w += ang; else if (dir === 'down') tgt.w -= ang;
     },
     detectEnter: (tgt, setArm) => setArm(ik(0.66, STAND_H + 0.3, 0, -0.75)),
+    // Social gestures use the FRONT PAW (the one nearer the camera), like a
+    // real dog: shift weight back into a half-sit, then lift the paw.
     gestures: {
-      // Big wave: arm straight up, open gripper, sweep side to side.
-      high_wave: (setArm, tgt) => [
-        [0.7, () => { setArm(ik(0.42, STAND_H + 1.05, -0.12, 1.35)); tgt.grip = 1; }],
-        ...[0.55, -1.1, 1.1, -1.1, 1.1, -0.55].map(d => [0.32, () => { tgt.yaw += d; tgt.w += d * 0.35; }]),
+      high_wave: (tgt, setArm, ctx) => [
+        ...ctx.stowArm(),
+        [0.7, () => { pawMode = 'wave'; tgt.h = STAND_H - 0.05; tgt.pitch = 0.24; tgt.roll = 0.06; tgt.paw = 1; tgt.pawAmp = 0; }],
+        [2.4, () => { tgt.pawAmp = 1; }],
+        [0.8, () => { tgt.pawAmp = 0; tgt.paw = 0; tgt.roll = 0; ctx.restorePosture(); }],
       ],
-      // Handshake: reach forward at hand height, grip, pump three times, let go.
-      shake_hand: (setArm, tgt) => [
-        [0.8, () => { setArm(ik(0.9, 0.78, -0.08, 0)); tgt.grip = 1; }],
-        [0.45, () => { tgt.grip = 0.35; }],
-        ...[0.12, -0.24, 0.24, -0.24, 0.24, -0.12].map(d => [0.22, () => { tgt.s += d; }]),
-        [0.4, () => { tgt.grip = 1; }],
+      shake_hand: (tgt, setArm, ctx) => [
+        ...ctx.stowArm(),
+        [0.8, () => { pawMode = 'shake'; tgt.h = Math.min(tgt.h, 0.42); tgt.pitch = 0.2; tgt.roll = 0.05; tgt.paw = 1; tgt.pawAmp = 0; }],
+        [0.4, () => {}],
+        [1.8, () => { tgt.pawAmp = 1; }],
+        [0.8, () => { tgt.pawAmp = 0; tgt.paw = 0; tgt.roll = 0; ctx.restorePosture(); }],
       ],
     },
     update(c) {
@@ -186,6 +190,20 @@ function buildDog() {
           const wave = Math.sin(t * 6 + (L.sz > 0 ? 0 : Math.PI)) * 0.03 * cur.rear;
           footW.x += (tuckX - footW.x) * cur.rear;
           footW.y += (tuckY + wave - footW.y) * cur.rear;
+        }
+        if (L.sx > 0 && L.sz < 0 && cur.paw > 0.001) {
+          // Gesture paw (front leg nearer the camera), in body frame.
+          const hx = L.hip.position.x, hy = L.hip.position.y, A = cur.pawAmp;
+          let px, py;
+          if (pawMode === 'wave') {      // raised high, sweeping hello
+            px = hx + 0.36 + Math.sin(t * 7.5) * 0.08 * A;
+            py = hy + 0.32 + Math.cos(t * 7.5) * 0.05 * A;
+          } else {                       // offered forward at chest height, pumping
+            px = hx + 0.5;
+            py = hy - 0.2 + Math.sin(t * 9) * 0.045 * A;
+          }
+          footW.x += (px - footW.x) * cur.paw;
+          footW.y += (py - footW.y) * cur.paw;
         }
         const j = legIK(footW.x - L.hip.position.x, footW.y - L.hip.position.y, L1, L2, -1);
         L.hip.rotation.z = j.hip; L.knee.rotation.z = j.knee;
@@ -270,7 +288,7 @@ function buildHumanoid() {
     carry: () => ik(0.42, STAND_H + 0.62, 0.22, -0.2),
     table: { x: 0.72, top: 0.78, half: { x: 0.26, z: 0.42 } },
     homeCam: new THREE.Vector3(3.15, 1.9, -2.3), homeTarget: new THREE.Vector3(0.3, 0.85, 0),
-    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: -1.5, le: -0.15 },
+    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: -1.5, le: -0.15, paw: 0, pawAmp: 0 },
     // Stand = upright, chest out, arms at the sides. Sit = squat.
     standEnter: (tgt) => { tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 1; tgt.ls = -1.5; tgt.le = -0.15; },
     isUp: () => false,                       // nothing to undo before other actions
@@ -281,19 +299,24 @@ function buildHumanoid() {
       else if (dir === 'up') tgt.hp += ang; else if (dir === 'down') tgt.hp -= ang;
     },
     detectEnter: (tgt, setArm) => { tgt.hp = -0.45; setArm(ik(0.62, STAND_H + 0.5, 0.2, -0.6)); },
+    // Natural human poses, set as joint angles (yaw<0 swings the right arm
+    // out to the side; s = shoulder raise, e = elbow, w = wrist).
     gestures: {
-      // Big wave: right hand high above the head, swinging side to side.
-      high_wave: (setArm, tgt) => [
-        [0.6, () => { setArm(ik(0.12, STAND_H + 1.2, 0.5, 1.45)); tgt.grip = 1; tgt.hp = 0.1; }],
-        ...[0.35, -0.7, 0.7, -0.7, 0.7, -0.35].map(d => [0.3, () => { tgt.yaw += d * 0.5; tgt.w += d; }]),
-        [0.2, () => { tgt.hp = 0; }],
+      // Hello: upper arm out and up (~30°), forearm vertical, palm open;
+      // the forearm swings side to side from the elbow.
+      high_wave: (tgt, setArm, ctx) => [
+        [0.6, () => { setArm({ yaw: -1.45, s: 0.55, e: 1.0, w: -0.05 }); tgt.grip = 1; tgt.hp = 0.06; tgt.hy = -0.18; }],
+        ...[0.62, 1.38, 0.62, 1.38, 0.62, 1.38, 1.0].map(e => [0.27, () => { tgt.e = e; }]),
+        [0.7, () => { ctx.restoreArm(); tgt.grip = 0; tgt.hp = 0; tgt.hy = 0; }],
       ],
-      // Handshake: right hand forward at waist height, grip, pump, release.
-      shake_hand: (setArm, tgt) => [
-        [0.7, () => { setArm(ik(0.48, STAND_H + 0.22, 0.22, 0)); tgt.grip = 1; tgt.hp = -0.15; }],
+      // Handshake: elbow near the side, forearm horizontal forward, slight
+      // forward lean and nod; three small pumps from the elbow.
+      shake_hand: (tgt, setArm, ctx) => [
+        [0.7, () => { setArm({ yaw: 0.12, s: -1.15, e: 1.05, w: -0.05 }); tgt.grip = 1; tgt.pitch = -0.07; tgt.hp = -0.12; }],
         [0.4, () => { tgt.grip = 0.35; }],
-        ...[0.1, -0.2, 0.2, -0.2, 0.2, -0.1].map(d => [0.22, () => { tgt.s += d; }]),
-        [0.4, () => { tgt.grip = 1; tgt.hp = 0; }],
+        ...[1.17, 0.93, 1.17, 0.93, 1.17, 1.05].map(e => [0.2, () => { tgt.e = e; }]),
+        [0.4, () => { tgt.grip = 1; }],
+        [0.7, () => { ctx.restoreArm(); tgt.grip = 0; tgt.pitch = 0; tgt.hp = 0; }],
       ],
     },
     update(c) {
@@ -498,9 +521,15 @@ function init() {
       wait(0.3, () => { gait = null; })]),
     make_gesture: (a) => {
       const g = R.gestures[a.gesture] || R.gestures.high_wave;
-      enqueue([...ensureStanding(), ...ensureDeployed(),
-        ...g(setArm, tgt).map(([d, f]) => wait(d, f)),
-        wait(0.6, () => { setArm(R.ready()); tgt.grip = 0.2; })]);
+      const wasSitting = sitting;
+      const ctx = {
+        // Dog: arm out of the way first (the paw does the gesture).
+        stowArm: () => (armStowed ? [] : [[0.7, () => { armStowed = true; setArm(R.STOW); tgt.grip = 0; }]]),
+        restorePosture: () => { if (wasSitting) R.sitEnter(tgt); else { tgt.h = R.STAND_H; tgt.pitch = 0; } },
+        restoreArm: () => setArm(armStowed ? R.STOW : R.ready()),
+      };
+      enqueue([...(R.isUp(tgt) ? [wait(0.9, () => R.downEnter(tgt))] : []),
+        ...g(tgt, setArm, ctx).map(([d, f]) => wait(d, f))]);
     },
     stop: () => { clearQueue(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
   };
