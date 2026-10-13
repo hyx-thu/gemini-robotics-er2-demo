@@ -2347,3 +2347,5 @@ details.message.thought summary {
 .dark-theme .fc-loop { stroke: #c58af9; }
 .dark-theme .fc-loop-t { fill: #c58af9; }
 .skills-card { width: min(1240px, 100%); }
+.c-pose { --cat: #c5221f; }
+.dark-theme .c-pose { --cat: #f28b82; }
