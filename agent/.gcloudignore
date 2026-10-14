@@ -1,0 +1,16 @@
+# Files `gcloud run deploy --source .` must NOT upload (the source archive is
+# stored in a GCS bucket). Mirrors .dockerignore: never ship local secrets.
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+*.egg-info/
