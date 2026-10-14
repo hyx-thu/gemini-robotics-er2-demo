@@ -563,6 +563,8 @@ class SessionManager:
       resume_handle: when set, asks the server to resume the previous
         session (conversation history, plan state) on this new socket.
     """
+    # Vertex AI needs projects/…/models/X; GeminiLiveApiStream.Send rewrites
+    # "models/X" to the full resource name, so keep the short form here.
     model_name = self.model
     if not model_name.startswith("models/"):
       model_name = f"models/{model_name}"
@@ -622,7 +624,7 @@ class SessionManager:
     #     => ~19K of recent history ≈ 1 min of task activity.
     #   Live (~9.5-12.6K SI, ~260 tok/frame): trigger 48K -> keep 32K
     #     => ~20K of recent history ≈ 45-60 s.
-    if self.heartbeat_only_when_task_active:
+    if getattr(self, "heartbeat_only_when_task_active", False):
       trigger, target = 48000, 32000
     else:
       # 40K/28K tripped 1011 (per-minute quota) about once a minute on ER.
