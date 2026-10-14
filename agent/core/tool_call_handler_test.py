@@ -458,6 +458,12 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertIn("pick attempt 1/3", self.handler.heartbeat_context())
     self.handler.watchdog.confirm()
 
+  async def test_heartbeat_includes_embodiment_target_context(self):
+    self.embodiment.target_context = lambda: "[TARGET] pick in flight toward 'pen'"
+    self.assertIn("[TARGET] pick in flight", self.handler.heartbeat_context())
+    self.embodiment.target_context = lambda: ""
+    self.assertNotIn("[TARGET]", self.handler.heartbeat_context())
+
   async def test_plan_may_mark_pick_step_but_not_pass_it(self):
     await self._plan(0, "planning")
     await self._call("pick")

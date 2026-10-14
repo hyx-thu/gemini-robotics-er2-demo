@@ -38,6 +38,11 @@ _WAYPOINTS = ["dock_station", "kitchen_counter", "office_desk", "snack_table"]
 # A detect older than this is flagged to the model as possibly stale.
 _STALE_TARGET_S = 6.0
 
+# Heartbeat target check: a shift beyond this (0-1000 units) counts as moved.
+_MOVED_THRESHOLD = 60
+# A detect not followed by pick/place stops being reported after this.
+_DETECT_CONTEXT_MAX_S = 60.0
+
 _VERIFY = (
     "Command sent to the robot. Watch the next camera frames and confirm the"
     " expected physical result before treating the step as complete."
@@ -146,6 +151,63 @@ class SimulatedSpotEmbodiment(base.Embodiment):
     s["last_trajectory"] = None
     s["last_detect"] = None
     logger.warning("[SimSpot] task aborted after unanswered %s", action_name)
+
+  # ---- Heartbeat target tracking ----
+
+  @staticmethod
+  def _describe_target(target: dict[str, Any]) -> str:
+    desc = (
+        f"{target.get('label') or 'target'!r} at (x={target.get('normalized_x')},"
+        f" y={target.get('normalized_y')})"
+    )
+    box = target.get("box_2d")
+    if box:
+      desc += f" box_2d={list(box)}"
+    return desc
+
+  def target_context(self) -> str:
+    """Last-known pick/place target for the heartbeat movement check.
+
+    Prompt-only: the model compares these coordinates with the latest frame
+    and, if the object / destination moved, re-detects before (re-)issuing
+    pick/place. Empty when there is no relevant target.
+    """
+    s = self._state
+    now = time.monotonic()
+    moved_rule = (
+        " Compare with the LATEST frame: if it is clearly no longer there"
+        f" (outside that box or more than ~{_MOVED_THRESHOLD} units away),"
+        " call detect on the current frame and then {reissue} with the NEW"
+        " coordinates. If it is still there, do not re-detect."
+    )
+    if s.get("place_target") is not None:
+      t = s["place_target"]
+      age = now - float(s.get("place_at") or now)
+      return (
+          "[TARGET] place in flight toward destination "
+          f"{self._describe_target(t)}, sent {age:.0f}s ago."
+          + moved_rule.format(reissue="re-issue place(x, y)")
+      )
+    if s.get("pick_target") is not None:
+      t = s["pick_target"]
+      age = now - float(s.get("pick_at") or now)
+      return (
+          f"[TARGET] pick in flight toward {self._describe_target(t)}, sent"
+          f" {age:.0f}s ago. If the object is already in the gripper / lifted,"
+          " that is the pick's effect, not a move: confirm_action instead."
+          + moved_rule.format(reissue="re-issue pick(grasp_x, grasp_y)")
+      )
+    if s.get("last_detect") is not None:
+      age = now - float(s.get("last_detect_at") or now)
+      if age > _DETECT_CONTEXT_MAX_S:
+        return ""
+      t = s["last_detect"]
+      return (
+          f"[TARGET] detected {self._describe_target(t)} {age:.0f}s ago;"
+          " pick/place not issued yet."
+          + moved_rule.format(reissue="call pick/place")
+      )
+    return ""
 
   # ---- Actuation ----
 
@@ -430,6 +492,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       target_age = time.monotonic() - float(s.get("last_detect_at") or time.monotonic())
       s["pick_target"] = target
       s["pick_origin"] = dict(target)
+      s["pick_at"] = time.monotonic()
       s["last_detect"] = None
       s["holding"] = target["label"]
       s["arm"] = "carry"
@@ -491,6 +554,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       origin = s.get("pick_origin")
       s["place_target"] = target
       s["last_detect"] = None
+      s["place_at"] = time.monotonic()
       s["holding"] = None
       s["gripper_open_fraction"] = 1.0
       raw_traj = kwargs.get("trajectory")

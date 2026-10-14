@@ -281,6 +281,15 @@ class ToolCallHandler:
           f"[PLAN] goal = {goal!r}; step {cur + 1}/{len(steps)} ="
           f" {cur_text!r}; next = {nxt_text!r}. {rule}"
       )
+    target_fn = getattr(self._embodiment, "target_context", None)
+    if callable(target_fn):
+      try:
+        target_text = target_fn()
+      except Exception:  # pylint: disable=broad-except
+        logger.exception("target_context failed")
+        target_text = ""
+      if target_text:
+        parts.append(target_text)
     if self._watchdog is not None:
       wd_text = self._watchdog.heartbeat_text()
       if wd_text:
@@ -876,7 +885,8 @@ class ToolCallHandler:
       annotated["next_action"] = (
           f"{func_name} attempt {info['attempt']}/{info['max_attempts']} is"
           f" already in flight ({info['confirm_within_s']}s left in its"
-          " confirmation window); this call did not start a new attempt. Keep"
+          " confirmation window); this call did not start a new attempt (any"
+          " new coordinates it carried were applied). Keep"
           " watching the camera: call confirm_action(observation=...) when you"
           f" SEE the {func_name} completed, otherwise ack."
       )

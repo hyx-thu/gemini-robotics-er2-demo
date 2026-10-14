@@ -275,8 +275,10 @@ class ActionWatchdog:
           " further along, e.g. the object already at its destination), call"
           " confirm_action(observation='what you see') and then update_plan to"
           " the first step not yet done. If nothing has changed yet, call ack"
-          " once and keep watching. Do not re-issue the command early, and"
-          " never ask the user to do it."
+          " once and keep watching. Do not re-issue the command early (only"
+          " exception: the [TARGET] check shows the object or destination has"
+          " moved - then detect again and re-issue with the new coordinates),"
+          " and never ask the user to do it."
       )
     if phase in (TIMED_OUT, OVERDUE):
       self.mark_timeout_notified()

@@ -46,5 +46,44 @@ class MovedObjectTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((820, 420), (r["trajectory"][-1]["x"], r["trajectory"][-1]["y"]))
 
 
+class TargetContextTest(unittest.IsolatedAsyncioTestCase):
+
+  async def test_empty_without_target(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    self.assertEqual("", e.target_context())
+
+  async def test_detect_not_yet_picked(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="pen", x=200, y=600)
+    ctx = e.target_context()
+    self.assertIn("[TARGET] detected 'pen' at (x=200, y=600)", ctx)
+    self.assertIn("not issued yet", ctx)
+    self.assertIn("call detect", ctx)
+
+  async def test_pick_in_flight_then_confirmed(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="pen", x=200, y=600)
+    await e.execute_action("pick")
+    ctx = e.target_context()
+    self.assertIn("pick in flight toward 'pen' at (x=200, y=600)", ctx)
+    self.assertIn("re-issue pick(grasp_x, grasp_y)", ctx)
+    self.assertIn("confirm_action instead", ctx)
+    e.on_action_confirmed("pick")
+    self.assertEqual("", e.target_context())
+
+  async def test_place_in_flight(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="pen", x=200, y=600)
+    await e.execute_action("pick")
+    e.on_action_confirmed("pick")
+    await e.execute_action("place", x=820, y=420)
+    ctx = e.target_context()
+    self.assertIn("place in flight toward destination", ctx)
+    self.assertIn("(x=820, y=420)", ctx)
+    self.assertIn("re-issue place(x, y)", ctx)
+    e.on_action_confirmed("place")
+    self.assertEqual("", e.target_context())
+
+
 if __name__ == "__main__":
   unittest.main()
