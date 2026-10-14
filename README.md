@@ -8,8 +8,7 @@ Forked from [google-gemini/robotics-samples/live-api](https://github.com/google-
 and extended with streaming TTS + barge-in, grasp-point suggestion, tool-call
 visualisation, session resumption, and a Spot simulator.
 
-- **Live demo**: https://gemini-robotic-er2-242017771503.us-central1.run.app
-- **GCP project**: `elated-terminal-503102-u0` / `us-central1` / Cloud Run service `gemini-robotic-er2`
+- **Deploy**: Cloud Run via `deploy.sh` (set `PROJECT_ID` / `REGION` for your own GCP project).
 
 ## Layout
 
