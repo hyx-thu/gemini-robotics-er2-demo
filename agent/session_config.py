@@ -79,6 +79,23 @@ KNOWN_MODELS: dict[str, ModelSpec] = {
         thinking_level="low",
         response_modalities=("TEXT",),  # 1007 on AUDIO; speech comes from our TTS
     ),
+    # Cascade: Gemini ASR (gemini-3.5-transcribe-live) -> gemini-4-argon via
+    # generateContent -> our TTS (model/cascade_client.py). Not a Live model.
+    "gemini-4-argon": ModelSpec(
+        name="gemini-4-argon",
+        thinking_level="low",          # MINIMAL is rejected (400)
+        response_modalities=("TEXT",),
+        heartbeat_native=False,
+    ),
+    # Gemini 3.8 Live talks to the user; robot task orchestration is delegated
+    # to gemini-robotics-er-2-preview (non-streaming) via the robot_task tool.
+    "gemini-3.8-live+er2": ModelSpec(
+        name="gemini-3.8-live+er2",
+        thinking_level="none",
+        supports_thinking=False,
+        supports_blocking_tools=False,
+        heartbeat_native=False,
+    ),
     "robotics_er_live_text_only_2p0_no_safety_classifiers": ModelSpec(
         name="robotics_er_live_text_only_2p0_no_safety_classifiers",
         thinking_level="low",

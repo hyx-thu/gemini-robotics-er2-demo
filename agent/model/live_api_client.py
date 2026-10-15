@@ -298,18 +298,44 @@ class VertexLiveApiClient:
 # rejects custom thinking levels on gemini-3.8-live unless allowlisted.
 VERTEX_LIVE_MODELS = frozenset({"gemini-3.8-live"})
 
+# Non-Live LLMs run as a cascade: Gemini ASR -> generateContent -> our TTS.
+CASCADE_MODELS = frozenset({"gemini-4-argon"})
+
+# Composite modes: "<live model>+<tag>" = the Live model talks to the user and
+# delegates robot task orchestration to a non-streaming model used as a tool.
+ORCHESTRATED_MODELS: dict[str, tuple[str, str]] = {
+    "gemini-3.8-live+er2": ("gemini-3.8-live", "gemini-robotics-er-2-preview"),
+}
+
+
+def wire_model(model: str) -> str:
+  """The model name actually sent in the Live setup message."""
+  name = model.removeprefix("models/")
+  if name in ORCHESTRATED_MODELS:
+    return ORCHESTRATED_MODELS[name][0]
+  return name
+
+
+def orchestrator_model(model: str) -> str | None:
+  """Robot-task orchestrator model for composite modes (else None)."""
+  pair = ORCHESTRATED_MODELS.get(model.removeprefix("models/"))
+  return pair[1] if pair else None
+
 
 def uses_vertex(model: str) -> bool:
   """Whether this model should be served from Vertex AI."""
   import os  # pylint: disable=g-import-not-at-top
   if os.environ.get("LIVE_BACKEND", "").lower() == "aistudio":
     return False
-  return model.removeprefix("models/") in VERTEX_LIVE_MODELS
+  return wire_model(model) in VERTEX_LIVE_MODELS
 
 
 def make_client(model: str, api_key: str | None):
-  """Return the Live client (Vertex or Developer API) for ``model``."""
+  """Return the Live client (Vertex, Developer API or cascade) for ``model``."""
   import os  # pylint: disable=g-import-not-at-top
+  if model.removeprefix("models/") in CASCADE_MODELS:
+    from model import cascade_client  # pylint: disable=g-import-not-at-top
+    return cascade_client.CascadeClient(model, api_key)
   if uses_vertex(model):
     return VertexLiveApiClient(
         project=os.environ.get("VERTEX_PROJECT")

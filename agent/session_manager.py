@@ -245,8 +245,14 @@ class SessionManager:
       thinking_level: str = "none",
       supports_blocking_tools: bool = True,
       heartbeat_only_when_task_active: bool = False,
+      er_orchestrator_config: dict[str, Any] | None = None,
   ):
     self.model = model
+    # Composite "Live + ER2" mode: config for the ER robot-task orchestrator
+    # (model, tools, system_instruction, thinking_level); built in
+    # start_session once the ToolCallHandler exists.
+    self._er_orchestrator_config = er_orchestrator_config
+    self.er_orchestrator = None
     self.supports_blocking_tools = supports_blocking_tools
     # For models not trained on the ack protocol: skip heartbeats while no
     # task is active (idle ticks only teach them to answer with ack / to
@@ -565,7 +571,7 @@ class SessionManager:
     """
     # Vertex AI needs projects/…/models/X; GeminiLiveApiStream.Send rewrites
     # "models/X" to the full resource name, so keep the short form here.
-    model_name = self.model
+    model_name = live_api_client.wire_model(self.model)
     if not model_name.startswith("models/"):
       model_name = f"models/{model_name}"
 
@@ -933,6 +939,22 @@ class SessionManager:
         enable_send_message_to_user=self._enable_send_message_to_user,
         blocking_tools=tool_call_handler.blocking_tool_names(self.tools),
     )
+    if self._er_orchestrator_config:
+      from core import er_orchestrator  # pylint: disable=g-import-not-at-top
+      cfg = self._er_orchestrator_config
+      self.er_orchestrator = er_orchestrator.ErOrchestrator(
+          session=self,
+          model=cfg["model"],
+          api_key=self.api_key,
+          system_instruction=cfg.get("system_instruction", ""),
+          tools=cfg.get("tools") or [],
+          thinking_level=cfg.get("thinking_level", "low"),
+      )
+      # The ER tools' blocking semantics must be known to the handler too.
+      self.tool_handler._blocking_tools = frozenset(  # pylint: disable=protected-access
+          self.tool_handler._blocking_tools  # pylint: disable=protected-access
+          | tool_call_handler.blocking_tool_names(cfg.get("tools") or [])
+      )
 
     # --- UI queue bridge: events → async generator yield ---
 

@@ -109,6 +109,24 @@ def _resolve_ui_dir():
 # ---------------------------------------------------------------------------
 # Cadence used for models that were not trained on the ack heartbeat protocol.
 _GENERIC_HEARTBEAT_INTERVAL_S = 6.0
+
+# Composite "Live + ER2" mode: extra DI for the Live front-end.
+_LIVE_FRONTEND_ADDENDUM = """### ROBOT TASKS ARE DELEGATED (LIVE + ER2 MODE) ###
+- You are the robot's voice and conversation partner. You do NOT drive the arm
+  yourself: for any physical manipulation request (move / fetch / pick up / put /
+  sort / stack / hand over objects, multi-step robot tasks) call
+  `robot_task(instruction=...)` once, passing the user's request faithfully in
+  their own words. Gemini Robotics-ER 2 then plans and executes it with the
+  camera and the arm.
+- After calling it, tell the user in one short sentence that the robot is on it.
+  Do not invent steps, coordinates or results.
+- Messages that start with `[ROBOT]` are progress / outcome notes from the robot
+  planner, not the user. Relay them to the user in ONE short sentence in the
+  user's language, then wait. Never call robot_task because of a [ROBOT] note.
+- If the user changes or cancels the task, call `robot_task` with the new request
+  (it replaces the running one) or `stop`.
+- Keep using your other tools (look, navigate, stand, sit, gestures, search,
+  maps, location) directly as usual."""
 _GENERIC_POST_SPEECH_GRACE_S = 2.5
 
 # DI lines written for the text-only ER + TTS path that contradict native
@@ -564,6 +582,10 @@ async def websocket_endpoint(
     modality = resolve_response_modality(
         resolved_model, session_cfg.response_modality or config.response_modality
     )
+    # The text-only DI (send_message + TTS) is what the non-streaming ER
+    # orchestrator needs in the composite mode; keep it before the AUDIO edit.
+    er_developer_instruction = agent.developer_instruction
+    orchestrator_model = live_api_client.orchestrator_model(resolved_model)
     if modality == "AUDIO":
       agent.developer_instruction = _strip_text_only_comms_rules(
           agent.developer_instruction
@@ -609,6 +631,31 @@ async def websocket_endpoint(
           group for group in agent_tools if group["functionDeclarations"]
       ]
 
+    er_orchestrator_config = None
+    heartbeat_enabled = config.heartbeat_enabled
+    if orchestrator_model and agent_name in ("spot", "tinybot"):
+      live_tools, er_tools = tools_lib.split_for_orchestration(agent_tools)
+      agent_tools = live_tools
+      agent.developer_instruction = (
+          agent.developer_instruction.rstrip() + "\n\n" + _LIVE_FRONTEND_ADDENDUM
+      )
+      er_orchestrator_config = {
+          "model": orchestrator_model,
+          "tools": er_tools,
+          "system_instruction": (
+              agent.system_instruction + "\n\n" + er_developer_instruction
+          ),
+          "thinking_level": "low",
+      }
+      # The Live front-end does not run the robot observe->act loop; the ER
+      # orchestrator sends its own heartbeats while a task is active.
+      heartbeat_enabled = False
+      logger.info(
+          "Composite mode: %s talks, %s orchestrates robot tasks (%d tools)",
+          live_api_client.wire_model(resolved_model), orchestrator_model,
+          sum(len(g.get("functionDeclarations", [])) for g in er_tools),
+      )
+
     resolved_use_tts = (
         False
         if modality == "AUDIO"
@@ -638,7 +685,7 @@ async def websocket_endpoint(
         dump_video_dir=config.dump_video_dir or None,
         api_key=config.api_key,
         heartbeat_interval_seconds=hb_interval,
-        heartbeat_enabled=config.heartbeat_enabled,
+        heartbeat_enabled=heartbeat_enabled,
         heartbeat_min_delay_seconds=hb_min_delay,
         agent_peers=config.agent_peers,
         peer_name=session_cfg.agent_name,
@@ -650,6 +697,7 @@ async def websocket_endpoint(
         thinking_level=resolved_thinking_level,
         supports_blocking_tools=spec.supports_blocking_tools,
         heartbeat_only_when_task_active=not spec.heartbeat_native,
+        er_orchestrator_config=er_orchestrator_config,
     )
     app.state.session_agent_name = session_cfg.agent_name
 

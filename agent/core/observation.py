@@ -271,6 +271,8 @@ class Observation:
     try:
       while True:
         chunk = await self.video_queue.get()
+        # Newest camera frame (unthrottled), for non-Live sub-agents.
+        self.latest_frame = chunk
         await self.bus.publish(
             event_bus.Event(
                 type=event_bus.EventType.REAL_TIME_IMAGE_SENT,

@@ -309,6 +309,9 @@ class ToolCallHandler:
 
   def shutdown(self) -> None:
     """Cancel the watchdog supervisor loop (session teardown)."""
+    orch = getattr(self._session_manager, "er_orchestrator", None)
+    if orch is not None:
+      orch.cancel()
     if self._watchdog_task is not None and not self._watchdog_task.done():
       self._watchdog_task.cancel()
     self._watchdog_task = None
@@ -334,7 +337,24 @@ class ToolCallHandler:
       except Exception:  # pylint: disable=broad-except
         logging.exception('Tool call %s failed', fc.get("name", "unknown"))
 
-  async def _execute_single_tool(self, fc: dict) -> None:
+  async def execute_for_agent(self, fc: dict) -> dict[str, Any]:
+    """Run a tool for a non-Live sub-agent (e.g. the ER2 orchestrator).
+
+    Same execution path as a Live tool call (watchdog, overlays, UI events),
+    but the FunctionResponse is returned instead of sent to the Live stream.
+    """
+    box: dict[str, Any] = {}
+
+    async def sink(function_response: dict[str, Any]) -> None:
+      box["fr"] = function_response
+
+    await self._execute_single_tool(fc, sink=sink)
+    return box.get("fr") or {
+        "id": str(fc.get("id", "")), "name": fc.get("name", ""),
+        "response": {"error": "tool produced no response"},
+    }
+
+  async def _execute_single_tool(self, fc: dict, sink: Any = None) -> None:
     """Execute a single function call and publish the result."""
     func_name = fc.get("name", "")
     args = fc.get("args", {})
@@ -380,7 +400,7 @@ class ToolCallHandler:
       # A blocking FunctionResponse resumes model generation. Send the latest
       # visual context first instead of creating a competing heartbeat turn.
       post_action_frame_sent = False
-      if is_blocking:
+      if is_blocking and sink is None:
         send_frame = getattr(
             self._session_manager, "send_latest_video_frame", None
         )
@@ -435,9 +455,12 @@ class ToolCallHandler:
       # Send tool response back to the Gemini session as a JSON dict.
       msg = {"toolResponse": {"functionResponses": [function_response]}}
 
-      if self._session_manager is None:
-        raise RuntimeError('Session manager is not initialized')
-      await self._session_manager.send_message(msg)
+      if sink is not None:
+        await sink(function_response)
+      else:
+        if self._session_manager is None:
+          raise RuntimeError('Session manager is not initialized')
+        await self._session_manager.send_message(msg)
 
       # Publish result for UI and logging.
       action_data = json.dumps(fc)
@@ -497,6 +520,9 @@ class ToolCallHandler:
 
   async def cancel_task(self, reason: str = "cancelled by user") -> dict[str, Any]:
     """Stop the current task on user request (UI button or spoken command)."""
+    orch = getattr(self._session_manager, "er_orchestrator", None)
+    if orch is not None:
+      orch.cancel()
     wd = self._watchdog
     pending_name = wd.pending.name if (wd is not None and wd.pending) else None
     if wd is not None:
@@ -685,6 +711,8 @@ class ToolCallHandler:
         return await self._execute_confirm_action(args)
       if func_name == "retry_step":
         return await self._execute_retry_step(args)
+      if func_name == "robot_task":
+        return await self._execute_robot_task(args)
       return await self._embodiment.execute_action(func_name, **args)
     except Exception as exc:  # pylint: disable=broad-except
       logging.error('Tool execution error for %s: %s', func_name, exc)
@@ -938,6 +966,16 @@ class ToolCallHandler:
     )
     self._ensure_watchdog_loop()
     return annotated
+
+  async def _execute_robot_task(self, args: dict[str, Any]) -> dict[str, Any]:
+    """Composite mode: hand a robot task to the ER orchestrator (async)."""
+    orch = getattr(self._session_manager, "er_orchestrator", None)
+    if orch is None:
+      return {"error": "robot_task is not available in this mode."}
+    instruction = str(args.get("instruction", "")).strip()
+    if not instruction:
+      return {"error": "instruction is required."}
+    return orch.start(instruction)
 
   async def _execute_retry_step(self, args: dict[str, Any]) -> dict[str, Any]:
     """Escalation level 2: redo earlier step(s) of the SAME plan.

@@ -997,6 +997,63 @@ def confirm_action_tool() -> dict[str, Any]:
   )
 
 
+def robot_task_tool() -> dict[str, Any]:
+  """Composite mode: delegate a physical robot task to the ER planner."""
+  return _tool(
+      name="robot_task",
+      description=(
+          "Hand a PHYSICAL robot task to the robotics planner (Gemini"
+          " Robotics-ER 2), which sees the camera, plans the steps and drives"
+          " the arm (detect / pick / place ...) on its own. Use it for any"
+          " request to move, fetch, pick up, put, sort, stack or hand over"
+          " objects. Pass the user's request faithfully in their own words"
+          " (any language). It returns at once; progress arrives later as"
+          " [ROBOT] messages that you relay to the user briefly. Calling it"
+          " again replaces the running task (e.g. the user changed the"
+          " request)."
+      ),
+      parameters={
+          "type": "OBJECT",
+          "properties": {
+              "instruction": {
+                  "type": "STRING",
+                  "description": "The task, in the user's words.",
+              },
+          },
+          "required": ["instruction"],
+      },
+  )
+
+
+# Tools the ER orchestrator drives in the composite (Live + ER2) mode; the
+# Live front-end keeps the rest and gets robot_task instead.
+ER_TASK_TOOL_NAMES = frozenset({
+    "update_plan", "detect", "pick", "place", "confirm_action", "retry_step",
+    "stow", "wait_for_pick_up", "draw_points", "clear_overlay",
+})
+
+
+def split_for_orchestration(
+    tools: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+  """Split a tool list into (live front-end tools, ER orchestrator tools)."""
+  live, er = [], []
+  for group in tools:
+    decls = group.get("functionDeclarations") or []
+    if not decls:
+      live.append(group)
+      continue
+    live_d = [d for d in decls if d.get("name") not in ER_TASK_TOOL_NAMES]
+    er_d = [d for d in decls if d.get("name") in ER_TASK_TOOL_NAMES
+            or d.get("name") in ("ack", "send_message", "look")]
+    if live_d:
+      live.append({**group, "functionDeclarations": live_d})
+    if er_d:
+      er.append({**group, "functionDeclarations": er_d})
+  live.append({"functionDeclarations": [robot_task_tool()]})
+  return live, er
+
+
 def retry_step_tool() -> dict[str, Any]:
   """Redo earlier step(s) of the SAME plan after a real failure."""
   return _tool(
