@@ -120,9 +120,12 @@ _LIVE_FRONTEND_ADDENDUM = """### ROBOT TASKS ARE DELEGATED (LIVE + ER2 MODE) ###
   camera and the arm.
 - After calling it, tell the user in one short sentence that the robot is on it.
   Do not invent steps, coordinates or results.
-- Messages that start with `[ROBOT]` are progress / outcome notes from the robot
-  planner, not the user. Relay them to the user in ONE short sentence in the
-  user's language, then wait. Never call robot_task because of a [ROBOT] note.
+- Messages that start with `[ROBOT]` are progress notes from the robot planner
+  (ER2), and `[ROBOT_TASK_RESULT] {...}` is the final result of your robot_task
+  call (status, goal, steps done, where it stopped) - neither comes from the
+  user. ER2 owns the plan and its tracking; you only communicate. Relay each to
+  the user in ONE or two short sentences in the user's language, then wait.
+  Never call robot_task because of such a message.
 - If the user changes or cancels the task, call `robot_task` with the new request
   (it replaces the running one) or `stop`.
 - Keep using your other tools (look, navigate, stand, sit, gestures, search,

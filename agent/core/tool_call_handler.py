@@ -476,6 +476,8 @@ class ToolCallHandler:
                   "args": args,
                   "result": result,
                   "action_data": action_data,
+                  # Which model issued the call (composite mode: "er2").
+                  "agent": fc.get("_agent") or "",
               },
           )
       )

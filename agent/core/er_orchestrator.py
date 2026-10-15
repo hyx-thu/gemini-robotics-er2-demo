@@ -23,6 +23,7 @@ robot_task, or after a safety timeout.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -124,6 +125,18 @@ class ErOrchestrator:
     except Exception:  # pylint: disable=broad-except
       logger.exception("[ER2] relay to Live failed")
 
+  async def _status(self, state: str, **extra: Any) -> None:
+    """UI badge / chat line: what the ER2 planner is doing right now."""
+    bus = getattr(self._session, "bus", None)
+    if bus is None:
+      return
+    await bus.publish(event_bus.Event(
+        type=event_bus.EventType.TOOL_RESULT,
+        source=event_bus.EventSource.ASSISTANT,
+        data={"type": "er2_status", "state": state, "model": self._model,
+              "instruction": self._instruction, **extra},
+    ))
+
   async def _publish_text(self, text: str) -> None:
     # ER2 (non-streaming) sometimes returns fragments of its reasoning as
     # plain text parts ("ve", "0", "{thought ..."); show only real sentences.
@@ -153,7 +166,9 @@ class ErOrchestrator:
     )
     language = getattr(self._session, "user_language_name", None) or "the user's language"
     started = time.monotonic()
+    await self._status("started")
     saw_plan = False
+    plan_relayed = False
     idle_without_plan = 0
     outcome = "stopped"
     parts = [{"text": _TASK_PREAMBLE.format(instruction=instruction, language=language)}]
@@ -168,6 +183,20 @@ class ErOrchestrator:
         status = self._plan_status()
         if status in ("planning", "in_progress"):
           saw_plan = True
+          if not plan_relayed:
+            plan_relayed = True
+            plan = getattr(self._handler(), "_plan", None) or {}
+            steps = [str(x) for x in plan.get("steps") or []]
+            await self._status("executing", goal=plan.get("goal", ""),
+                               steps=len(steps))
+            await self._tell_live(
+                "[ROBOT] The robotics planner (ER2) made this plan - goal: "
+                f"{plan.get('goal', '')!r}; steps: "
+                + "; ".join(f"{i + 1}. {t}" for i, t in enumerate(steps))
+                + f". Tell the user in ONE short sentence in {language} that"
+                " ER2 has planned it and is executing (no need to read every"
+                " step). Do not call robot tools."
+            )
         elif saw_plan and status in ("done", "failed"):
           outcome = status
           break
@@ -187,12 +216,27 @@ class ErOrchestrator:
       logger.exception("[ER2] task loop failed")
       outcome = "error"
     plan = getattr(self._handler(), "_plan", None) or {}
-    logger.info("[ER2] task finished (%s): %s", outcome, instruction)
+    steps = [str(x) for x in plan.get("steps") or []]
+    cur = int(plan.get("current_step", 0) or 0)
+    done_steps = len(steps) if outcome == "done" else min(cur, len(steps))
+    result = {
+        "task": instruction,
+        "status": outcome,
+        "goal": plan.get("goal", ""),
+        "steps_done": done_steps,
+        "steps_total": len(steps),
+        "stopped_at": steps[cur] if steps and outcome != "done" and cur < len(steps) else "",
+        "last_note": plan.get("note", ""),
+        "duration_s": round(time.monotonic() - started),
+    }
+    logger.info("[ER2] task finished: %s", result)
+    await self._status("finished", result=result)
     await self._tell_live(
-        f"[ROBOT] Task {outcome}: {instruction!r}"
-        + (f" (goal: {plan.get('goal')!r})" if plan.get("goal") else "")
-        + f". Tell the user the outcome in one short sentence in {language};"
-        " do not call robot tools."
+        "[ROBOT_TASK_RESULT] " + json.dumps(result, ensure_ascii=False)
+        + f"\nThis is the result of your robot_task call, produced by ER2."
+        f" Tell the user the outcome in one or two short sentences in"
+        f" {language} (if it failed, say where it stopped and offer to try"
+        " again). Do not call robot tools unless the user asks again."
     )
 
   async def _turn(self, agent, loop) -> bool:
@@ -213,6 +257,7 @@ class ErOrchestrator:
       for i, fc in enumerate(calls):
         fc.setdefault("id", f"er2_{int(time.time() * 1000)}_{i}")
         fc.setdefault("args", {})
+        fc["_agent"] = "er2"
         name = fc.get("name")
         if name not in _IDLE_TOOLS:
           acted = True

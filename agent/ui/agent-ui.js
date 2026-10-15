@@ -896,6 +896,41 @@ function videoSourceForAgent(agent) {
   return agentVideoSources[agent] || (agent === 'human' ? 'computer' : agent);
 }
 
+// Composite "Live + ER2" mode: make it obvious that the ER2 planner (not the
+// Live voice model) plans, executes and tracks the robot task.
+function renderEr2Status(msg) {
+  const badge = document.getElementById('plan-agent');
+  const model = (msg.model || 'ER2').replace(/^models\//, '');
+  let text = '', line = '';
+  if (msg.state === 'started') {
+    text = '🤖 ER2 planning…';
+    line = `🤖 ER2 planner (${model}) took over the task: “${msg.instruction || ''}”`;
+  } else if (msg.state === 'executing') {
+    text = '🤖 ER2 executing';
+    line = `🤖 ER2 planned ${msg.steps || ''} steps and is executing / tracking them`;
+  } else if (msg.state === 'finished') {
+    const r = msg.result || {};
+    const ok = r.status === 'done';
+    text = ok ? '🤖 ER2 ✓ done' : `🤖 ER2 ✗ ${r.status || 'stopped'}`;
+    line = `🤖 ER2 finished: ${r.status} (${r.steps_done}/${r.steps_total} steps, ${r.duration_s}s) → result handed to the Live model`;
+  }
+  if (badge && text) {
+    badge.textContent = text;
+    badge.className = 'plan-agent ' + (msg.state || '');
+    badge.title = `Planned and tracked by ${model}; Gemini Live only talks to you`;
+    const panel = document.getElementById('plan-panel');
+    if (panel && msg.state === 'started') panel.classList.remove('hidden');
+  }
+  if (line) {
+    const row = document.createElement('div');
+    row.className = 'message er2-status ' + (msg.state || '');
+    row.textContent = line;
+    const isAtBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 50;
+    chatLog.appendChild(row);
+    if (isAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
+  }
+}
+
 function renderPlan(args) {
   const panel = document.getElementById('plan-panel');
   if (!panel || !args || !Array.isArray(args.steps) || !args.steps.length) return;
@@ -1274,6 +1309,8 @@ function handleJsonMessage(msg) {
     drawPointsOverlay(msg.points, msg.layer || 'annotation', msg);
   } else if (msg.type === 'clear_overlay') {
     clearOverlay(msg.layer);
+  } else if (msg.type === 'er2_status') {
+    renderEr2Status(msg);
   } else if (msg.type === 'action_status') {
     renderActionStatus(msg);
   } else if (msg.type === 'user' || msg.type === 'user_transcript') {
@@ -1440,7 +1477,7 @@ function handleJsonMessage(msg) {
 
         const summary = document.createElement('summary');
         summary.className = 'tool_call_summary';
-        summary.textContent = `🔧 [${toolCallCounter}] ${desc.summary}`;
+        summary.textContent = `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${toolCallCounter}] ${desc.summary}`;
         summary.title = `${msg.name}(${msg.args ? JSON.stringify(msg.args) : ''})`;
         details.appendChild(summary);
 
@@ -1455,7 +1492,7 @@ function handleJsonMessage(msg) {
         if (isAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
       } else {
         // Fallback if no result yet
-        appendMessage('tool_call', `🔧 [${toolCallCounter}] ${desc.summary}`);
+        appendMessage('tool_call', `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${toolCallCounter}] ${desc.summary}`);
       }
 
       if (msg.name === 'update_plan') {

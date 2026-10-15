@@ -2572,3 +2572,19 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .fc-vals { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--cat) !important; opacity: .8; }
 .tool-tip .tt-enum { margin: 2px 0; display: flex; gap: 4px; flex-wrap: wrap; }
 .tool-tip .tt-enum code { font-size: 10.5px; padding: 0 6px; border-radius: 6px; background: var(--accent-bg); }
+
+
+/* ---- Live + ER2 mode: who is planning ---- */
+.plan-agent {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: #e8f0fe; color: #1a57c9; border: 1px solid #b6ccf5;
+  white-space: nowrap;
+}
+.plan-agent.started { animation: er2-pulse 1.2s ease-in-out infinite; }
+.plan-agent.finished { background: #e6f4ea; color: #137333; border-color: #a8dab5; }
+.plan-agent.hidden { display: none; }
+@keyframes er2-pulse { 50% { opacity: .55; } }
+.message.er2-status {
+  align-self: center; font-size: 12px; color: #1a57c9; background: #eef3fd;
+  border: 1px dashed #b6ccf5; border-radius: 8px; padding: 4px 10px; margin: 4px 0;
+}
