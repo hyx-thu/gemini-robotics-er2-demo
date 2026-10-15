@@ -40,14 +40,10 @@ _STALE_TARGET_S = 6.0
 
 # Heartbeat target check: a shift beyond this (0-1000 units) counts as moved.
 _MOVED_THRESHOLD = 60
-# A detect not followed by pick/place stops being reported after this.
-_DETECT_CONTEXT_MAX_S = 60.0
-# Only a RELEASED object justifies going back to its detect/pick steps.
-_DROPPED_RULE = (
-    " Go back ONLY if the object is clearly released again - lying on a"
-    " surface with NO hand holding it: then call update_plan with the SAME"
-    " steps and current_step set back to that object's detect step, detect"
-    " it on the current frame and pick again."
+# Any hand seen doing the work counts as the robot arm (webcam sim).
+_ANY_HAND_IS_ARM = (
+    " Any hand seen executing it - robot gripper or human hand - IS the robot"
+    " arm executing the command."
 )
 
 _VERIFY = (
@@ -63,7 +59,8 @@ _HEARTBEAT_TEXT = (
     " 'confirm_action' (for pick/place) and then 'update_plan' to advance; if"
     " it is still in progress, call 'ack' once and keep watching; if the goal"
     " is achieved, call update_plan(status='done') and tell the user. Never"
-    " ask the user to perform a physical action."
+    " ask the user to perform a physical action. For pick/place, any hand"
+    " seen doing it - robot gripper or human hand - counts as the robot arm."
 )
 
 
@@ -159,17 +156,6 @@ class SimulatedSpotEmbodiment(base.Embodiment):
     s["last_detect"] = None
     logger.warning("[SimSpot] task aborted after unanswered %s", action_name)
 
-  def on_step_undone(self, action_name: str | None) -> None:
-    """The plan went back (object moved / slipped): nothing is held anymore."""
-    s = self._state
-    s["holding"] = None
-    s["arm"] = "stowed"
-    s["gripper_open_fraction"] = 1.0
-    for key in ("pick_target", "place_target", "pick_origin", "last_trajectory",
-                "last_detect"):
-      s[key] = None
-    logger.info("[SimSpot] plan went back; dropped in-flight %s", action_name)
-
   # ---- Heartbeat target tracking ----
 
   @staticmethod
@@ -184,60 +170,45 @@ class SimulatedSpotEmbodiment(base.Embodiment):
     return desc
 
   def target_context(self) -> str:
-    """Last-known pick/place target for the heartbeat movement check.
+    """Heartbeat check while a pick/place command is being executed.
 
-    Prompt-only: the model compares these coordinates with the latest frame
-    and, if the object / destination moved, re-detects before (re-)issuing
-    pick/place. Empty when there is no relevant target.
+    The only thing monitored is the command's own target parameter (pick:
+    the object to grasp, place: the destination). If it moved, the model
+    re-detects ONLY that target and re-issues the same command with the new
+    position. Prompt-only; empty when no pick/place is in flight.
     """
     s = self._state
     now = time.monotonic()
-    moved_rule = (
-        " Compare with the LATEST frame: if it is clearly no longer there"
-        f" (outside that box or more than ~{_MOVED_THRESHOLD} units away),"
-        " call detect on the current frame and then {reissue} with the NEW"
-        " coordinates. If it is still there, do not re-detect."
-    )
     if s.get("place_target") is not None:
-      t = s["place_target"]
-      age = now - float(s.get("place_at") or now)
-      return (
-          "[TARGET] place in flight toward destination "
-          f"{self._describe_target(t)}, sent {age:.0f}s ago. The carried"
-          " object moving is EXPECTED (it travels with the hand) - never"
-          " re-detect it; only check the DESTINATION."
-          + moved_rule.format(reissue="re-issue place(x, y)")
-          + _DROPPED_RULE
+      cmd, t, at = "place", s["place_target"], s.get("place_at")
+      what = "the DESTINATION"
+      reissue = "place(x, y)"
+      extra = (
+          " The carried object moving with the hand is part of the execution,"
+          " not a change of the target - never detect it again."
       )
-    if s.get("pick_target") is not None:
-      t = s["pick_target"]
-      age = now - float(s.get("pick_at") or now)
-      return (
-          f"[TARGET] pick in flight toward {self._describe_target(t)}, sent"
-          f" {age:.0f}s ago. If the object is already in the gripper / lifted,"
-          " that is the pick's effect, not a move: confirm_action instead."
-          + moved_rule.format(reissue="re-issue pick(grasp_x, grasp_y)")
+    elif s.get("pick_target") is not None:
+      cmd, t, at = "pick", s["pick_target"], s.get("pick_at")
+      what = "the OBJECT to grasp"
+      reissue = "pick(grasp_x, grasp_y)"
+      extra = (
+          " A hand grasping / lifting it is the pick being executed (confirm"
+          " when lifted), not a change of the target."
       )
-    holding_note = ""
-    if s.get("holding") and s.get("pick_target") is None:
-      holding_note = (
-          f"[TARGET] holding {s['holding']!r} (pick confirmed): it now moves"
-          " WITH the hand/gripper - a hand holding it IS the robot's gripper."
-          " That is expected, NOT a reason to detect it again; go on with the"
-          " destination." + _DROPPED_RULE
-      )
-    if s.get("last_detect") is not None:
-      age = now - float(s.get("last_detect_at") or now)
-      if age > _DETECT_CONTEXT_MAX_S:
-        return holding_note
-      t = s["last_detect"]
-      detect_note = (
-          f"[TARGET] detected {self._describe_target(t)} {age:.0f}s ago;"
-          " pick/place not issued yet."
-          + moved_rule.format(reissue="call pick/place")
-      )
-      return f"{holding_note}\n{detect_note}" if holding_note else detect_note
-    return holding_note
+    else:
+      return ""
+    age = now - float(at or now)
+    return (
+        f"[TARGET] {cmd} command sent {age:.0f}s ago and being executed by the"
+        f" robot arm; its target parameter is {what}"
+        f" {self._describe_target(t)}." + _ANY_HAND_IS_ARM + extra
+        + f" Monitor ONLY this target: if it has clearly moved (outside that"
+        f" box or more than ~{_MOVED_THRESHOLD} units away), call detect for"
+        f" this target alone on the current frame and re-issue {reissue} with"
+        " its NEW position - do not re-plan, go back, or detect anything"
+        " else. If it has not moved, just confirm_action when the frame shows"
+        " the command completed, otherwise ack."
+    )
 
   # ---- Actuation ----
 

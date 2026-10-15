@@ -48,47 +48,36 @@ class MovedObjectTest(unittest.IsolatedAsyncioTestCase):
 
 class TargetContextTest(unittest.IsolatedAsyncioTestCase):
 
-  async def test_empty_without_target(self):
+  async def test_empty_without_pending_command(self):
     e = spot_sim_embodiment.SimulatedSpotEmbodiment()
     self.assertEqual("", e.target_context())
-
-  async def test_detect_not_yet_picked(self):
-    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
     await e.execute_action("detect", instruction="pen", x=200, y=600)
-    ctx = e.target_context()
-    self.assertIn("[TARGET] detected 'pen' at (x=200, y=600)", ctx)
-    self.assertIn("not issued yet", ctx)
-    self.assertIn("call detect", ctx)
+    self.assertEqual("", e.target_context())
 
-  async def test_pick_in_flight_then_confirmed(self):
+  async def test_pick_in_flight_monitors_only_the_object(self):
     e = spot_sim_embodiment.SimulatedSpotEmbodiment()
     await e.execute_action("detect", instruction="pen", x=200, y=600)
     await e.execute_action("pick")
     ctx = e.target_context()
-    self.assertIn("pick in flight toward 'pen' at (x=200, y=600)", ctx)
+    self.assertIn("[TARGET] pick command sent", ctx)
+    self.assertIn("the OBJECT to grasp 'pen' at (x=200, y=600)", ctx)
+    self.assertIn("human hand - IS the robot arm", ctx)
     self.assertIn("re-issue pick(grasp_x, grasp_y)", ctx)
-    self.assertIn("confirm_action instead", ctx)
+    self.assertIn("do not re-plan", ctx)
     e.on_action_confirmed("pick")
-    self.assertIn("holding 'pen'", e.target_context())
-    self.assertNotIn("pick in flight", e.target_context())
+    self.assertEqual("", e.target_context())
 
-  async def test_place_in_flight(self):
+  async def test_place_in_flight_monitors_only_the_destination(self):
     e = spot_sim_embodiment.SimulatedSpotEmbodiment()
     await e.execute_action("detect", instruction="pen", x=200, y=600)
     await e.execute_action("pick")
     e.on_action_confirmed("pick")
-    ctx = e.target_context()
-    self.assertIn("[TARGET] holding 'pen' (pick confirmed)", ctx)
-    self.assertIn("NOT a reason to detect it again", ctx)
-    await e.execute_action("detect", instruction="cup", x=800, y=400)
-    ctx = e.target_context()
-    self.assertIn("holding 'pen'", ctx)
-    self.assertIn("detected 'cup'", ctx)
     await e.execute_action("place", x=820, y=420)
     ctx = e.target_context()
-    self.assertIn("place in flight toward destination", ctx)
-    self.assertIn("never re-detect it", ctx)
+    self.assertIn("[TARGET] place command sent", ctx)
+    self.assertIn("the DESTINATION", ctx)
     self.assertIn("(x=820, y=420)", ctx)
+    self.assertIn("never detect it again", ctx)
     self.assertIn("re-issue place(x, y)", ctx)
     e.on_action_confirmed("place")
     self.assertEqual("", e.target_context())

@@ -750,29 +750,16 @@ class ToolCallHandler:
               ),
           }
         if current < prev_cur:
-          wd_p = self._watchdog.pending if self._watchdog is not None else None
-          if wd_p is not None and len(steps) == len(prev_steps):
-            # Recovery: an earlier step's effect was undone while a verified
-            # command is in flight (object moved before the grasp, or slipped
-            # out of the gripper before the place). Going back is the only
-            # sane path - drop the stale command so the watchdog stops
-            # re-sending it with old coordinates.
-            recovered_from = await self._recover_to_earlier_step(wd_p.name)
-            logging.info(
-                "update_plan recovery %d -> %d (cancelled pending %s)",
-                prev_cur, current, recovered_from,
-            )
-          else:
-            # Never move backwards without a user request; keep progress.
-            logging.info(
-                "update_plan clamped current_step %d -> %d (no regression)",
-                current, prev_cur,
-            )
-            clamped_from = current
-            current = prev_cur
-            if current >= len(steps):
-              steps = prev_steps
-              current = min(prev_cur, len(steps) - 1)
+          # Never move backwards without a user request; keep progress.
+          logging.info(
+              "update_plan clamped current_step %d -> %d (no regression)",
+              current, prev_cur,
+          )
+          clamped_from = current
+          current = prev_cur
+          if current >= len(steps):
+            steps = prev_steps
+            current = min(prev_cur, len(steps) - 1)
     if not prev or prev.get("status") in ("done", "failed"):
       self._plan_started_at = time.monotonic()
 
@@ -860,33 +847,6 @@ class ToolCallHandler:
       )
     return result_payload
 
-  async def _recover_to_earlier_step(self, action_name: str) -> str:
-    """Cancel the in-flight verified command because the plan went back.
-
-    The embodiment rolls back the intended state (e.g. nothing is held), the
-    stale trajectory is removed from the camera and the UI status cleared.
-    """
-    wd = self._watchdog
-    if wd is not None:
-      wd.reset()
-    hook = getattr(self._embodiment, "on_step_undone", None) or getattr(
-        self._embodiment, "on_task_aborted", None
-    )
-    if hook is not None:
-      try:
-        hook(action_name)
-      except Exception:  # pylint: disable=broad-except
-        logging.exception("recovery hook failed")
-    await self._bus.publish(
-        event_bus.Event(
-            type=event_bus.EventType.TOOL_RESULT,
-            source=event_bus.EventSource.ASSISTANT,
-            data={"type": "clear_overlay", "layer": "trajectory"},
-        )
-    )
-    await self._publish_action_status({"state": "cleared"})
-    return action_name
-
   # ---- Action watchdog (command -> visual confirmation -> retry -> abort) ----
 
   @staticmethod
@@ -932,6 +892,16 @@ class ToolCallHandler:
       }
     annotated = dict(result)
     annotated["watchdog"] = info
+    if info.get("retargeted"):
+      annotated["next_action"] = (
+          f"{func_name} re-targeted to the new position (attempt"
+          f" {info['attempt']}/{info['max_attempts']}, confirmation window"
+          f" restarted: {info['confirm_within_s']:.0f}s). Keep watching the"
+          f" camera: call confirm_action(observation=...) when you SEE the"
+          f" {func_name} completed, otherwise ack."
+      )
+      await self._publish_action_status({**wd.status(), "state": "pending"})
+      return annotated
     if info.get("merged"):
       annotated["next_action"] = (
           f"{func_name} attempt {info['attempt']}/{info['max_attempts']} is"

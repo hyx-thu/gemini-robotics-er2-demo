@@ -36,6 +36,23 @@ TIMED_OUT = "timed_out"    # window elapsed, attempts left, model should re-issu
 OVERDUE = "overdue"        # model did not re-issue within the grace period
 EXHAUSTED = "exhausted"    # last attempt timed out -> abort the task
 
+# Target-position parameters of pick/place.
+_TARGET_KEYS = ("grasp_x", "grasp_y", "x", "y")
+
+
+def _retargeted(old: dict[str, Any] | None, new: dict[str, Any] | None) -> bool:
+  """True if ``new`` carries a target position different from ``old``."""
+  old, new = old or {}, new or {}
+  changed = False
+  for key in _TARGET_KEYS:
+    if key in new and new.get(key) is not None:
+      try:
+        if old.get(key) is None or round(float(new[key])) != round(float(old[key])):
+          changed = True
+      except (TypeError, ValueError):
+        continue
+  return changed
+
 
 @dataclasses.dataclass
 class PendingAction:
@@ -157,6 +174,24 @@ class ActionWatchdog:
     now = self._clock()
     p = self.pending
     if p is not None and p.name == name:
+      if self.elapsed() < self.timeout_s and _retargeted(p.args, args):
+        # Same command re-issued with a NEW target position (the object /
+        # destination moved and was re-detected): the arm must travel to the
+        # new spot, so restart the confirmation window - same attempt - and
+        # adopt the new args so a watchdog re-issue never uses the old ones.
+        p.args = dict(args or {})
+        p.issued_at = now
+        p.timeout_notified_at = None
+        p.source = source
+        return {
+            "action": name,
+            "attempt": p.attempt,
+            "max_attempts": self.max_attempts,
+            "retry": False,
+            "retargeted": True,
+            "confirm_within_s": self.timeout_s,
+            "source": source,
+        }
       if self.elapsed() < self.timeout_s:
         # Same command re-sent while the current attempt is still inside its
         # confirmation window (model impatience, or the model echoing a
