@@ -30,6 +30,12 @@ _WATCHDOG_TICK_S = 0.5
 # confirm_action is only accepted once the command has had time to take
 # effect and at least one camera frame captured after it has been sent.
 _MIN_CONFIRM_DWELL_S = 3.0
+# retry_step is two-phase: the failure must still be visible on a later
+# heartbeat (between these bounds) before the plan is moved back.
+_RETRY_RECHECK_MIN_S = 2.0
+_RETRY_RECHECK_MAX_S = 30.0
+# Plan-level retries (going back to redo steps) allowed per plan.
+_MAX_PLAN_RETRIES = 2
 _MIN_CONFIRM_FRAME_LAG_S = 1.0
 
 # Spoken / typed commands that cancel the running task (any language).
@@ -188,6 +194,9 @@ class ToolCallHandler:
     self._last_user_input_time = 0.0
     self._plan_started_at = 0.0
     self._plan_finished_at = 0.0
+    # retry_step bookkeeping (reset with every new plan).
+    self._plan_retries = 0
+    self._retry_intent: tuple[int, float] | None = None
     # Command -> visual confirmation -> retry -> abort supervisor. Enabled by
     # embodiments that set ``verify_actions_visually = True``.
     self._watchdog = self._build_watchdog(embodiment)
@@ -674,6 +683,8 @@ class ToolCallHandler:
         return await self._execute_update_plan(args)
       if func_name == "confirm_action":
         return await self._execute_confirm_action(args)
+      if func_name == "retry_step":
+        return await self._execute_retry_step(args)
       return await self._embodiment.execute_action(func_name, **args)
     except Exception as exc:  # pylint: disable=broad-except
       logging.error('Tool execution error for %s: %s', func_name, exc)
@@ -762,6 +773,8 @@ class ToolCallHandler:
             current = min(prev_cur, len(steps) - 1)
     if not prev or prev.get("status") in ("done", "failed"):
       self._plan_started_at = time.monotonic()
+      self._plan_retries = 0
+      self._retry_intent = None
 
     wd = self._watchdog
     if wd is not None and wd.pending is not None and status != "failed":
@@ -925,6 +938,132 @@ class ToolCallHandler:
     )
     self._ensure_watchdog_loop()
     return annotated
+
+  async def _execute_retry_step(self, args: dict[str, Any]) -> dict[str, Any]:
+    """Escalation level 2: redo earlier step(s) of the SAME plan.
+
+    Used only when the in-flight pick/place can no longer succeed (object
+    dropped, scene changed a lot). Two-phase: the first call only records the
+    intent; a second call on a later heartbeat (problem still visible)
+    cancels the in-flight command, rolls back the embodiment and moves the
+    plan back. At most _MAX_PLAN_RETRIES per plan; after that the model must
+    keep the plan or replan the remaining steps.
+    """
+    plan = self._plan
+    if not plan or plan.get("status") not in ("planning", "in_progress"):
+      return {"status": "not_applicable", "note": "No task in progress."}
+    steps = [str(x) for x in plan.get("steps") or []]
+    cur = int(plan.get("current_step", 0) or 0)
+    try:
+      step = int(args.get("step"))
+    except (TypeError, ValueError):
+      return {"error": "step must be the 0-based index of the plan step to redo."}
+    if step < 0 or step > cur:
+      return {
+          "error": f"step must be between 0 and the current step ({cur}).",
+          "next_action": "Keep the plan; call ack if nothing needs redoing.",
+      }
+    observation = str(args.get("observation", "")).strip()
+    now = time.monotonic()
+    intent = self._retry_intent
+    confirmed = (
+        intent is not None
+        and intent[0] == step
+        and _RETRY_RECHECK_MIN_S <= now - intent[1] <= _RETRY_RECHECK_MAX_S
+    )
+    if not confirmed:
+      self._retry_intent = (step, now)
+      logging.info("retry_step(%d) noted, awaiting recheck: %s", step, observation)
+      return {
+          "status": "awaiting_recheck",
+          "step": step,
+          "next_action": (
+              "Nothing changed yet - the plan and the command in flight are"
+              " kept. Look again on the NEXT heartbeat: only if the problem is"
+              " still clearly visible, call retry_step again with the same"
+              " step; if the scene is fine after all, just continue (ack /"
+              " confirm_action)."
+          ),
+      }
+    self._retry_intent = None
+    wd = self._watchdog
+    pending = wd.pending.name if wd is not None and wd.pending is not None else None
+    if pending is not None:
+      wd.reset()
+      hook = getattr(self._embodiment, "on_retry", None) or getattr(
+          self._embodiment, "on_task_aborted", None
+      )
+      if hook is not None:
+        try:
+          hook(pending)
+        except Exception:  # pylint: disable=broad-except
+          logging.exception("on_retry hook failed")
+      await self._bus.publish(
+          event_bus.Event(
+              type=event_bus.EventType.TOOL_RESULT,
+              source=event_bus.EventSource.ASSISTANT,
+              data={"type": "clear_overlay", "layer": "trajectory"},
+          )
+      )
+      await self._publish_action_status({"state": "cleared"})
+    if self._plan_retries >= _MAX_PLAN_RETRIES:
+      logging.info("retry_step(%d) refused: budget used; cancelled %s", step, pending)
+      return {
+          "status": "retry_budget_exhausted",
+          "cancelled_command": pending,
+          "next_action": (
+              f"{_MAX_PLAN_RETRIES} retries were already used for this plan."
+              " If the original remaining steps can still reach the goal,"
+              " continue with the current step. Only if they truly cannot,"
+              " replan: update_plan with the SAME goal, keep the completed"
+              " steps and revise ONLY the remaining ones (or status='failed'"
+              " if the goal is impossible), and tell the user in one sentence."
+          ),
+      }
+    self._plan_retries += 1
+    plan["current_step"] = step
+    plan["status"] = "in_progress"
+    note = observation or "retry"
+    logging.info(
+        "retry_step %d -> %d (retry %d/%d, cancelled %s): %s",
+        cur, step, self._plan_retries, _MAX_PLAN_RETRIES, pending, observation,
+    )
+    # Let the UI plan panel follow (it renders update_plan tool events).
+    await self._bus.publish(
+        event_bus.Event(
+            type=event_bus.EventType.TOOL_RESULT,
+            source=event_bus.EventSource.ASSISTANT,
+            data={
+                "type": "tool_call",
+                "id": f"retry-step-{self._plan_retries}",
+                "name": "update_plan",
+                "args": {
+                    "goal": plan.get("goal", ""),
+                    "steps": steps,
+                    "current_step": step,
+                    "status": "in_progress",
+                    "note": note,
+                },
+                "result": {"status": "ok", "current_step": step,
+                           "plan_status": "in_progress"},
+                "source": "retry",
+            },
+        )
+    )
+    return {
+        "status": "retrying",
+        "current_step": step,
+        "current_step_text": steps[step] if step < len(steps) else "",
+        "retries_used": self._plan_retries,
+        "max_retries": _MAX_PLAN_RETRIES,
+        "cancelled_command": pending,
+        "next_action": (
+            f"Same plan, same goal. Redo step {step + 1} now on the CURRENT"
+            " frame (e.g. detect the object again, then pick it), then"
+            " continue with the remaining steps unchanged. Tell the user in"
+            " one short sentence that you are retrying."
+        ),
+    }
 
   async def _execute_confirm_action(self, args: dict[str, Any]) -> dict[str, Any]:
     wd = self._watchdog

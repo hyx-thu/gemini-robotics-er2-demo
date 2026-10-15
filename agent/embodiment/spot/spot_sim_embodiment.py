@@ -40,6 +40,17 @@ _STALE_TARGET_S = 6.0
 
 # Heartbeat target check: a shift beyond this (0-1000 units) counts as moved.
 _MOVED_THRESHOLD = 60
+# Escalation ladder when the in-flight command can no longer succeed.
+_ESCALATION = (
+    " ONLY if the command clearly can no longer succeed as sent (e.g. the"
+    " carried object fell and lies released on a surface with no hand"
+    " holding it, or the scene changed drastically) escalate cautiously:"
+    " keep the original plan and first call retry_step(step=<index of the"
+    " step to redo, e.g. that object's detect step>, observation=...) - it"
+    " must be confirmed by calling it again on the next heartbeat. Replan"
+    " (update_plan: same goal, completed steps kept, only remaining steps"
+    " revised) only if retrying cannot reach the goal."
+)
 # Any hand seen doing the work counts as the robot arm (webcam sim).
 _ANY_HAND_IS_ARM = (
     " Any hand seen executing it - robot gripper or human hand - IS the robot"
@@ -156,6 +167,19 @@ class SimulatedSpotEmbodiment(base.Embodiment):
     s["last_detect"] = None
     logger.warning("[SimSpot] task aborted after unanswered %s", action_name)
 
+  def on_retry(self, action_name: str | None) -> None:
+    """retry_step cancelled the in-flight command: redo from an earlier step."""
+    s = self._state
+    if action_name in ("pick", "place"):
+      # The object is not (reliably) in the gripper anymore.
+      s["holding"] = None
+      s["arm"] = "stowed"
+      s["gripper_open_fraction"] = 1.0
+    for key in ("pick_target", "place_target", "pick_origin", "last_trajectory",
+                "last_detect"):
+      s[key] = None
+    logger.info("[SimSpot] retry: cancelled in-flight %s", action_name)
+
   # ---- Heartbeat target tracking ----
 
   @staticmethod
@@ -208,6 +232,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         " its NEW position - do not re-plan, go back, or detect anything"
         " else. If it has not moved, just confirm_action when the frame shows"
         " the command completed, otherwise ack."
+        + _ESCALATION
     )
 
   # ---- Actuation ----

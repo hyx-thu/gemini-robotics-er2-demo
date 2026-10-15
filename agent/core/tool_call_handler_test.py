@@ -475,6 +475,35 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(same["watchdog"].get("merged"))
     wd.confirm()
 
+  async def test_retry_step_is_two_phase_and_budgeted(self):
+    await self._user_says("move the block")
+    await self._plan(0, "planning")
+    await self._call("pick")
+    self.handler.watchdog.confirm()
+    await self._plan(3)
+    await self._call("place")
+    with mock.patch.object(tool_call_handler, "_RETRY_RECHECK_MIN_S", 0.0):
+      first = await self._call("retry_step", {"step": 0, "observation": "dropped"})
+      self.assertEqual("awaiting_recheck", first["status"])
+      self.assertEqual("place", self.handler.watchdog.pending.name)
+      self.assertEqual(3, self.handler._plan["current_step"])
+      second = await self._call("retry_step", {"step": 0, "observation": "dropped"})
+      self.assertEqual("retrying", second["status"])
+      self.assertEqual("place", second["cancelled_command"])
+      self.assertIsNone(self.handler.watchdog.pending)
+      self.assertEqual(0, self.handler._plan["current_step"])
+      plans = [d for d in self._events("tool_call") if d.get("name") == "update_plan"]
+      self.assertEqual(0, plans[-1]["args"]["current_step"])
+      # Second retry allowed, third refused (budget 2).
+      for _ in range(2):
+        await self._call("retry_step", {"step": 0, "observation": "again"})
+      last = None
+      for _ in range(2):
+        last = await self._call("retry_step", {"step": 0, "observation": "again"})
+      self.assertEqual("retry_budget_exhausted", last["status"])
+    bad = await self._call("retry_step", {"step": 3, "observation": "x"})
+    self.assertIn("error", bad)
+
   async def test_clamped_regression_is_reported_to_model(self):
     await self._user_says("move the block")
     await self._plan(0, "planning")

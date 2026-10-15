@@ -997,6 +997,48 @@ def confirm_action_tool() -> dict[str, Any]:
   )
 
 
+def retry_step_tool() -> dict[str, Any]:
+  """Redo earlier step(s) of the SAME plan after a real failure."""
+  return _tool(
+      name="retry_step",
+      description=(
+          "Escalation for a REAL failure of the pick/place in flight (e.g. the"
+          " carried object fell and lies released on a surface with no hand"
+          " holding it, or the scene changed so much that the command cannot"
+          " succeed). Keeps the SAME plan and goal, cancels the command in"
+          " flight and moves the plan back to `step` so you redo it (usually"
+          " the object's detect step, then pick and place again). Be very"
+          " cautious: small deviations and an object moving WITH the hand are"
+          " NOT failures. Two-phase: the first call only records the problem;"
+          " call it again on the next heartbeat with the same step only if the"
+          " problem is still clearly visible. Max 2 retries per plan; replan"
+          " the remaining steps with update_plan only if retrying cannot reach"
+          " the goal."
+      ),
+      parameters={
+          "type": "OBJECT",
+          "properties": {
+              "step": {
+                  "type": "INTEGER",
+                  "description": (
+                      "0-based index of the plan step to redo (<= the current"
+                      " step), e.g. the detect step of the dropped object."
+                  ),
+              },
+              "observation": {
+                  "type": "STRING",
+                  "description": (
+                      "One short sentence of visual evidence, in the user's"
+                      " language, e.g. \"纸团掉在了桌上，夹爪是空的\"."
+                  ),
+              },
+          },
+          "required": ["step", "observation"],
+      },
+      behavior="BLOCKING",
+  )
+
+
 _WATCHDOG_NOTE = (
     " The command is supervised: watch the next camera frames - the arm or"
     " hand you see is the robot executing it. When the result is visible,"
@@ -1157,6 +1199,7 @@ def spot_sim_tools() -> list[dict[str, Any]]:
       pick_sim_tool(),
       place_sim_tool(),
       confirm_action_tool(),
+      retry_step_tool(),
       wait_for_pick_up_tool(),
       stand_tool(),
       sit_tool(),
