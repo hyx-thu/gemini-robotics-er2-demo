@@ -2590,16 +2590,23 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 }
 
 
-/* ---- Session recording toggle ---- */
-.rec-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
-.rec-btn.hidden { display: none; }
-.rec-btn .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #9aa0a6; }
-.rec-btn.recording { color: #d93025; border-color: #d93025; }
-.rec-btn.recording .rec-dot { background: #d93025; animation: rec-blink 1s step-start infinite; }
+/* ---- Session recording toggle (small icon right of "Connected") ---- */
+.status-row { display: flex; align-items: center; gap: 2px; }
+.rec-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border-color, #dadce0); background: transparent; cursor: pointer;
+}
+.rec-icon.hidden { display: none; }
+.rec-icon:disabled { opacity: .5; cursor: default; }
+.rec-icon .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #9aa0a6; }
+.rec-icon:hover .rec-dot { background: #d93025; }
+.rec-icon.recording { border-color: #d93025; box-shadow: 0 0 0 2px rgba(217,48,37,.15); }
+.rec-icon.recording .rec-dot { background: #d93025; animation: rec-blink 1s step-start infinite; }
 @keyframes rec-blink { 50% { opacity: 0.2; } }
 
-/* ---- Author credit (bottom-right of the status bar) ---- */
-.author-credit { margin-left: auto; padding: 0 10px; font-size: 11px; opacity: .55; white-space: nowrap; }
+/* ---- Author credit (bottom bar, next to Settings) ---- */
+.author-credit { padding: 0 8px; font-size: 11px; opacity: .55; white-space: nowrap; }
 .author-credit a { color: inherit; text-decoration: none; }
 .author-credit:hover { opacity: .9; }
 .author-credit a:hover { text-decoration: underline; }

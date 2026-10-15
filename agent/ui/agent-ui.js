@@ -827,8 +827,8 @@ let recordingOn = false;
 const recordBtn = document.getElementById('recordBtn');
 function updateRecordBtn(status) {
   if (!recordBtn) return;
-  recordBtn.classList.toggle('hidden', !recordingAvailable);
   const connected = !!(typeof geminiClient !== 'undefined' && geminiClient && geminiClient.isConnected());
+  recordBtn.classList.toggle('hidden', !recordingAvailable || !connected);
   recordBtn.disabled = !connected;
   recordBtn.classList.toggle('recording', recordingOn);
   recordBtn.title = recordingOn
