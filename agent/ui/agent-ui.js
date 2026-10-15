@@ -1461,7 +1461,17 @@ function handleJsonMessage(msg) {
         // accepted plan otherwise.
         const r = msg.result && typeof msg.result === 'object' ? msg.result : {};
         const rejected = r.error || r.status === 'ignored' || r.status === 'kept_original_plan';
-        if (!rejected) renderPlan(msg.args || {});
+        if (!rejected) {
+          // Render what the server ACCEPTED (it may keep progress instead of
+          // the step the model proposed), so panel, camera and robot agree.
+          const accepted = { ...(msg.args || {}) };
+          if (Number.isInteger(r.current_step)) {
+            if (r.current_step !== accepted.current_step) delete accepted.note;
+            accepted.current_step = r.current_step;
+          }
+          if (typeof r.plan_status === 'string') accepted.status = r.plan_status;
+          renderPlan(accepted);
+        }
       } else {
         recordToolVisual(msg);
         renderRichToolCard(msg);

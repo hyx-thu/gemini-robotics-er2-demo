@@ -152,6 +152,17 @@ class SimulatedSpotEmbodiment(base.Embodiment):
     s["last_detect"] = None
     logger.warning("[SimSpot] task aborted after unanswered %s", action_name)
 
+  def on_step_undone(self, action_name: str | None) -> None:
+    """The plan went back (object moved / slipped): nothing is held anymore."""
+    s = self._state
+    s["holding"] = None
+    s["arm"] = "stowed"
+    s["gripper_open_fraction"] = 1.0
+    for key in ("pick_target", "place_target", "pick_origin", "last_trajectory",
+                "last_detect"):
+      s[key] = None
+    logger.info("[SimSpot] plan went back; dropped in-flight %s", action_name)
+
   # ---- Heartbeat target tracking ----
 
   @staticmethod
@@ -187,6 +198,11 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           "[TARGET] place in flight toward destination "
           f"{self._describe_target(t)}, sent {age:.0f}s ago."
           + moved_rule.format(reissue="re-issue place(x, y)")
+          + " If the carried object is NOT in the gripper (still or again"
+          " lying somewhere, e.g. on the table), the pick did not hold: call"
+          " update_plan with the SAME steps and current_step set back to that"
+          " object's detect step (going back is allowed in this case), then"
+          " immediately call detect on the current frame and pick again."
       )
     if s.get("pick_target") is not None:
       t = s["pick_target"]

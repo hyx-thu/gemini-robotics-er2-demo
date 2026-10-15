@@ -458,6 +458,33 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertIn("pick attempt 1/3", self.handler.heartbeat_context())
     self.handler.watchdog.confirm()
 
+  async def test_going_back_while_place_pending_cancels_stale_place(self):
+    await self._user_says("move the block")
+    await self._plan(0, "planning")
+    await self._call("pick")
+    self.handler.watchdog.confirm()
+    await self._plan(3)
+    await self._call("place")
+    self.assertEqual("place", self.handler.watchdog.pending.name)
+    # Object slipped out of the gripper: model goes back to detect.
+    back = await self._plan(0)
+    self.assertEqual("ok", back["status"])
+    self.assertEqual(0, back["current_step"])
+    self.assertNotIn("note", back)
+    self.assertIsNone(self.handler.watchdog.pending)
+    clears = [d for d in self.bus.events
+              if d.data.get("type") == "clear_overlay"
+              and d.data.get("layer") == "trajectory"]
+    self.assertTrue(clears)
+
+  async def test_clamped_regression_is_reported_to_model(self):
+    await self._user_says("move the block")
+    await self._plan(0, "planning")
+    await self._plan(2)
+    back = await self._plan(0)
+    self.assertEqual(2, back["current_step"])
+    self.assertIn("NOT moved back", back["note"])
+
   async def test_heartbeat_includes_embodiment_target_context(self):
     self.embodiment.target_context = lambda: "[TARGET] pick in flight toward 'pen'"
     self.assertIn("[TARGET] pick in flight", self.handler.heartbeat_context())
