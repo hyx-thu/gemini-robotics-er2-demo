@@ -42,6 +42,13 @@ _STALE_TARGET_S = 6.0
 _MOVED_THRESHOLD = 60
 # A detect not followed by pick/place stops being reported after this.
 _DETECT_CONTEXT_MAX_S = 60.0
+# Only a RELEASED object justifies going back to its detect/pick steps.
+_DROPPED_RULE = (
+    " Go back ONLY if the object is clearly released again - lying on a"
+    " surface with NO hand holding it: then call update_plan with the SAME"
+    " steps and current_step set back to that object's detect step, detect"
+    " it on the current frame and pick again."
+)
 
 _VERIFY = (
     "Command sent to the robot. Watch the next camera frames and confirm the"
@@ -196,13 +203,11 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       age = now - float(s.get("place_at") or now)
       return (
           "[TARGET] place in flight toward destination "
-          f"{self._describe_target(t)}, sent {age:.0f}s ago."
+          f"{self._describe_target(t)}, sent {age:.0f}s ago. The carried"
+          " object moving is EXPECTED (it travels with the hand) - never"
+          " re-detect it; only check the DESTINATION."
           + moved_rule.format(reissue="re-issue place(x, y)")
-          + " If the carried object is NOT in the gripper (still or again"
-          " lying somewhere, e.g. on the table), the pick did not hold: call"
-          " update_plan with the SAME steps and current_step set back to that"
-          " object's detect step (going back is allowed in this case), then"
-          " immediately call detect on the current frame and pick again."
+          + _DROPPED_RULE
       )
     if s.get("pick_target") is not None:
       t = s["pick_target"]
@@ -213,17 +218,26 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           " that is the pick's effect, not a move: confirm_action instead."
           + moved_rule.format(reissue="re-issue pick(grasp_x, grasp_y)")
       )
+    holding_note = ""
+    if s.get("holding") and s.get("pick_target") is None:
+      holding_note = (
+          f"[TARGET] holding {s['holding']!r} (pick confirmed): it now moves"
+          " WITH the hand/gripper - a hand holding it IS the robot's gripper."
+          " That is expected, NOT a reason to detect it again; go on with the"
+          " destination." + _DROPPED_RULE
+      )
     if s.get("last_detect") is not None:
       age = now - float(s.get("last_detect_at") or now)
       if age > _DETECT_CONTEXT_MAX_S:
-        return ""
+        return holding_note
       t = s["last_detect"]
-      return (
+      detect_note = (
           f"[TARGET] detected {self._describe_target(t)} {age:.0f}s ago;"
           " pick/place not issued yet."
           + moved_rule.format(reissue="call pick/place")
       )
-    return ""
+      return f"{holding_note}\n{detect_note}" if holding_note else detect_note
+    return holding_note
 
   # ---- Actuation ----
 
