@@ -253,6 +253,9 @@ class SessionManager:
     # start_session once the ToolCallHandler exists.
     self._er_orchestrator_config = er_orchestrator_config
     self.er_orchestrator = None
+    # Opt-in dataset recorder (core/session_recorder.py), toggled from the UI.
+    self.recorder = None
+    self.recording_meta: dict[str, Any] = {}
     self.supports_blocking_tools = supports_blocking_tools
     # For models not trained on the ack protocol: skip heartbeats while no
     # task is active (idle ticks only teach them to answer with ack / to
@@ -333,6 +336,43 @@ class SessionManager:
     self.user_language: str | None = None
     self.user_language_name: str | None = None
     self._last_user_input_time = 0.0
+
+  def set_recording(self, enabled: bool) -> dict[str, Any]:
+    """Start/stop recording this session to the private dataset bucket."""
+    from core import session_recorder  # pylint: disable=g-import-not-at-top
+    if enabled:
+      if self.recorder is not None and not self.recorder.closed:
+        return {"state": "on", **self.recorder.status()}
+      bucket = session_recorder.recording_bucket()
+      if not bucket:
+        return {"state": "unavailable",
+                "reason": "RECORDING_BUCKET is not configured on this server"}
+      meta = {"model": self.model, "modality": self.response_modality,
+              "thinking_level": self.thinking_level,
+              "revision": os.environ.get("K_REVISION", "local"),
+              **self.recording_meta}
+      self.recorder = session_recorder.SessionRecorder(
+          bucket, meta, sample_rate=self.input_sample_rate)
+      plan = getattr(self.tool_handler, "_plan", None)
+      if plan:
+        self.recorder.event("plan_snapshot", plan)
+      return {"state": "on", **self.recorder.status()}
+    if self.recorder is None:
+      return {"state": "off"}
+    status = self.recorder.close()
+    self.recorder = None
+    return {"state": "off", **status}
+
+  async def _record_bus_event(self, event: event_bus.Event) -> None:
+    rec = self.recorder
+    if rec is None:
+      return
+    data = event.data
+    if isinstance(data, dict):
+      data = {k: v for k, v in data.items() if k not in ("action_data",)}
+    elif isinstance(data, (bytes, bytearray)):
+      return
+    rec.event(event.type.name.lower(), data)
 
   def note_user_language(self, text: str) -> None:
     """Update the tracked user language from a transcript / typed text."""
@@ -978,6 +1018,19 @@ class SessionManager:
         event_bus.EventType.TRANSPARENT_HISTORY,
     ]
 
+    self.bus.subscribe(
+        [
+            event_bus.EventType.USER_TRANSCRIPT,
+            event_bus.EventType.GEMINI_TEXT,
+            event_bus.EventType.GEMINI_THOUGHT,
+            event_bus.EventType.TOOL_RESULT,
+            event_bus.EventType.TURN_COMPLETE,
+            event_bus.EventType.TEXT_INPUT,
+            event_bus.EventType.INTERRUPTED,
+        ],
+        self._record_bus_event,
+    )
+
     async def _ui_handler(event: event_bus.Event):
       await ui_queue.put(event)
 
@@ -1458,6 +1511,8 @@ class SessionManager:
                   }
               }
               await self.send_message(heartbeat_msg)
+              if self.recorder is not None:
+                self.recorder.event("heartbeat", {"trigger": trigger, "text": hb_text})
               self._last_heartbeat_sent_time = loop.time()
               logger.info("Sent heartbeat (trigger=%s)", trigger)
               await ui_queue.put({"type": "heartbeat_sent", "trigger": trigger})
@@ -1610,6 +1665,12 @@ class SessionManager:
 
     finally:
       self._closing = True
+      if self.recorder is not None:
+        try:
+          self.recorder.close()
+        except Exception:  # pylint: disable=broad-except
+          logger.exception("recorder close failed")
+        self.recorder = None
       health_task.cancel()
       if heartbeat_task:
         heartbeat_task.cancel()

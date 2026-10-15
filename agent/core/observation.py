@@ -213,6 +213,9 @@ class Observation:
 
         if not await self._deliver("audio", msg):
           continue
+        rec = getattr(self.session_manager, "recorder", None)
+        if rec is not None:
+          rec.audio(chunk)
         # Diagnostic: forwarded audio rate (16 kHz mono int16 = 32000 B/s).
         now_r = time.monotonic()
         self._rate_bytes = getattr(self, "_rate_bytes", 0) + len(chunk)
@@ -305,6 +308,9 @@ class Observation:
 
         if not await self._deliver("video", msg):
           continue
+        rec = getattr(self.session_manager, "recorder", None)
+        if rec is not None:
+          rec.frame(chunk)
         self.last_frame_sent_time = time.monotonic()
         self._frame_sent_event.set()
         logging.info("Sent video frame")

@@ -317,6 +317,8 @@ async def api_server_defaults(request: fastapi.Request):
       "default_modality": config.response_modality,
       "use_tts": config.use_tts,
       "spot_simulated": agent_lib.spot_simulated(),
+      # Opt-in dataset recording (private bucket) is available on this server.
+      "recording_available": bool(os.environ.get("RECORDING_BUCKET")),
       # Agent pre-selected in the UI on page load (env DEFAULT_AGENT).
       "default_agent": os.environ.get("DEFAULT_AGENT", "spot").strip() or "spot",
       # Which video source the UI should use per agent.
@@ -703,6 +705,7 @@ async def websocket_endpoint(
         er_orchestrator_config=er_orchestrator_config,
     )
     app.state.session_agent_name = session_cfg.agent_name
+    app.state.active_session.recording_meta = {"agent": session_cfg.agent_name}
 
   try:
 
@@ -828,6 +831,13 @@ async def websocket_endpoint(
                   logger.info(
                       "Client video_source set to %s", payload.get("source")
                   )
+                  continue
+                if msg_type == "recording":
+                  sess = app.state.active_session
+                  if sess is not None:
+                    status = sess.set_recording(bool(payload.get("enabled")))
+                    logger.info("Recording toggled: %s", status)
+                    await websocket.send_json({"type": "recording_status", **status})
                   continue
                 if msg_type == "abort_task":
                   sess = app.state.active_session

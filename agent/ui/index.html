@@ -101,6 +101,7 @@
               </div>
             </div>
           </div>
+          <button id="recordBtn" class="btn rec-btn hidden" title="Record this session (camera frames sent to the model, mic audio, events) to a private bucket for the test dataset" disabled><span class="rec-dot"></span><span class="rec-label">REC</span></button>
           <button id="themeToggleBtn" class="btn" title="Toggle light / dark theme">
             <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
             <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -398,10 +399,11 @@
         <span class="latency-bar-item" title="Output (response) tokens">OUT <span id="tok-output-bar" class="metric-value">--</span></span>
         <button id="latencyDetailToggle" class="debug-toggle-btn" title="Server breakdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
       </div>
+      <span class="author-credit" title="Built by hyx@google.com">by <a href="mailto:hyx@google.com">hyx@</a></span>
     </div>
     <script src="/static/media-handler.js?v=6"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=44"></script>
+    <script src="/static/agent-ui.js?v=45"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
     <script type="module" src="/static/robot-twin.js?v=8"></script>
   </body>

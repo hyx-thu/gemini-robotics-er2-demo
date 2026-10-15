@@ -409,6 +409,8 @@ async function initServerDefaults() {
     const defaults = await resp.json();
     if (defaults.thinking) modelThinkingInfo = defaults.thinking;
     mapsEmbedKey = defaults.maps_embed_key || '';
+    recordingAvailable = !!defaults.recording_available;
+    updateRecordBtn();
     if (defaults.video_sources) {
       agentVideoSources = Object.assign({}, agentVideoSources, defaults.video_sources);
       if (defaults.spot_simulated) {
@@ -819,6 +821,28 @@ function stopGeolocationReporting() {
   }
   _geoWatchId = null;
 }
+// ---- Opt-in session recording (test dataset) ----
+let recordingAvailable = false;
+let recordingOn = false;
+const recordBtn = document.getElementById('recordBtn');
+function updateRecordBtn(status) {
+  if (!recordBtn) return;
+  recordBtn.classList.toggle('hidden', !recordingAvailable);
+  const connected = !!(typeof geminiClient !== 'undefined' && geminiClient && geminiClient.isConnected());
+  recordBtn.disabled = !connected;
+  recordBtn.classList.toggle('recording', recordingOn);
+  recordBtn.title = recordingOn
+    ? `Recording to ${status && status.path ? status.path : 'the private dataset bucket'} — click to stop`
+    : 'Record this session (camera frames sent to the model, mic audio, events) to a private bucket for the test dataset';
+}
+if (recordBtn) {
+  recordBtn.addEventListener('click', () => {
+    if (!geminiClient || !geminiClient.isConnected()) return;
+    geminiClient.send(JSON.stringify({ type: 'recording', enabled: !recordingOn }));
+    recordBtn.disabled = true;
+  });
+}
+
 let geminiClient = new GeminiClient({
   onOpen: () => {
     // utterance_id numbering restarts with every session.
@@ -830,6 +854,8 @@ let geminiClient = new GeminiClient({
     connectBtn.classList.add('connected');
     connectBtn.title = 'Connected — click to disconnect';
     connectBtn.disabled = false;
+    recordingOn = false;
+    setTimeout(() => updateRecordBtn(), 0);
     if (modelSelectorBtn) modelSelectorBtn.disabled = true;
     if (audioToggleBtn) audioToggleBtn.disabled = true;
     if (agentSelectorBtn) agentSelectorBtn.disabled = true;
@@ -869,6 +895,8 @@ let geminiClient = new GeminiClient({
     }
   },
   onClose: (e) => {
+    recordingOn = false;
+    setTimeout(() => updateRecordBtn(), 0);
     console.log('WS Closed:', e);
     activeThinkingLevel = null;
     renderThinkingStatus();
@@ -1309,6 +1337,18 @@ function handleJsonMessage(msg) {
     drawPointsOverlay(msg.points, msg.layer || 'annotation', msg);
   } else if (msg.type === 'clear_overlay') {
     clearOverlay(msg.layer);
+  } else if (msg.type === 'recording_status') {
+    recordingOn = msg.state === 'on';
+    updateRecordBtn(msg);
+    const row = document.createElement('div');
+    row.className = 'message er2-status';
+    row.textContent = msg.state === 'on'
+      ? `⏺ Recording this session → ${msg.path}`
+      : msg.state === 'off'
+        ? `⏹ Recording stopped${msg.frames !== undefined ? ` (${msg.frames} frames, ${msg.events} events)` : ''}`
+        : `⏺ Recording unavailable: ${msg.reason || ''}`;
+    chatLog.appendChild(row);
+    chatLog.scrollTop = chatLog.scrollHeight;
   } else if (msg.type === 'er2_status') {
     renderEr2Status(msg);
   } else if (msg.type === 'action_status') {
