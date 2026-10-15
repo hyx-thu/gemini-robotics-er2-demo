@@ -1208,7 +1208,11 @@ def place_sim_tool() -> dict[str, Any]:
           " intended placement spot. The destination may have moved since"
           " detect: look at the LATEST frame and pass x/y of the placement"
           " point measured on it (if it moved a lot, call detect again"
-          " first); the trajectory must end on that current point."
+          " first); the trajectory must end on that current point. The"
+          " trajectory must START where the carried object / the hand holding"
+          " it is NOW in the latest frame (it was lifted and moved since the"
+          " pick) - pass that point as from_x/from_y; never start at the old"
+          " pick location."
           + _WATCHDOG_NOTE
       ),
       parameters={
@@ -1227,6 +1231,21 @@ def place_sim_tool() -> dict[str, Any]:
                   "description": (
                       "Placement point y (0-1000) measured on the CURRENT"
                       " camera frame; overrides the earlier detect."
+                  ),
+              },
+              "from_x": {
+                  "type": "INTEGER",
+                  "description": (
+                      "Current x (0-1000) of the carried object / the hand"
+                      " holding it, measured on the CURRENT frame = the"
+                      " trajectory start."
+                  ),
+              },
+              "from_y": {
+                  "type": "INTEGER",
+                  "description": (
+                      "Current y (0-1000) of the carried object / the hand"
+                      " holding it, measured on the CURRENT frame."
                   ),
               },
           },

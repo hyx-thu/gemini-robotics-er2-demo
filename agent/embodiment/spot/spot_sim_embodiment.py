@@ -297,11 +297,13 @@ class SimulatedSpotEmbodiment(base.Embodiment):
 
     if len(pts) >= 2:
       if action == "place" and tx is not None and ty is not None:
-        # Ensure the placement path starts near pick origin (if omitted) and ends at target.
+        # The path starts where the carried object is NOW (``origin`` = the
+        # current hand position, when known), never at the old pick spot:
+        # the object has been lifted and moved since.
         if ox is not None and oy is not None:
           d0 = abs(pts[0]["x"] - ox) + abs(pts[0]["y"] - oy)
-          if d0 > 120 and len(pts) < 6:
-            pts.insert(0, {"x": ox, "y": oy, "label": "pick origin"})
+          if d0 > 60 and len(pts) < 6:
+            pts.insert(0, {"x": ox, "y": oy, "label": "start (in hand)"})
         d_end = abs(pts[-1]["x"] - tx) + abs(pts[-1]["y"] - ty)
         if d_end > 60:
           pts.append({"x": tx, "y": ty, "label": "place"})
@@ -319,7 +321,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         apex_y = max(40, min(oy, ty) - 160)
         mid_x = (ox + tx) // 2
         return [
-            {"x": ox, "y": oy, "label": "pick origin"},
+            {"x": ox, "y": oy, "label": "start (in hand)"},
             {"x": ox, "y": apex_y, "label": "lift"},
             {"x": mid_x, "y": max(35, apex_y - 25), "label": "arc"},
             {"x": tx, "y": ty, "label": "place"},
@@ -578,6 +580,15 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       retry = not fresh_detect and not coords_updated and target is not None
       placed = s["holding"]
       origin = s.get("pick_origin")
+      # Where the carried object is NOW (measured by the model on the latest
+      # frame). Without it the model's own first waypoint is the start; the
+      # old pick spot is only a last-resort fallback for a synthesized path.
+      fx = self._coord(kwargs.get("from_x"))
+      fy = self._coord(kwargs.get("from_y"))
+      start: dict[str, Any] | None = None
+      if fx is not None and fy is not None:
+        start = {"label": f"{placed or 'object'} (in hand)",
+                 "normalized_x": fx, "normalized_y": fy}
       s["place_target"] = target
       s["last_detect"] = None
       s["place_at"] = time.monotonic()
@@ -587,7 +598,11 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       if retry and not raw_traj and s.get("last_trajectory"):
         traj = list(s["last_trajectory"])
       else:
-        traj = self._parse_trajectory(raw_traj, target=target, origin=origin, action="place")
+        has_path = isinstance(raw_traj, (list, tuple)) and len(raw_traj) >= 2
+        traj = self._parse_trajectory(
+            raw_traj, target=target,
+            origin=start or (None if has_path else origin), action="place",
+        )
         if target:
           traj = self._anchor_trajectory(traj, target, "place")
         s["last_trajectory"] = list(traj)
@@ -598,8 +613,8 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           "executed": True,
           "note": _VERIFY,
       }
-      if origin:
-        result["pick_origin"] = origin
+      if traj:
+        result["start_point"] = [traj[0]["x"], traj[0]["y"]]
       if target:
         result["target"] = target
         result["place_point"] = [target["normalized_x"], target["normalized_y"]]
@@ -612,7 +627,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
             "connect": True,
             "action": "place",
             "points": traj,
-            "origin": origin,
+            "origin": start,
             "target": target,
         }
       return result

@@ -45,6 +45,25 @@ class MovedObjectTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([820, 420], r["place_point"])
     self.assertEqual((820, 420), (r["trajectory"][-1]["x"], r["trajectory"][-1]["y"]))
 
+  async def test_place_path_starts_at_current_hand_not_pick_spot(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="pen", x=200, y=600)
+    await e.execute_action("pick")
+    # Lifted and carried: the hand is now at (450, 250).
+    r = await e.execute_action("place", x=820, y=420, from_x=450, from_y=250,
+                               trajectory=[{"x": 600, "y": 200, "label": "arc"},
+                                           {"x": 820, "y": 420, "label": "place"}])
+    self.assertEqual([450, 250], r["start_point"])
+    self.assertNotIn("pick origin", [p["label"] for p in r["trajectory"]])
+    self.assertNotIn("pick_origin", r)
+    # Without from_x/y the model's own first waypoint is the start.
+    e2 = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e2.execute_action("detect", instruction="pen", x=200, y=600)
+    await e2.execute_action("pick")
+    r2 = await e2.execute_action("place", x=820, y=420,
+                                 trajectory=[{"x": 500, "y": 260}, {"x": 820, "y": 420}])
+    self.assertEqual([500, 260], r2["start_point"])
+
 
 class TargetContextTest(unittest.IsolatedAsyncioTestCase):
 

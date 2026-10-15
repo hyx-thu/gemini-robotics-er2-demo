@@ -1917,7 +1917,7 @@ function recordToolVisual(msg) {
       drawPointsOverlay(rawTraj, 'trajectory', {
         connect: true,
         action: msg.name,
-        origin: r.pick_origin || null,
+        origin: null,
         target: r.target || null,
       });
       return;
@@ -2244,7 +2244,7 @@ function redrawOverlay() {
   // 1) Top-left live tool telemetry HUD & vector graphics (look / drive / navigate / etc.)
   drawToolTelemetryOverlay(ctx, rect, labelBoxes);
 
-  // 2) If trajectory has a distinct pick_origin (e.g. during `place`), render the origin box & marker
+  // 2) During `place`, mark where the carried object is now (trajectory start), if it has a box
   const trajMeta = overlayMeta.trajectory || {};
   if (overlayLayers.trajectory.length > 0 && trajMeta.origin && trajMeta.action === 'place') {
     const orig = trajMeta.origin;
@@ -2252,7 +2252,7 @@ function redrawOverlay() {
     if (orig.box) {
       const [bx0, by0] = drawBoxWithBrackets(ctx, toPx, orig.box, origSt, false);
       const bStr = orig.box.map(Math.round).join(',');
-      drawPill(ctx, rect, labelBoxes, `📤 pick origin: ${orig.label || 'item'} (${Math.round(orig.x)}, ${Math.round(orig.y)}) [box: ${bStr}]`, bx0, by0 - 26, origSt, false);
+      drawPill(ctx, rect, labelBoxes, `📤 from: ${orig.label || 'item'} (${Math.round(orig.x)}, ${Math.round(orig.y)}) [box: ${bStr}]`, bx0, by0 - 26, origSt, false);
     }
   }
 
