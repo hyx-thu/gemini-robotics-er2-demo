@@ -95,6 +95,21 @@ class GenerateContentAgent:
     else:
       self.history.append({"role": role, "parts": list(parts)})
 
+  def add_tool_responses(
+      self, responses: list[dict[str, Any]], frame_parts: list[dict[str, Any]]
+  ) -> None:
+    """Function responses, then the fresh camera frame as its OWN user turn.
+
+    Vertex AI rejects a user content that mixes functionResponse parts with
+    inlineData ("Requests ending with a model turn are not supported"), so
+    the frame goes into a separate (consecutive) user content.
+    """
+    self.add("user", responses)
+    if frame_parts:
+      self.history.append(
+          {"role": "user", "parts": [{"text": "[latest camera frame]"}] + list(frame_parts)}
+      )
+
   def truncate(self, length: int) -> None:
     """Drop everything after ``length`` contents (e.g. an idle ack turn)."""
     del self.history[length:]

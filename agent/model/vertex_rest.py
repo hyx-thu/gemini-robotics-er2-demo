@@ -35,7 +35,10 @@ VERTEX_REST_MODELS = frozenset({
 
 _AISTUDIO_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
 _SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
-_FALLBACK_CODES = (400, 401, 403, 404)
+# Auth / not-found style errors only: a 400 is a request problem that AI
+# Studio would reject too (and a mid-conversation switch breaks thought
+# signatures: "Corrupted thought signature").
+_FALLBACK_CODES = (401, 403, 404)
 
 _lock = threading.Lock()
 _creds = None

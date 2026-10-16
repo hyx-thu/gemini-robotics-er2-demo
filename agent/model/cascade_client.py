@@ -335,7 +335,7 @@ class CascadeStream:
       )
       if responses is None:
         return
-      agent.add("user", responses + self._frame_parts())
+      agent.add_tool_responses(responses, self._frame_parts())
       if all(fc.get("name") in _IDLE_TOOLS for fc in calls):
         break
     self._emit({
