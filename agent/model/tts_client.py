@@ -106,8 +106,6 @@ def transcribe_audio_pcm(
   if not pcm_data or len(pcm_data) < sample_rate:  # <0.5s of audio
     return ""
   resolved_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("TTS_API_KEY")
-  if not resolved_key:
-    return ""
   import io  # pylint: disable=g-import-not-at-top
   import wave  # pylint: disable=g-import-not-at-top
 
@@ -118,12 +116,9 @@ def transcribe_audio_pcm(
     wf.setframerate(sample_rate)
     wf.writeframes(pcm_data)
   wav_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-  url = (
-      "https://generativelanguage.googleapis.com/v1beta/models/"
-      f"{model}:generateContent"
-  )
   payload = {
       "contents": [{
+          "role": "user",
           "parts": [
               {"inlineData": {"mimeType": "audio/wav", "data": wav_b64}},
               {
@@ -139,14 +134,24 @@ def transcribe_audio_pcm(
       }],
       "generationConfig": {"temperature": 0.0},
   }
-  req = urllib.request.Request(
-      url,
-      data=json.dumps(payload).encode("utf-8"),
-      headers={"Content-Type": "application/json", "x-goog-api-key": resolved_key},
-      method="POST",
-  )
+  from model import vertex_rest  # pylint: disable=g-import-not-at-top
   try:
-    with urllib.request.urlopen(req, timeout=6) as resp:
+    url, headers, backend = vertex_rest.endpoint(model, "generateContent", resolved_key)
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode("utf-8"), headers=headers,
+        method="POST",
+    )
+    try:
+      resp = urllib.request.urlopen(req, timeout=6)
+    except urllib.error.HTTPError as e:
+      if backend != "vertex" or not vertex_rest.should_fallback(e):
+        raise
+      vertex_rest.disable(model, f"HTTP {e.code}")
+      url, headers, _ = vertex_rest.endpoint(model, "generateContent", resolved_key)
+      resp = urllib.request.urlopen(urllib.request.Request(
+          url, data=json.dumps(payload).encode("utf-8"), headers=headers,
+          method="POST"), timeout=6)
+    with resp:
       if resp.status != 200:
         return ""
       data = json.loads(resp.read().decode("utf-8"))
@@ -201,7 +206,7 @@ class Tts3pClient:
 
   def _gemini_body(self, text: str) -> dict:
     return {
-        "contents": [{"parts": [{"text": text}]}],
+        "contents": [{"role": "user", "parts": [{"text": text}]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": {
@@ -215,21 +220,22 @@ class Tts3pClient:
     }
 
   def _build_request(self, text: str, stream_sse: bool = False) -> urllib.request.Request:
-    if not self._api_key:
-      raise ValueError("api_key is required for Tts3pClient")
-    # API key in a header, never in the URL (keeps it out of logs / proxies).
-    headers = {"Content-Type": "application/json", "x-goog-api-key": self._api_key}
-
     if self._provider == "gemini":
+      # Vertex AI first (ADC); AI Studio with the key in a header otherwise
+      # (never in the URL - keeps it out of logs / proxies).
+      from model import vertex_rest  # pylint: disable=g-import-not-at-top
       method_suffix = (
           "streamGenerateContent?alt=sse" if stream_sse else "generateContent"
       )
-      url = (
-          "https://generativelanguage.googleapis.com/v1beta/models/"
-          f"{self._gemini_model}:{method_suffix}"
+      url, headers, backend = vertex_rest.endpoint(
+          self._gemini_model, method_suffix, self._api_key
       )
+      self.last_backend = backend
       body = self._gemini_body(text)
     else:
+      if not self._api_key:
+        raise ValueError("api_key is required for Tts3pClient")
+      headers = {"Content-Type": "application/json", "x-goog-api-key": self._api_key}
       url = "https://texttospeech.googleapis.com/v1/text:synthesize"
       body = {
           "input": {"text": text},

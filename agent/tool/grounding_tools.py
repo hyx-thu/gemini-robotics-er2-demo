@@ -215,20 +215,35 @@ def _generate(
             "latLng": {"latitude": lat_lng[0], "longitude": lat_lng[1]}
         }
     }
-  url = (
-      "https://generativelanguage.googleapis.com/v1beta/models/"
-      f"{model}:generateContent"
-  )
-  req = urllib.request.Request(
-      url,
-      data=json.dumps(payload).encode("utf-8"),
-      # API key in a header, never in the URL (keeps it out of logs / proxies).
-      headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-      method="POST",
-  )
+  from model import vertex_rest  # pylint: disable=g-import-not-at-top
+  payload["contents"][0]["role"] = "user"
+  body = json.dumps(payload).encode("utf-8")
   t0 = time.monotonic()
-  with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_S) as resp:
-    data = json.loads(resp.read().decode("utf-8"))
+  # Vertex AI first (ADC); AI Studio (key in a header, never in the URL)
+  # if the model / grounding tool is not available there.
+  url, headers, backend = vertex_rest.endpoint(model, "generateContent", api_key)
+  try:
+    with urllib.request.urlopen(
+        urllib.request.Request(url, data=body, headers=headers, method="POST"),
+        timeout=_REQUEST_TIMEOUT_S,
+    ) as resp:
+      data = json.loads(resp.read().decode("utf-8"))
+  except urllib.error.HTTPError as e:
+    if backend != "vertex" or not vertex_rest.should_fallback(e):
+      raise
+    logger.warning("grounding via Vertex failed (HTTP %s); using AI Studio", e.code)
+    # Only this grounding call falls back (the model itself may work on
+    # Vertex for other features), so build the AI Studio request directly.
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent"
+    )
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+    with urllib.request.urlopen(
+        urllib.request.Request(url, data=body, headers=headers, method="POST"),
+        timeout=_REQUEST_TIMEOUT_S,
+    ) as resp:
+      data = json.loads(resp.read().decode("utf-8"))
   cand = (data.get("candidates") or [{}])[0]
   parts = cand.get("content", {}).get("parts", [])
   text = "".join(p.get("text", "") for p in parts).strip()

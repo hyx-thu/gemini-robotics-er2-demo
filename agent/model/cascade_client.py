@@ -22,6 +22,7 @@ The conversation lives on the client, so a reconnect (new stream) keeps it.
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import re
 import threading
@@ -166,13 +167,30 @@ class CascadeStream:
     agent.generation_config = gen
     threading.Thread(target=self._open_asr, daemon=True).start()
 
+  def _asr_client(self):
+    """Vertex AI (global, ADC) first; AI Studio key as fallback."""
+    if self._client.asr_backend == "vertex":
+      try:
+        return live_api_client.VertexLiveApiClient(
+            project=os.environ.get("VERTEX_PROJECT")
+            or os.environ.get("GOOGLE_CLOUD_PROJECT"),
+            location=os.environ.get("VERTEX_ASR_LOCATION", "global"),
+        ), "vertex"
+      except Exception as e:  # pylint: disable=broad-except
+        logger.warning("Cascade ASR: Vertex unavailable (%s); using AI Studio", e)
+        self._client.asr_backend = "aistudio"
+    return live_api_client.GeminiLiveApiClient(api_key=self._client.api_key), "aistudio"
+
   def _open_asr(self) -> None:
     try:
-      asr = live_api_client.GeminiLiveApiClient(
-          api_key=self._client.api_key
-      ).create_stream()
+      client, backend = self._asr_client()
+      asr = client.create_stream()
     except Exception as e:  # pylint: disable=broad-except
       logger.error("Cascade ASR connect failed: %s", e)
+      if self._client.asr_backend == "vertex":
+        self._client.asr_backend = "aistudio"
+        threading.Timer(0.2, self._open_asr).start()
+        return
       self._close(f"ASR connect failed: {e}")
       return
     ready = threading.Event()
@@ -202,10 +220,17 @@ class CascadeStream:
       threading.Timer(0.5 * self._asr_failures, self._open_asr).start()
 
     asr.Start(on_msg, on_done)
-    asr.Send({"setup": {"model": f"models/{self._client.asr_model}"}})
+    # Vertex requires inputAudioTranscription for the ASR model (1007 else).
+    asr.Send({"setup": {"model": f"models/{self._client.asr_model}",
+                        "inputAudioTranscription": {}}})
     if not ready.wait(10.0):
-      logger.error("Cascade ASR: no setupComplete")
+      logger.error("Cascade ASR (%s): no setupComplete (%s)", backend,
+                   asr.close_reason)
       asr.Shutdown()
+      if backend == "vertex":
+        self._client.asr_backend = "aistudio"
+        threading.Timer(0.2, self._open_asr).start()
+        return
       self._close("ASR setup timeout")
       return
     with self._asr_lock:
@@ -214,8 +239,8 @@ class CascadeStream:
     self._ready_emitted = True
     if first:
       logger.info(
-          "Cascade ready: ASR=%s -> LLM=%s", self._client.asr_model,
-          self._client.agent.model,
+          "Cascade ready: ASR=%s (%s) -> LLM=%s", self._client.asr_model,
+          backend, self._client.agent.model,
       )
       self._emit({"setupComplete": {}})
     else:
@@ -364,6 +389,12 @@ class CascadeClient:
       raise ValueError("api_key is required for the cascade model.")
     self.api_key = api_key
     self.asr_model = asr_model
+    vertex_ok = bool(os.environ.get("VERTEX_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT"))
+    self.asr_backend = (
+        "vertex"
+        if vertex_ok and os.environ.get("LIVE_BACKEND", "").lower() != "aistudio"
+        else "aistudio"
+    )
     self.agent = generate_agent.GenerateContentAgent(model=model, api_key=api_key)
     logger.info("CascadeClient: ASR=%s -> LLM=%s (+ server TTS)", asr_model, model)
 

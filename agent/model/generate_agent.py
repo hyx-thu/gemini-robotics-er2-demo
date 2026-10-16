@@ -10,8 +10,9 @@ Shared engine for the two non-streaming model modes:
   plan/act loop through this engine (core/er_orchestrator.py).
 
 The engine only manages the conversation history and the HTTP call; tool
-execution belongs to the caller. The API key travels in the
-x-goog-api-key header, never in the URL.
+execution belongs to the caller. Models available on Vertex AI are
+called there (ADC); the rest use the Gemini Developer API with the key in the
+x-goog-api-key header, never in the URL (see model/vertex_rest.py).
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+from model import vertex_rest
 
 logger = logging.getLogger(__name__)
 
@@ -137,17 +140,14 @@ class GenerateContentAgent:
     if self.generation_config:
       body["generationConfig"] = self.generation_config
     data = json.dumps(body).encode("utf-8")
-    url = f"{_API_BASE}{self.model}:generateContent"
     resp: dict[str, Any] | None = None
     t0 = time.monotonic()
+    backend = ""
     for attempt in range(3):
-      req = urllib.request.Request(
-          url, data=data,
-          headers={
-              "Content-Type": "application/json",
-              "x-goog-api-key": self._api_key,
-          },
+      url, headers, backend = vertex_rest.endpoint(
+          self.model, "generateContent", self._api_key
       )
+      req = urllib.request.Request(url, data=data, headers=headers)
       try:
         with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
           resp = json.loads(r.read())
@@ -155,9 +155,12 @@ class GenerateContentAgent:
       except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")[:500]
         logger.warning(
-            "[%s] generateContent HTTP %s (attempt %d): %s",
-            self.model, e.code, attempt + 1, detail,
+            "[%s] generateContent HTTP %s via %s (attempt %d): %s",
+            self.model, e.code, backend, attempt + 1, detail,
         )
+        if backend == "vertex" and vertex_rest.should_fallback(e):
+          vertex_rest.disable(self.model, f"HTTP {e.code}")
+          continue
         if e.code not in _RETRY_STATUS:
           break
       except Exception as e:  # pylint: disable=broad-except
@@ -174,8 +177,8 @@ class GenerateContentAgent:
     parts = [p for p in content.get("parts") or [] if p]
     self.last_usage = resp.get("usageMetadata") or {}
     logger.info(
-        "[%s] generateContent %.1fs, %d parts, finish=%s",
-        self.model, latency, len(parts),
+        "[%s] generateContent (%s) %.1fs, %d parts, finish=%s",
+        self.model, backend, latency, len(parts),
         cands[0].get("finishReason") if cands else None,
     )
     if parts:
