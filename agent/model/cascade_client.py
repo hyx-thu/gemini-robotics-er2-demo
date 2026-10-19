@@ -161,9 +161,14 @@ class CascadeStream:
     gen = {}
     thinking = (setup.get("generationConfig") or {}).get("thinkingConfig")
     if thinking:
-      gen["thinkingConfig"] = {
-          "thinkingLevel": thinking.get("thinkingLevel", "LOW"),
-      }
+      if "thinkingBudget" in thinking:
+        gen["thinkingConfig"] = {
+            "thinkingBudget": thinking["thinkingBudget"],
+        }
+      else:
+        gen["thinkingConfig"] = {
+            "thinkingLevel": thinking.get("thinkingLevel", "LOW"),
+        }
     agent.generation_config = gen
     threading.Thread(target=self._open_asr, daemon=True).start()
 

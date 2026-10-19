@@ -157,7 +157,9 @@ class ErOrchestrator:
   async def _run(self, instruction: str) -> None:
     loop = asyncio.get_running_loop()
     gen_cfg = {}
-    if self._thinking and self._thinking != "none":
+    if self._thinking == "none":
+      gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
+    elif self._thinking:
       gen_cfg["thinkingConfig"] = {"thinkingLevel": self._thinking.upper()}
     agent = generate_agent.GenerateContentAgent(
         model=self._model, api_key=self._api_key,

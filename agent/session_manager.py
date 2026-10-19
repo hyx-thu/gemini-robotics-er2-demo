@@ -647,10 +647,20 @@ class SessionManager:
 
     # Add thinking config if a level is set. includeThoughts streams the
     # model's reasoning summaries back so the UI can render them.
+    # For default-thinking models (Robotics-ER, Argon), omitting thinkingConfig
+    # when thinking_level == "none" leaves the model's built-in dynamic thinking
+    # budget (~400-600 thought tokens) enabled; explicitly pass thinkingBudget=0
+    # to disable thinking.
     if self.thinking_level and self.thinking_level != "none":
       setup_dict["setup"]["generationConfig"]["thinkingConfig"] = {
           "thinkingLevel": self.thinking_level.upper(),
           "includeThoughts": True,
+      }
+    elif self.thinking_level == "none" and (
+        "robotics" in model_name or "argon" in model_name
+    ):
+      setup_dict["setup"]["generationConfig"]["thinkingConfig"] = {
+          "thinkingBudget": 0,
       }
 
     # Add tools. For models that reject "behavior": "BLOCKING" (1007), send

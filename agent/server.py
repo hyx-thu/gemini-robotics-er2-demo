@@ -650,7 +650,7 @@ async def websocket_endpoint(
           "system_instruction": (
               agent.system_instruction + "\n\n" + er_developer_instruction
           ),
-          "thinking_level": "low",
+          "thinking_level": session_cfg.thinking_level or "low",
       }
       # The Live front-end does not run the robot observe->act loop; the ER
       # orchestrator sends its own heartbeats while a task is active.
