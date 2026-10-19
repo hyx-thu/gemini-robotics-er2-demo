@@ -634,6 +634,48 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(2, idx("navigate", 2, self.PLAN))  # fallback: issued step
     self.assertIsNone(idx("pick", None, ["stand()", "look('down')"]))
 
+  async def test_confirm_action_auto_advances_plan_and_update_plan_keeps_translated_goal(self):
+    await self._user_says("把桌面收拾干净")
+    steps_12 = [
+        "detect('蓝色笔') - 定位蓝色笔",
+        "pick() - 抓取蓝色笔",
+        "detect('黑色笔筒') - 定位笔筒",
+        "place() - 放入蓝色笔",
+        "detect('黄色笔') - 定位黄色笔",
+        "pick() - 抓取黄色笔",
+        "detect('黑色笔筒') - 定位笔筒",
+        "place() - 放入黄色笔",
+    ]
+    await self._call("update_plan", {
+        "goal": "清理桌面上的笔",
+        "steps": steps_12,
+        "current_step": 4,
+        "status": "in_progress",
+    })
+    await self._call("pick", {"grasp_x": 540, "grasp_y": 730})
+    await asyncio.sleep(0.2 * self.handler.watchdog.timeout_s + 0.05)
+    confirmed = await self._call(
+        "confirm_action", {"observation": "hand lifted the yellow pen"}
+    )
+    self.assertEqual("confirmed", confirmed["status"])
+    # confirm_action automatically advanced current_step from 4 past pick (5) to 6.
+    self.assertEqual(6, self.handler._plan["current_step"])
+    self.assertEqual(6, confirmed["current_step"])
+
+    # Even if the model next calls update_plan with a translated goal AND drops
+    # the first 4 completed steps (passing 4 remaining steps with current_step=2),
+    # the original goal and 8-step list are preserved and current_step stays 6!
+    upd = await self._call("update_plan", {
+        "goal": "Clean up the yellow pen on the desk",
+        "steps": steps_12[4:],
+        "current_step": 2,
+        "status": "in_progress",
+    })
+    self.assertEqual("ok", upd["status"])
+    self.assertEqual("清理桌面上的笔", self.handler._plan["goal"])
+    self.assertEqual(8, len(self.handler._plan["steps"]))
+    self.assertEqual(6, self.handler._plan["current_step"])
+
 
 if __name__ == "__main__":
   unittest.main()

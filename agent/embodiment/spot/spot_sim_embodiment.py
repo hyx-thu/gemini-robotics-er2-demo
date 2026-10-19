@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any
 
@@ -54,7 +55,17 @@ _ESCALATION = (
 # Any hand seen doing the work counts as the robot arm (webcam sim).
 _ANY_HAND_IS_ARM = (
     " Any hand seen executing it - robot gripper or human hand - IS the robot"
-    " arm executing the command."
+    " arm executing the command (NEVER detect or pick an object already held in"
+    " a hand)."
+)
+
+# Matches detect instructions that mistakenly target an object already held in
+# a hand/gripper instead of an unpicked tabletop object or destination.
+_HELD_IN_HAND_RE = re.compile(
+    r"\b(?:held\s+(?:in|by)|in\s+(?:the\s+|your\s+|my\s+|a\s+)?(?:hand|gripper|fingers)"
+    r"|being\s+held|already\s+(?:held|picked|lifted|in\s+hand))\b"
+    r"|手中|手里|手握|拿着的|握着的|抓着的",
+    re.IGNORECASE,
 )
 
 _VERIFY = (
@@ -66,12 +77,17 @@ _HEARTBEAT_TEXT = (
     "[HEARTBEAT] If no task is active, call 'ack' exactly once and end your"
     " turn; you will receive another heartbeat shortly. If a task is active:"
     " look at the latest camera frame and judge whether the current step's"
-    " command has visibly been executed by the robot. If it has, call"
-    " 'confirm_action' (for pick/place) and then 'update_plan' to advance; if"
-    " it is still in progress, call 'ack' once and keep watching; if the goal"
-    " is achieved, call update_plan(status='done') and tell the user. Never"
-    " ask the user to perform a physical action. For pick/place, any hand"
-    " seen doing it - robot gripper or human hand - counts as the robot arm."
+    " command has visibly been executed by the robot. For pick/place, any hand"
+    " seen doing it - robot gripper or human hand - counts as the robot arm:"
+    " if a hand is grasping, lifting, or holding the target object off the"
+    " surface, the pick HAS ALREADY SUCCEEDED - immediately call"
+    " 'confirm_action' (if pick is pending) and advance to the destination"
+    " detect/place step; NEVER call detect or pick on an object held in a"
+    " hand! If the current command has completed, call 'confirm_action' (for"
+    " pick/place) and then 'update_plan' to advance; if it is still in"
+    " progress, call 'ack' once and keep watching; if the goal is achieved,"
+    " call update_plan(status='done') and tell the user. Never ask the user to"
+    " perform a physical action."
 )
 
 
@@ -211,13 +227,26 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           " The carried object moving with the hand is part of the execution,"
           " not a change of the target - never detect it again."
       )
+      move_cond = (
+          f"if the destination container/spot has clearly moved (outside that"
+          f" box or more than ~{_MOVED_THRESHOLD} units away)"
+      )
     elif s.get("pick_target") is not None:
       cmd, t, at = "pick", s["pick_target"], s.get("pick_at")
       what = "the OBJECT to grasp"
       reissue = "pick(grasp_x, grasp_y)"
       extra = (
-          " A hand grasping / lifting it is the pick being executed (confirm"
-          " when lifted), not a change of the target."
+          " CRITICAL: if a hand or gripper is grasping, lifting, or holding"
+          " this object in the air (or it has left its spot on the table"
+          " because the hand picked it up), that means the pick IS ALREADY"
+          " COMPLETED - call confirm_action(observation=...) IMMEDIATELY and"
+          " NEVER call detect or pick on an object in a hand!"
+      )
+      move_cond = (
+          "ONLY if the object is still lying UNTOUCHED on the table surface"
+          " (with NO hand holding or lifting it) and has clearly moved on the"
+          f" table (outside that box or more than ~{_MOVED_THRESHOLD} units"
+          " away)"
       )
     else:
       return ""
@@ -226,12 +255,12 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         f"[TARGET] {cmd} command sent {age:.0f}s ago and being executed by the"
         f" robot arm; its target parameter is {what}"
         f" {self._describe_target(t)}." + _ANY_HAND_IS_ARM + extra
-        + f" Monitor ONLY this target: if it has clearly moved (outside that"
-        f" box or more than ~{_MOVED_THRESHOLD} units away), call detect for"
+        + f" Monitor ONLY this target: {move_cond}, call detect for"
         f" this target alone on the current frame and re-issue {reissue} with"
         " its NEW position - do not re-plan, go back, or detect anything"
-        " else. If it has not moved, just confirm_action when the frame shows"
-        " the command completed, otherwise ack."
+        " else. If it has not moved (or is already lifted by the hand), just"
+        " confirm_action when the frame shows the command completed,"
+        " otherwise ack."
         + _ESCALATION
     )
 
@@ -458,6 +487,48 @@ class SimulatedSpotEmbodiment(base.Embodiment):
                 "x and y are required: look at the current frame and pass the"
                 " target's center in 0-1000 normalized image coordinates"
                 " (x: 0=left..1000=right, y: 0=top..1000=bottom)."
+            ),
+        }
+      if _HELD_IN_HAND_RE.search(instruction):
+        # The model saw the object already in the hand/gripper and mistakenly
+        # tried to detect it as a pick target. Record the hand position as the
+        # carried origin for the upcoming place() and redirect the model to
+        # confirm_action / detect(destination) + place().
+        s["pick_origin"] = {
+            "label": instruction,
+            "normalized_x": x,
+            "normalized_y": y,
+        }
+        if s.get("pick_target") is not None:
+          return {
+              "detected": False,
+              "already_in_hand": True,
+              "hand_position": [x, y],
+              "error": (
+                  f"'{instruction}' is ALREADY held in the hand (which IS the"
+                  " robot arm executing your pick). Never detect or pick an"
+                  " object that is already held in a hand!"
+              ),
+              "next_action": (
+                  "The pick is already complete! Call"
+                  " confirm_action(observation='object is lifted and held in"
+                  " the hand') NOW, then call detect for the placement"
+                  f" destination and place(from_x={x}, from_y={y})."
+              ),
+          }
+        return {
+            "detected": False,
+            "already_in_hand": True,
+            "hand_position": [x, y],
+            "error": (
+                f"'{instruction}' is ALREADY held in the hand (which IS the"
+                " robot arm). Do NOT call pick() on an object in the hand!"
+            ),
+            "next_action": (
+                "Skip pick() - the object is already grasped at"
+                f" ({x}, {y}). Call detect for the placement destination"
+                " (container/surface) and then call"
+                f" place(from_x={x}, from_y={y})."
             ),
         }
       target: dict[str, Any] = {

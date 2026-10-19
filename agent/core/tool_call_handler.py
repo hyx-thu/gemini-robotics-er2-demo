@@ -257,28 +257,38 @@ class ToolCallHandler:
       if pending is not None:
         rule = (
             f"The {pending.name} command of this step is awaiting VISUAL"
-            " confirmation (see WATCHDOG below). If the frame shows its"
-            " effect - OR shows that this and later steps are already done"
-            " (e.g. the object is already at its destination) - call"
-            " confirm_action, then update_plan jumping current_step to the"
-            " first step whose effect is NOT yet visible."
+            " confirmation (see WATCHDOG below). Remember: any hand, gripper,"
+            " or actuator in the camera IS our robot arm executing our"
+            " command. If the frame shows its effect (for pick: a hand is"
+            " grasping, lifting, or holding the object off the table; for"
+            " place: the object rests at the destination) - OR shows that"
+            " this and later steps are already done (e.g. the object is"
+            " already at its destination) - call confirm_action, then"
+            " update_plan jumping current_step to the first step whose effect"
+            " is NOT yet visible. NEVER call detect or pick on an object"
+            " already held in a hand!"
         )
       else:
         rule = (
             "FOLLOW THIS PLAN; do not restart or rewrite it. Judge progress"
-            " against the GOAL and the latest camera frame. (a) If the scene"
-            " shows this step's effect AND possibly later steps already"
-            " achieved (the robot may run ahead), call update_plan with the"
-            " SAME steps and current_step set to the first step whose effect"
-            " is NOT yet visible (or status='done' if the goal is reached),"
-            " then immediately call that step's tool - never redo finished"
-            " steps. (b) If this step's tool has not been called yet, call it"
-            " now; for pick/place use coordinates measured on the LATEST"
-            " frame (pick: grasp_x/grasp_y, place: x/y) - if the object (before"
-            " it is picked) or the destination moved since your last detect,"
-            " call detect again first instead of reusing old coordinates; an"
-            " object already picked moves with the hand, which is expected and"
-            " never a reason to re-detect it. (c) If it is still in"
+            " against the GOAL and the latest camera frame. Any hand or"
+            " gripper visible in the camera IS our robot arm obeying our"
+            " commands. (a) If the scene shows this step's effect AND"
+            " possibly later steps already achieved (e.g. for pick/detect: a"
+            " hand is already holding or lifting the object in the air, or"
+            " the object is already at its destination), call update_plan"
+            " with the SAME steps and current_step set to the first step"
+            " whose effect is NOT yet visible (or status='done' if the goal"
+            " is reached), then immediately call that step's tool - NEVER"
+            " redo finished steps and NEVER detect or pick an object that is"
+            " already held in a hand! (b) If this step's tool has not been"
+            " called yet, call it now; for pick/place use coordinates"
+            " measured on the LATEST frame (pick: grasp_x/grasp_y, place:"
+            " x/y) - if an unpicked object still lying untouched on the table"
+            " or the destination moved since your last detect, call detect"
+            " again first instead of reusing old coordinates; an object"
+            " already picked moves with the hand, which is expected and"
+            " never a reason to re-detect or re-pick it. (c) If it is still in"
             " progress, call ack once and keep"
             " watching. (d) Small deviations (slightly different spot, object"
             " nudged) are NOT failures - carry on with the next step. Only if"
@@ -385,6 +395,17 @@ class ToolCallHandler:
           result = await self._invoke_tool(func_name, args)
           if func_name == "detect":
             await self._publish_detected_target(result)
+            # If the model is re-detecting after a timeout notice, give its
+            # follow-up pick/place a full grace window so _auto_reissue does
+            # not fire with stale coordinates between detect and pick/place.
+            if (
+                self._watchdog is not None
+                and self._watchdog.pending is not None
+                and self._watchdog.pending.timeout_notified_at is not None
+            ):
+              self._watchdog.pending.timeout_notified_at = (
+                  self._watchdog._clock()  # pylint: disable=protected-access
+              )
       else:
         result = await self._invoke_tool(func_name, args)
       if (
@@ -773,23 +794,43 @@ class ToolCallHandler:
         }
       if prev_status in ("planning", "in_progress"):
         if goal_changed:
+          # Only reject as kept_original_plan when the model tries to start a
+          # brand-new plan at step 0 ("planning" or current_step == 0). When
+          # the model is advancing an in-progress plan (status == "in_progress"
+          # and current > 0) and merely translated or rephrased the goal text,
+          # silently preserve prev_goal and accept the step advancement!
+          if status == "planning" or current == 0:
+            logging.info(
+                "update_plan kept original goal %r (model proposed %r)",
+                prev_goal, new_goal,
+            )
+            return {
+                "status": "kept_original_plan",
+                "plan_status": prev_status,
+                "goal": prev_goal,
+                "current_step": prev_cur,
+                "current_step_text": prev_steps[prev_cur] if prev_steps else "",
+                "reason": (
+                    "The user did not ask for a different task, so the goal"
+                    f" stays {prev_goal!r}. Continue with the current step; only"
+                    " revise the REMAINING steps of this goal if the scene truly"
+                    " requires it."
+                ),
+            }
           logging.info(
-              "update_plan kept original goal %r (model proposed %r)",
+              "update_plan preserved original goal %r across in-progress step"
+              " update (model wrote %r)",
               prev_goal, new_goal,
           )
-          return {
-              "status": "kept_original_plan",
-              "plan_status": prev_status,
-              "goal": prev_goal,
-              "current_step": prev_cur,
-              "current_step_text": prev_steps[prev_cur] if prev_steps else "",
-              "reason": (
-                  "The user did not ask for a different task, so the goal"
-                  f" stays {prev_goal!r}. Continue with the current step; only"
-                  " revise the REMAINING steps of this goal if the scene truly"
-                  " requires it."
-              ),
-          }
+          new_goal = prev_goal
+        # If the model shortened the step list by dropping already-completed
+        # prefix steps (e.g. passing only the remaining 8 of 12 steps), restore
+        # the completed prefix so step indices never shift or regress.
+        if 0 < len(steps) < len(prev_steps):
+          offset = len(prev_steps) - len(steps)
+          if offset <= prev_cur:
+            steps = prev_steps[:offset] + [str(s) for s in steps]
+            current = min(len(steps) - 1, current + offset)
         if current < prev_cur:
           # Never move backwards without a user request; keep progress.
           logging.info(
@@ -830,13 +871,29 @@ class ToolCallHandler:
             "watchdog": wd.status(),
         }
 
-    goal_str = str(args.get("goal", "") or "").strip()
+    goal_str = new_goal or (str(prev.get("goal", "") or "").strip() if prev else "")
     self._plan = {
         "goal": goal_str,
         "steps": [str(s) for s in steps],
         "current_step": current,
         "status": status,
     }
+    # If the model created the initial plan in a non-English language (e.g.
+    # Chinese heard directly from raw audio) while inputAudioTranscription had
+    # auto-translated the transcript to English, sync the language lock to the
+    # plan's language so heartbeats do not force a mid-task language switch.
+    sm = self._session_manager
+    if (
+        sm is not None
+        and current == 0
+        and goal_str
+        and getattr(sm, "user_language", None) == "en"
+        and _CJK_GAP_RE.pattern  # CJK check
+        and re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", goal_str)
+    ):
+      note_lang = getattr(sm, "note_user_language", None)
+      if callable(note_lang):
+        note_lang(goal_str)
     dm = getattr(self._session_manager, "decision_making", None)
     if (
         dm is not None
@@ -917,7 +974,24 @@ class ToolCallHandler:
     if wd is None or not isinstance(result, dict) or result.get("error"):
       return result
     plan_step = self._plan["current_step"] if self._plan else None
-    info = wd.on_issued(func_name, args, plan_step=plan_step, source="model")
+    effective_args = dict(args or {})
+    if (
+        func_name == "pick"
+        and "grasp_x" not in effective_args
+        and isinstance(result.get("grasp_point"), (list, tuple))
+        and len(result["grasp_point"]) == 2
+    ):
+      effective_args["grasp_x"], effective_args["grasp_y"] = result["grasp_point"]
+    elif (
+        func_name == "place"
+        and "x" not in effective_args
+        and isinstance(result.get("place_point"), (list, tuple))
+        and len(result["place_point"]) == 2
+    ):
+      effective_args["x"], effective_args["y"] = result["place_point"]
+    info = wd.on_issued(
+        func_name, effective_args, plan_step=plan_step, source="model"
+    )
     if info.get("exhausted"):
       reason = (
           f"{func_name} was not executed after {info['max_attempts']} attempts"
@@ -1151,6 +1225,7 @@ class ToolCallHandler:
             ),
             "watchdog": wd.status(),
         }
+    pending_plan_step = p.plan_step if p is not None else None
     result = wd.confirm(observation)
     if result.get("status") == "confirmed":
       hook = getattr(self._embodiment, "on_action_confirmed", None)
@@ -1159,6 +1234,47 @@ class ToolCallHandler:
           hook(result["action"])
         except Exception:  # pylint: disable=broad-except
           logging.exception("on_action_confirmed hook failed")
+      # Automatically advance the stored plan past the confirmed pick/place
+      # step so the plan never stays stuck on a completed detect/pick step even
+      # if the model omits or botches update_plan.
+      plan = self._plan
+      if plan and plan.get("status") in ("planning", "in_progress"):
+        steps = [str(s) for s in plan.get("steps") or []]
+        cur = int(plan.get("current_step", 0) or 0)
+        act_idx = self._action_step_index(
+            str(result["action"]),
+            pending_plan_step if pending_plan_step is not None else cur,
+            steps,
+        )
+        if act_idx is not None and cur <= act_idx and act_idx + 1 < len(steps):
+          plan["current_step"] = act_idx + 1
+          plan["status"] = "in_progress"
+          result["current_step"] = act_idx + 1
+          result["current_step_text"] = steps[act_idx + 1]
+          await self._bus.publish(
+              event_bus.Event(
+                  type=event_bus.EventType.TOOL_RESULT,
+                  source=event_bus.EventSource.ASSISTANT,
+                  data={
+                      "type": "tool_call",
+                      "id": f"confirm-advance-{act_idx + 1}",
+                      "name": "update_plan",
+                      "args": {
+                          "goal": plan.get("goal", ""),
+                          "steps": steps,
+                          "current_step": act_idx + 1,
+                          "status": "in_progress",
+                          "note": observation or f"{result['action']} confirmed",
+                      },
+                      "result": {
+                          "status": "ok",
+                          "current_step": act_idx + 1,
+                          "plan_status": "in_progress",
+                      },
+                      "source": "confirm_action",
+                  },
+              )
+          )
       result["next_action"] = (
           "Call update_plan with current_step advanced to the next step"
           " (same steps list, status='in_progress') and continue."

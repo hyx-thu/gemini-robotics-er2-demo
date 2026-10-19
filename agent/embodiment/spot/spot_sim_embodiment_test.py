@@ -101,6 +101,20 @@ class TargetContextTest(unittest.IsolatedAsyncioTestCase):
     e.on_action_confirmed("place")
     self.assertEqual("", e.target_context())
 
+  async def test_detect_rejects_object_already_held_in_hand(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="yellow pen", x=540, y=730)
+    await e.execute_action("pick")
+    # Model sees the hand holding the pen and tries to detect it again.
+    r = await e.execute_action(
+        "detect", instruction="the yellow pen held in the hand", x=530, y=510
+    )
+    self.assertFalse(r["detected"])
+    self.assertTrue(r["already_in_hand"])
+    self.assertEqual([530, 510], r["hand_position"])
+    self.assertIn("confirm_action", r["next_action"])
+    self.assertIn("from_x=530, from_y=510", r["next_action"])
+
 
 if __name__ == "__main__":
   unittest.main()
