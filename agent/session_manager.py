@@ -467,6 +467,13 @@ class SessionManager:
         )
       except asyncio.TimeoutError:
         logger.warning("Timed out waiting for a pre-text camera frame")
+    else:
+      latest = getattr(self.observation, "latest_frame", None)
+      latest_t = float(getattr(self.observation, "latest_frame_time", 0.0) or 0.0)
+      sent_t = float(getattr(self.observation, "last_frame_sent_time", 0.0) or 0.0)
+      if latest and latest_t > sent_t:
+        chunk = latest
+        self.observation.last_frame_sent_time = time.monotonic()
 
     messages = []
     if chunk:
@@ -502,7 +509,23 @@ class SessionManager:
     """Send the first poller frame captured after this method is called."""
     poller = getattr(self.embodiment, "poller", None)
     if poller is None:
-      return False
+      latest = getattr(self.observation, "latest_frame", None)
+      latest_t = float(getattr(self.observation, "latest_frame_time", 0.0) or 0.0)
+      sent_t = float(getattr(self.observation, "last_frame_sent_time", 0.0) or 0.0)
+      if not latest or latest_t <= sent_t:
+        return False
+      await self.observation.dump_frame(latest)
+      await self.send_message({
+          "realtimeInput": {
+              "video": {
+                  "mimeType": "image/jpeg",
+                  "data": base64.b64encode(latest).decode("utf-8"),
+              }
+          }
+      })
+      self.observation.last_frame_sent_time = time.monotonic()
+      logger.info("Sent latest buffered webcam frame after tool call")
+      return True
     try:
       chunk = await asyncio.wait_for(
           poller.wait_for_next_frame(), timeout=timeout

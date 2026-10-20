@@ -972,13 +972,16 @@ def confirm_action_tool() -> dict[str, Any]:
       name="confirm_action",
       description=(
           "Report that the most recent pick or place command has VISIBLY been"
-          " executed by the robot, as seen in the camera frames (pick: the"
-          " object is lifted / no longer at its detected spot; place: the"
-          " object rests at the placement target). Call it ONLY after you see"
-          " the result - never from the tool result alone. The plan cannot"
-          " advance past the command's step until this is called. If nothing"
-          " changes within the confirmation window, do not call this; the"
-          " watchdog will ask you to re-issue the command instead."
+          " executed by the robot, as seen in the camera frames (pick: a hand"
+          " or gripper is visibly grasping, lifting, or holding the object off"
+          " the table, or it is already at the destination; place: the object"
+          " rests at the placement target). NOTE: if the target object is"
+          " still lying untouched on the table surface at a different tabletop"
+          " position (with no hand/arm grasping or holding it), that is NOT"
+          " pick completion — call detect and pick at the new position"
+          " instead! Call confirm_action ONLY after you see the physical"
+          " result - never from the tool result alone. The plan cannot advance"
+          " past the command's step until this is called."
       ),
       parameters={
           "type": "OBJECT",
@@ -1098,12 +1101,19 @@ def retry_step_tool() -> dict[str, Any]:
 
 _WATCHDOG_NOTE = (
     " The command is supervised: watch the next camera frames - the arm or"
-    " hand you see is the robot executing it. When the result is visible,"
-    " call confirm_action(observation=...). If nothing changes within the"
-    " confirmation window the watchdog tells you to call this tool again"
-    " (max 3 attempts, then the task is aborted). Calling it again while the"
-    " current attempt is still in its window does not start a new attempt."
-    " Never ask the user to perform the action by hand."
+    " hand you see is the robot executing it. On each heartbeat: (1) when the"
+    " result is visible (pick: a hand/gripper is grasping, lifting, or holding"
+    " the object off the table; place: object rests at destination), call"
+    " confirm_action(observation=...); (2) if NO hand/arm has entered the"
+    " pick/grasp process yet and the untouched target object on the table (or"
+    " destination for place) has moved to a new position (>~60 units or"
+    " outside box_2d), IMMEDIATELY call detect on the current frame and call"
+    " this tool again with the new coordinates (do not wait for timeout);"
+    " (3) if nothing changes within the confirmation window the watchdog tells"
+    " you to call this tool again (max 3 attempts, then the task is aborted)."
+    " Calling it again with the SAME unchanged coordinates inside the window"
+    " does not start a new attempt. Never ask the user to perform the action"
+    " by hand."
 )
 
 _TRAJECTORY_SCHEMA = {

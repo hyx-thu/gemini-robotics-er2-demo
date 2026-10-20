@@ -67,11 +67,36 @@ class MovedObjectTest(unittest.IsolatedAsyncioTestCase):
 
 class TargetContextTest(unittest.IsolatedAsyncioTestCase):
 
-  async def test_empty_without_pending_command(self):
+  async def test_empty_without_pending_command_and_tracks_pre_pick_detect(self):
     e = spot_sim_embodiment.SimulatedSpotEmbodiment()
     self.assertEqual("", e.target_context())
-    await e.execute_action("detect", instruction="pen", x=200, y=600)
-    self.assertEqual("", e.target_context())
+    det = await e.execute_action(
+        "detect", instruction="pen", x=200, y=600, box_2d=[550, 150, 650, 250]
+    )
+    self.assertIn("moved away from (x=200, y=600)", det["next_action"])
+    ctx = e.target_context()
+    self.assertIn("[TARGET] Target detected", ctx)
+    self.assertIn("before pick/place is issued", ctx)
+    self.assertIn("'pen' at (x=200, y=600) box_2d=[550, 150, 650, 250]", ctx)
+    self.assertIn("IMMEDIATELY call detect", ctx)
+
+  async def test_pick_preserves_box_on_minor_refinement_and_tracks_redetect_in_flight(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action(
+        "detect", instruction="pen", x=200, y=600, box_2d=[550, 150, 650, 250]
+    )
+    # Minor grasp-point refinement inside box_2d keeps box_2d in [TARGET].
+    await e.execute_action("pick", grasp_x=205, grasp_y=598)
+    ctx = e.target_context()
+    self.assertIn("box_2d=[550, 150, 650, 250]", ctx)
+    # Re-detect while pick is in flight updates next_action and [TARGET] coords.
+    det2 = await e.execute_action(
+        "detect", instruction="pen", x=750, y=500, box_2d=[450, 700, 550, 800]
+    )
+    self.assertIn("redirect the in-flight pick", det2["next_action"])
+    ctx2 = e.target_context()
+    self.assertIn("(x=750, y=500) box_2d=[450, 700, 550, 800]", ctx2)
+    self.assertIn("already re-detected the moved object", ctx2)
 
   async def test_pick_in_flight_monitors_only_the_object(self):
     e = spot_sim_embodiment.SimulatedSpotEmbodiment()

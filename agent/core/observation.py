@@ -71,6 +71,8 @@ class Observation:
     # (0.0 until the first frame). Lets the heartbeat loop skip waiting for
     # a new frame when a fresh one is already in the model's buffer.
     self.last_frame_sent_time = 0.0
+    self.latest_frame: bytes | None = None
+    self.latest_frame_time = 0.0
     # Monotonic timestamp of the last mic chunk whose peak exceeded the
     # threshold (observed idle noise peaks at ~100–300, speech at 17k–31k).
     self.mic_active_peak_threshold = 2000
@@ -276,6 +278,7 @@ class Observation:
         chunk = await self.video_queue.get()
         # Newest camera frame (unthrottled), for non-Live sub-agents.
         self.latest_frame = chunk
+        self.latest_frame_time = time.monotonic()
         await self.bus.publish(
             event_bus.Event(
                 type=event_bus.EventType.REAL_TIME_IMAGE_SENT,

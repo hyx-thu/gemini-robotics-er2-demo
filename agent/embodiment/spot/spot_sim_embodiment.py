@@ -76,17 +76,28 @@ _VERIFY = (
 _HEARTBEAT_TEXT = (
     "[HEARTBEAT] If no task is active, call 'ack' exactly once and end your"
     " turn; you will receive another heartbeat shortly. If a task is active:"
-    " look at the latest camera frame and judge whether the current step's"
-    " command has visibly been executed by the robot. For pick/place, any hand"
-    " seen doing it - robot gripper or human hand - counts as the robot arm:"
-    " if a hand is grasping, lifting, or holding the target object off the"
-    " surface, the pick HAS ALREADY SUCCEEDED - immediately call"
-    " 'confirm_action' (if pick is pending) and advance to the destination"
-    " detect/place step; NEVER call detect or pick on an object held in a"
-    " hand! If the current command has completed, call 'confirm_action' (for"
-    " pick/place) and then 'update_plan' to advance; if it is still in"
-    " progress, call 'ack' once and keep watching; if the goal is achieved,"
-    " call update_plan(status='done') and tell the user. Never ask the user to"
+    " look at the latest camera frame and perform this 3-way check on the"
+    " current step's target (see [TARGET] below): (1) HAND/ARM IN PICK PROCESS"
+    " OR ACTION COMPLETED: any hand seen doing it - robot gripper or human"
+    " hand - counts as the robot arm; if a hand is grasping, lifting, or"
+    " holding the target object off the surface (for pick) or the object rests"
+    " at the destination (for place), the command HAS ALREADY SUCCEEDED -"
+    " immediately call 'confirm_action' (if pick/place is pending) and then"
+    " 'update_plan' to advance (or if a hand/arm is actively touching/closing"
+    " on the object right now, call 'ack' while it lifts; NEVER call detect or"
+    " pick once a hand/arm has entered the pick process or holds the object!)."
+    " (2) TARGET MOVED ON TABLE BEFORE GRASP: if NO hand or arm is touching,"
+    " grasping, or holding the target object and the untouched target on the"
+    " table (before pick or while pick is pending) or placement destination"
+    " (for place) has clearly moved from its [TARGET] position (>~60 units or"
+    " outside box_2d), IMMEDIATELY call 'detect' on the current frame with its"
+    " new coordinates and then call 'pick' (or 'place') with the updated"
+    " coordinates/trajectory - do NOT call 'ack' and do NOT wait for the 30s"
+    " timeout! (3) TARGET UNCHANGED & STILL WAITING: if the target is still at"
+    " its [TARGET] spot on the table and the action is still in progress, call"
+    " 'ack' once and keep watching (or if pick/place has not been sent yet"
+    " after detect, call pick/place now); if the goal is achieved, call"
+    " update_plan(status='done') and tell the user. Never ask the user to"
     " perform a physical action."
 )
 
@@ -209,44 +220,110 @@ class SimulatedSpotEmbodiment(base.Embodiment):
       desc += f" box_2d={list(box)}"
     return desc
 
-  def target_context(self) -> str:
-    """Heartbeat check while a pick/place command is being executed.
+  @staticmethod
+  def _point_moved(target: dict[str, Any], x: int, y: int) -> bool:
+    """True if (x, y) is outside target's box_2d or >_MOVED_THRESHOLD away."""
+    tx = target.get("normalized_x")
+    ty = target.get("normalized_y")
+    if isinstance(tx, (int, float)) and isinstance(ty, (int, float)):
+      if max(abs(x - int(tx)), abs(y - int(ty))) > _MOVED_THRESHOLD:
+        return True
+    box = target.get("box_2d")
+    if isinstance(box, (list, tuple)) and len(box) == 4:
+      ymin, xmin, ymax, xmax = [int(v) for v in box]
+      if x < xmin or x > xmax or y < ymin or y > ymax:
+        return True
+    return False
 
-    The only thing monitored is the command's own target parameter (pick:
-    the object to grasp, place: the destination). If it moved, the model
-    re-detects ONLY that target and re-issues the same command with the new
-    position. Prompt-only; empty when no pick/place is in flight.
+  def target_context(self) -> str:
+    """Heartbeat check before and during a pick/place command.
+
+    Monitors the active target parameter:
+    - After detect() and BEFORE pick()/place() is issued (last_detect): checks
+      if the detected target moved on the table before pick/place is sent.
+    - While pick() or place() is in flight (pick_target / place_target): checks
+      if the target object (still untouched on the table, before any hand/arm
+      grasps it) or the placement destination moved, instructing the model to
+      immediately re-run detect() and re-issue pick()/place().
     """
     s = self._state
     now = time.monotonic()
+    last_det = s.get("last_detect")
     if s.get("place_target") is not None:
-      cmd, t, at = "place", s["place_target"], s.get("place_at")
+      cmd, t, at = "place", last_det or s["place_target"], (
+          s.get("last_detect_at") if last_det else s.get("place_at")
+      )
       what = "the DESTINATION"
       reissue = "place(x, y)"
+      redetected_note = (
+          " You already re-detected the moved destination at this position;"
+          " if it is still there on the current frame, IMMEDIATELY call"
+          " place(x, y) with the updated trajectory now!"
+          if last_det is not None
+          else ""
+      )
       extra = (
           " The carried object moving with the hand is part of the execution,"
           " not a change of the target - never detect it again."
+          + redetected_note
       )
       move_cond = (
-          f"if the destination container/spot has clearly moved (outside that"
-          f" box or more than ~{_MOVED_THRESHOLD} units away)"
+          f"if the destination container/spot has clearly moved on the table"
+          f" (outside that box or more than ~{_MOVED_THRESHOLD} units away"
+          " from the coordinates above)"
       )
     elif s.get("pick_target") is not None:
-      cmd, t, at = "pick", s["pick_target"], s.get("pick_at")
+      cmd, t, at = "pick", last_det or s["pick_target"], (
+          s.get("last_detect_at") if last_det else s.get("pick_at")
+      )
       what = "the OBJECT to grasp"
       reissue = "pick(grasp_x, grasp_y)"
+      redetected_note = (
+          " You already re-detected the moved object at this new position;"
+          " if it is still there on the current frame (and not yet in a hand),"
+          " IMMEDIATELY call pick(grasp_x, grasp_y) with the updated"
+          " trajectory now!"
+          if last_det is not None
+          else ""
+      )
       extra = (
-          " CRITICAL: if a hand or gripper is grasping, lifting, or holding"
-          " this object in the air (or it has left its spot on the table"
-          " because the hand picked it up), that means the pick IS ALREADY"
-          " COMPLETED - call confirm_action(observation=...) IMMEDIATELY and"
-          " NEVER call detect or pick on an object in a hand!"
+          " (1) If a hand or gripper is grasping, lifting, or holding this"
+          " object off the table (or has already entered the pick process and"
+          " is touching/closing on it), do NOT re-detect: call"
+          " confirm_action(observation=...) IMMEDIATELY once lifted/held (or"
+          " ack while the hand finishes lifting) and NEVER call detect or pick"
+          " on an object in a hand!"
+          + redetected_note
       )
       move_cond = (
-          "ONLY if the object is still lying UNTOUCHED on the table surface"
-          " (with NO hand holding or lifting it) and has clearly moved on the"
-          f" table (outside that box or more than ~{_MOVED_THRESHOLD} units"
-          " away)"
+          "(2) If NO hand or arm has entered the pick process (the object is"
+          " still lying UNTOUCHED on the table surface with no hand holding or"
+          " touching it) and its position in the CURRENT camera frame has"
+          f" clearly moved on the table (outside that box or more than"
+          f" ~{_MOVED_THRESHOLD} units away from the coordinates above)"
+      )
+    elif last_det is not None:
+      age = now - float(s.get("last_detect_at") or now)
+      return (
+          f"[TARGET] Target detected {age:.0f}s ago (before pick/place is"
+          f" issued): {self._describe_target(last_det)}."
+          + _ANY_HAND_IS_ARM
+          + " Before issuing pick or place on this heartbeat, check the target"
+          " in the CURRENT camera frame: (1) if a hand or robot arm has"
+          " ALREADY entered the pick process (touching, grasping, lifting, or"
+          " holding this object), NEVER call detect or pick on it (if already"
+          " lifted in a hand, advance to detect the placement destination);"
+          " (2) if the target is still lying UNTOUCHED on the table surface"
+          " (with NO hand touching or holding it) — or is the placement"
+          " destination — and has clearly moved on the table (outside that"
+          f" box or more than ~{_MOVED_THRESHOLD} units away from"
+          f" (x={last_det.get('normalized_x')},"
+          f" y={last_det.get('normalized_y')})), you MUST IMMEDIATELY call"
+          " detect for this target on the current frame with its NEW"
+          " coordinates first, and then call pick(grasp_x, grasp_y) or"
+          " place(x, y) with the new position - do not re-plan; (3) only if"
+          " the target has NOT moved from the coordinates above, issue"
+          " pick(grasp_x, grasp_y) or place(x, y) now."
       )
     else:
       return ""
@@ -255,12 +332,13 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         f"[TARGET] {cmd} command sent {age:.0f}s ago and being executed by the"
         f" robot arm; its target parameter is {what}"
         f" {self._describe_target(t)}." + _ANY_HAND_IS_ARM + extra
-        + f" Monitor ONLY this target: {move_cond}, call detect for"
-        f" this target alone on the current frame and re-issue {reissue} with"
-        " its NEW position - do not re-plan, go back, or detect anything"
-        " else. If it has not moved (or is already lifted by the hand), just"
-        " confirm_action when the frame shows the command completed,"
-        " otherwise ack."
+        + f" Monitor ONLY this target on the CURRENT camera frame: {move_cond},"
+        " IMMEDIATELY call detect for this target alone on the current frame"
+        f" and re-issue {reissue} with its NEW position (do NOT call ack and do"
+        " NOT wait for the 30s timeout) - do not re-plan, go back, or detect"
+        " anything else. If it has not moved on the table (or is already lifted"
+        " by the hand), call confirm_action when the frame shows the command"
+        " completed, otherwise ack."
         + _ESCALATION
     )
 
@@ -543,6 +621,26 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         target["box_2d"] = box
       s["last_detect"] = dict(target)
       s["last_detect_at"] = time.monotonic()
+      if s.get("pick_target") is not None and s.get("place_target") is None:
+        next_act = (
+            f"Target re-detected at (x={x}, y={y}). Now IMMEDIATELY call"
+            f" pick(trajectory=..., grasp_x={x}, grasp_y={y}) to redirect the"
+            " in-flight pick command to this new position."
+        )
+      elif s.get("place_target") is not None:
+        next_act = (
+            f"Destination re-detected at (x={x}, y={y}). Now IMMEDIATELY call"
+            f" place(trajectory=..., x={x}, y={y}) to redirect the in-flight"
+            " place command to this new position."
+        )
+      else:
+        next_act = (
+            f"Check the latest camera frame: if the target has moved away from"
+            f" (x={x}, y={y}) on the table (and no hand/arm has entered the"
+            " pick process), call detect again with its new coordinates first;"
+            " otherwise call pick or place now with your recommended 2D"
+            " trajectory."
+        )
       res: dict[str, Any] = {
           "detected": True,
           "instruction": instruction,
@@ -551,11 +649,11 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           "grasp_point": [x, y],
           "note": (
               "Target registered at the grasp affordance coordinates you"
-              " provided and overlaid on the camera image. If the marker is"
-              " not on the optimal graspable part, call detect again or refine"
-              " with grasp_x/grasp_y in pick."
+              " provided and overlaid on the camera image. If the target"
+              " moved on the table (with no hand grasping it) or the marker"
+              " is not on the optimal graspable part, call detect again first."
           ),
-          "next_action": "Call pick or place with your recommended 2D trajectory before moving the robot or camera.",
+          "next_action": next_act,
       }
       if grasp_part:
         res["grasp_part"] = grasp_part
@@ -583,9 +681,11 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         coords_updated = (
             gx != target.get("normalized_x") or gy != target.get("normalized_y")
         )
+        moved_outside = self._point_moved(target, gx, gy)
         target["normalized_x"] = gx
         target["normalized_y"] = gy
-        target.pop("box_2d", None) if coords_updated else None
+        if moved_outside:
+          target.pop("box_2d", None)
       if gpart:
         target["grasp_part"] = gpart
       target_age = time.monotonic() - float(s.get("last_detect_at") or time.monotonic())
@@ -627,7 +727,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         pick_res["warning"] = (
             f"The grasp point comes from a detect made {target_age:.0f}s ago."
             " If the object has moved since, call detect again on the latest"
-            " frame (or pass grasp_x/grasp_y measured now) before re-issuing."
+            " frame before re-issuing pick."
         )
       return pick_res
 
@@ -643,9 +743,10 @@ class SimulatedSpotEmbodiment(base.Embodiment):
         coords_updated = (
             px != base.get("normalized_x") or py != base.get("normalized_y")
         )
+        moved_outside = self._point_moved(base, px, py)
         base["normalized_x"] = px
         base["normalized_y"] = py
-        if coords_updated:
+        if moved_outside:
           base.pop("box_2d", None)
         target = base
       retry = not fresh_detect and not coords_updated and target is not None
