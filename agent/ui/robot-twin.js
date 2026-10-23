@@ -618,6 +618,22 @@ function init() {
   if (resetBtn) resetBtn.onclick = () => { camera.position.copy(R.homeCam); controls.target.copy(R.homeTarget); controls.update(); };
   const switchBtn = document.getElementById('twin-switch');
   if (switchBtn) switchBtn.onclick = () => activateRig(R.name === 'dog' ? 'humanoid' : 'dog');
+  const expandBtn = document.getElementById('twin-expand');
+  function setExpanded(exp) {
+    panel.classList.toggle('expanded', exp);
+    if (expandBtn) {
+      expandBtn.setAttribute('aria-expanded', String(exp));
+      expandBtn.title = exp ? 'Restore 3D view (1×)' : 'Expand 3D view (4×)';
+      expandBtn.setAttribute('aria-label', exp ? 'Restore 3D view' : 'Expand 3D view');
+    }
+    resize();
+  }
+  if (expandBtn) {
+    expandBtn.onclick = (e) => {
+      e.stopPropagation();
+      setExpanded(!panel.classList.contains('expanded'));
+    };
+  }
   activateRig(localStorage.getItem('twin_rig') || 'dog');
 
   // ----------------------------------------------------------- main loop --
@@ -636,6 +652,7 @@ function init() {
   function frame() {
     requestAnimationFrame(frame);
     if (panel.offsetParent === null) return;
+    resize();
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
     if (!step || t >= step.until) {

@@ -756,6 +756,8 @@ class SessionManager:
     except Exception:  # pylint: disable=broad-except
       pass
 
+  notify_ui = _notify_ui
+
   def _reset_turn_state(self) -> None:
     """Forget per-socket state that would otherwise outlive a reconnect.
 

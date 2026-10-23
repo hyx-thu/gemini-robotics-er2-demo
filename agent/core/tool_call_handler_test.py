@@ -26,6 +26,7 @@ class FakeSessionManager:
   def __init__(self):
     self.messages = []
     self.frames_sent = 0
+    self.ui_notifications = []
 
   async def send_message(self, message):
     self.messages.append(message)
@@ -33,6 +34,9 @@ class FakeSessionManager:
   async def send_latest_video_frame(self):
     self.frames_sent += 1
     return True
+
+  def notify_ui(self, payload):
+    self.ui_notifications.append(payload)
 
 
 class FakeEmbodiment:
@@ -675,6 +679,44 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual("清理桌面上的笔", self.handler._plan["goal"])
     self.assertEqual(8, len(self.handler._plan["steps"]))
     self.assertEqual(6, self.handler._plan["current_step"])
+
+  async def test_finished_plan_clears_on_new_user_turn_and_emits_tool_started(self):
+    await self._user_says("把笔拿起来")
+    await self._plan(0, "planning")
+    await self._plan(3, "done")
+    self.assertIsNotNone(self.handler._plan)
+
+    self.session.ui_notifications.clear()
+    await self._user_says("现在天气怎么样？")
+    self.assertIsNone(self.handler._plan)
+    self.assertIn({"type": "plan_clear"}, self.session.ui_notifications)
+
+    # Non-idle tool emits tool_started immediately before execution completes.
+    self.session.ui_notifications.clear()
+    self.embodiment.wait_for_release = True
+    task = asyncio.create_task(self.handler._execute_single_tool({
+        "id": "loc-1",
+        "name": "stand",
+        "args": {},
+    }))
+    await self.embodiment.started.wait()
+    self.assertEqual(
+        [{
+            "type": "tool_started",
+            "id": "loc-1",
+            "name": "stand",
+            "args": {},
+            "agent": "",
+        }],
+        self.session.ui_notifications,
+    )
+    self.embodiment.release.set()
+    await task
+
+    # Idle ack never spams tool_started.
+    self.session.ui_notifications.clear()
+    await self.handler._execute_single_tool({"id": "ack-1", "name": "ack", "args": {}})
+    self.assertEqual([], self.session.ui_notifications)
 
 
 if __name__ == "__main__":

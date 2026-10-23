@@ -343,6 +343,16 @@ class ToolCallHandler:
     """Updates the session manager reference."""
     self._session_manager = session_manager
 
+  def _notify_ui(self, payload: dict[str, Any]) -> None:
+    """Send an immediate UI-only status payload without queuing on EventBus."""
+    sm = self._session_manager
+    notify = getattr(sm, "notify_ui", None) or getattr(sm, "_notify_ui", None)
+    if callable(notify):
+      try:
+        notify(payload)
+      except Exception:  # pylint: disable=broad-except
+        logging.debug("notify_ui failed", exc_info=True)
+
   def set_embodiment(self, embodiment: Any):
     """Updates the embodiment reference."""
     self._embodiment = embodiment
@@ -386,6 +396,21 @@ class ToolCallHandler:
     if is_blocking:
       self._blocking_execution_count += 1
       self.tool_executing.set()
+    if func_name and func_name not in event_bus.IDLE_TOOL_NAMES:
+      if (
+          func_name not in {"update_plan", "confirm_action", "retry_step"}
+          and self._plan
+          and self._plan.get("status") in ("done", "failed")
+          and self._last_user_input_time > self._plan_finished_at
+      ):
+        self._plan = None
+      self._notify_ui({
+          "type": "tool_started",
+          "id": call_id,
+          "name": func_name,
+          "args": args,
+          "agent": fc.get("_agent") or "",
+      })
     try:
       watchdog_block = (
           self._watchdog.blocks(func_name) if self._watchdog is not None else None
@@ -535,21 +560,34 @@ class ToolCallHandler:
 
   async def _record_user_instruction(self, event: event_bus.Event) -> None:
     """Track user requests: sit authorisation, stop/cancel, plan stickiness."""
+    is_replace = False
     if event.type == event_bus.EventType.TEXT_INPUT:
       text = str(event.data or "")
-      if text.lstrip().startswith("[HEARTBEAT]"):
+      stripped = text.lstrip()
+      if stripped.startswith(
+          ("[HEARTBEAT]", "[ROBOT]", "[ROBOT_TASK_RESULT]", "[USER COMMAND]")
+      ):
         return
       self._user_transcript = text
     else:
       data = event.data or {}
       text = data.get("text", "") if isinstance(data, dict) else str(data)
-      if isinstance(data, dict) and data.get("replace"):
+      is_replace = bool(isinstance(data, dict) and data.get("replace"))
+      if is_replace:
         self._user_transcript = text
       else:
         self._user_transcript = f"{self._user_transcript} {text}".strip()
     if text.strip() and text.strip() != "🎤 正在识别语音…":
-      # Any genuine user input re-opens the right to (re)plan.
+      # Any genuine user input re-opens the right to (re)plan and dismisses
+      # a finished plan from a previous turn.
       self._last_user_input_time = time.monotonic()
+      if (
+          not is_replace
+          and self._plan
+          and self._plan.get("status") in ("done", "failed")
+      ):
+        self._plan = None
+        self._notify_ui({"type": "plan_clear"})
     self._sit_authorized = user_requested_sit(self._user_transcript)
     if self.task_active() and _USER_STOP_RE.search(text or ""):
       await self.cancel_task("user said stop")

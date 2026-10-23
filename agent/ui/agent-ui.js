@@ -916,12 +916,423 @@ let geminiClient = new GeminiClient({
 // Initial mic button paint (needs geminiClient + mediaHandler to exist).
 updateMicUI();
 
-// --- Plan panel (driven by the update_plan tool) ---
+// --- Plan panel (driven by update_plan OR automatic live tool-step tracking) ---
 
 let agentVideoSources = { human: 'computer', spot: 'spot', tinybot: 'tinybot' };
 
 function videoSourceForAgent(agent) {
   return agentVideoSources[agent] || (agent === 'human' ? 'computer' : agent);
+}
+
+// Meta / silent tools that should NOT appear as standalone steps in auto tool-step mode.
+const TOOL_STEP_EXCLUDED = new Set([
+  'ack',
+  'update_plan',
+  'robot_task',
+  'confirm_action',
+  'retry_step',
+  'send_message',
+  'clear_overlay',
+]);
+
+// Physical embodiment tools where the Stop button remains relevant in tool-step mode.
+const EMBODIMENT_STEP_TOOLS = new Set([
+  'detect', 'pick', 'place', 'navigate', 'drive', 'look', 'stand', 'sit',
+  'stow', 'wait_for_pick_up', 'run_instruction', 'turn_head_to_uv',
+  'move_absolute', 'move_relative',
+]);
+
+let userTurnSeq = 0;
+let awaitingToolsForTurnSeq = -1;
+let lastUserRequestText = '';
+const pendingToolRows = new Map();  // call_id -> { rowEl, num }
+
+function createEmptyPlanState() {
+  return {
+    mode: 'none',       // 'none' | 'plan' | 'tools'
+    status: 'idle',     // 'idle' | 'planning' | 'in_progress' | 'done' | 'failed'
+    goal: '',
+    entries: [],        // [{ id, name, args, state: 'running'|'done'|'failed', result }]
+    userTurnSeq: 0,
+    turnClosed: false,
+    startedBeforeTranscript: false,
+    startedAt: 0,
+    lastCompletedAt: 0,
+  };
+}
+let planState = createEmptyPlanState();
+
+function _prefersChineseText(sample) {
+  const s = String(sample || lastUserRequestText || '');
+  if (/[\u3040-\u30ff]/.test(s)) return false;  // Japanese Kana -> English fallback
+  if (/[\u4e00-\u9fff]/.test(s)) return true;
+  if (!s && /^zh\b/i.test(navigator.language || '')) return true;
+  return false;
+}
+
+function _shortArg(val, maxLen = 34) {
+  const s = String(val ?? '').trim();
+  if (!s) return '';
+  return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
+}
+
+function formatAutoToolStep(entry) {
+  const name = entry.name || 'tool';
+  const a = entry.args || {};
+  const r = (entry.result && typeof entry.result === 'object') ? entry.result : null;
+  const zh = _prefersChineseText(
+    `${lastUserRequestText} ${a.query || ''} ${a.instruction || ''} ${a.place_name || ''}`
+  );
+  const qStr = (v) => {
+    const t = _shortArg(v);
+    return t ? `"${t}"` : '';
+  };
+
+  if (name === 'get_current_location') {
+    let locHint = '';
+    if (r && r.available !== false && !r.error) {
+      if (r.place_description) {
+        locHint = ` (${_shortArg(String(r.place_description).split(/[。.,，\n]/)[0], 26)})`;
+      } else if (r.latitude != null && r.longitude != null) {
+        locHint = ` (${Number(r.latitude).toFixed(3)}, ${Number(r.longitude).toFixed(3)})`;
+      }
+    } else if (r && (r.error || r.available === false)) {
+      locHint = zh ? ' (未获取定位)' : ' (unavailable)';
+    }
+    return zh
+      ? `📍 get_current_location() — 定位当前位置${locHint}`
+      : `📍 get_current_location() — Locate current position${locHint}`;
+  }
+  if (name === 'google_search') {
+    const q = qStr(a.query);
+    return zh
+      ? `🔎 google_search(${q}) — 搜索实时信息`
+      : `🔎 google_search(${q}) — Search live web info`;
+  }
+  if (name === 'google_maps_search') {
+    const q = qStr(a.query);
+    return zh
+      ? `🗺️ google_maps_search(${q}) — 搜索地图与周边地点`
+      : `🗺️ google_maps_search(${q}) — Search Google Maps`;
+  }
+  if (name === 'get_place_photos') {
+    const q = qStr(a.place_name || a.place_id);
+    return zh
+      ? `📷 get_place_photos(${q}) — 获取地点实景照片`
+      : `📷 get_place_photos(${q}) — Fetch place photos`;
+  }
+  if (name === 'get_calendar') {
+    return zh ? '📅 get_calendar() — 查询日程安排' : '📅 get_calendar() — Check calendar';
+  }
+  if (name === 'get_waypoints') {
+    return zh ? '🧭 get_waypoints() — 获取导航路点' : '🧭 get_waypoints() — List waypoints';
+  }
+  if (name === 'navigate') {
+    const q = qStr(a.waypoint || a.name);
+    return zh ? `🧭 navigate(${q}) — 导航至目标点` : `🧭 navigate(${q}) — Navigate to waypoint`;
+  }
+  if (name === 'drive') {
+    return zh ? '🚶 drive() — 移动机身' : '🚶 drive() — Move robot base';
+  }
+  if (name === 'look') {
+    return zh ? '👀 look() — 调整摄像头视角' : '👀 look() — Adjust camera view';
+  }
+  if (name === 'stand') {
+    return zh ? '🐕 stand() — 起立' : '🐕 stand() — Stand up';
+  }
+  if (name === 'sit') {
+    return zh ? '🐕 sit() — 坐下' : '🐕 sit() — Sit down';
+  }
+  if (name === 'stow') {
+    return zh ? '🦾 stow() — 收回机械臂' : '🦾 stow() — Stow arm';
+  }
+  if (name === 'make_gesture') {
+    const g = qStr(a.gesture);
+    return zh ? `👋 make_gesture(${g}) — 执行动作手势` : `👋 make_gesture(${g}) — Perform gesture`;
+  }
+  if (name === 'detect') {
+    const q = qStr(a.instruction);
+    return zh ? `🎯 detect(${q}) — 视觉定位目标` : `🎯 detect(${q}) — Detect target`;
+  }
+  if (name === 'pick') {
+    return zh ? '🤏 pick() — 抓取目标物体' : '🤏 pick() — Pick target object';
+  }
+  if (name === 'place') {
+    return zh ? '📥 place() — 放置目标物体' : '📥 place() — Place target object';
+  }
+  if (name === 'wait_for_pick_up') {
+    return zh ? '⏳ wait_for_pick_up() — 等待递交接取' : '⏳ wait_for_pick_up() — Wait for handoff';
+  }
+  if (name === 'run_instruction') {
+    const q = qStr(a.instruction);
+    return zh ? `▶️ run_instruction(${q}) — 执行指令` : `▶️ run_instruction(${q}) — Run instruction`;
+  }
+  return `${name}(${_shortArg(JSON.stringify(a), 32)})`;
+}
+
+function _isToolResultError(msg) {
+  const r = msg && msg.result;
+  if (!r || typeof r !== 'object') {
+    return typeof r === 'string' && r.startsWith('Error:');
+  }
+  if (r.error) return true;
+  if (msg.name === 'get_current_location' && r.available === false) return true;
+  return false;
+}
+
+function renderToolSteps() {
+  const panel = document.getElementById('plan-panel');
+  if (!panel || planState.mode !== 'tools' || !planState.entries.length) return;
+  const entries = planState.entries;
+  const steps = entries.map(formatAutoToolStep);
+  const runningIdx = entries.findIndex(e => e.state === 'running');
+  const failedIdx = entries.findIndex(e => e.state === 'failed');
+  const doneCount = entries.filter(e => e.state === 'done').length;
+  const allFinished = runningIdx === -1;
+  const hasFailed = failedIdx !== -1 && allFinished;
+  const isDone = allFinished && !hasFailed;
+  const status = isDone ? 'done' : hasFailed ? 'failed' : 'in_progress';
+  planState.status = status;
+
+  panel.classList.remove('hidden');
+  const badge = document.getElementById('plan-agent');
+  if (badge && !entries.some(e => e.agent === 'er2')) {
+    badge.classList.add('hidden');
+  }
+  const statusEl = document.getElementById('plan-status');
+  if (statusEl) {
+    statusEl.textContent = status.replace('_', ' ');
+    statusEl.className = 'plan-status ' + status;
+  }
+  const activeIdx = runningIdx !== -1 ? runningIdx : (failedIdx !== -1 ? failedIdx : entries.length - 1);
+  const progEl = document.getElementById('plan-progress');
+  if (progEl) {
+    progEl.textContent = isDone
+      ? `${entries.length}/${entries.length} ✓`
+      : `step ${activeIdx + 1}/${entries.length}`;
+  }
+  const zh = _prefersChineseText(lastUserRequestText);
+  const goalEl = document.getElementById('plan-goal');
+  if (goalEl) {
+    goalEl.textContent = planState.goal || (zh ? '工具调用步骤' : 'Tool execution steps');
+  }
+  const stopBtn = document.getElementById('plan-stop-btn');
+  if (stopBtn) {
+    const showStop = !allFinished && entries.some(e => EMBODIMENT_STEP_TOOLS.has(e.name));
+    stopBtn.style.display = showStop ? '' : 'none';
+  }
+  const bar = document.getElementById('plan-progressbar-fill');
+  if (bar) {
+    bar.style.width = `${Math.round((doneCount / entries.length) * 100)}%`;
+    bar.className = 'plan-progressbar-fill ' + status;
+  }
+  const ol = document.getElementById('plan-steps');
+  if (ol) {
+    ol.innerHTML = '';
+    entries.forEach((entry, i) => {
+      const li = document.createElement('li');
+      let cls, mark;
+      if (entry.state === 'done')         { cls = 'done';          mark = '✓'; }
+      else if (entry.state === 'failed')  { cls = 'current failed'; mark = '✗'; }
+      else if (entry.state === 'running') { cls = 'current';       mark = '▶'; }
+      else                                { cls = 'pending';       mark = String(i + 1); }
+      li.className = cls;
+      li.title = `${i + 1}. ${steps[i]}`;
+      li.innerHTML = `<span class="step-idx">${mark}</span><span class="step-text"></span>`;
+      li.querySelector('.step-text').textContent = steps[i];
+      ol.appendChild(li);
+    });
+    const curLi = ol.children[activeIdx];
+    if (curLi && curLi.scrollIntoView) curLi.scrollIntoView({ block: 'nearest' });
+  }
+  const noteEl = document.getElementById('plan-note');
+  if (noteEl) noteEl.classList.add('hidden');
+
+  // Mirror segmented progress bar under the camera.
+  const hud = document.getElementById('plan-hud');
+  if (hud) {
+    hud.classList.remove('hidden');
+    hud.className = 'plan-hud ' + status;
+    const dots = hud.querySelector('.hud-dots');
+    if (dots) {
+      dots.innerHTML = '';
+      entries.forEach((entry, i) => {
+        const d = document.createElement('span');
+        const dotCls = entry.state === 'done' ? 'done'
+          : (entry.state === 'running' || entry.state === 'failed') ? 'current'
+          : 'pending';
+        d.className = 'hud-dot ' + dotCls;
+        d.title = `${i + 1}. ${steps[i]}`;
+        dots.appendChild(d);
+      });
+    }
+    const idx = hud.querySelector('.hud-idx');
+    const txt = hud.querySelector('.hud-text');
+    if (idx && txt) {
+      if (isDone) {
+        idx.textContent = '✓';
+        txt.textContent = `Done · ${steps.length} steps`;
+      } else {
+        idx.textContent = (hasFailed ? '✗ ' : '▶ ') + `${activeIdx + 1}/${steps.length}`;
+        txt.textContent = steps[activeIdx] || '';
+      }
+      txt.title = steps[activeIdx] || '';
+    }
+  }
+}
+
+function onNewUserRequest(rawText) {
+  const clean = String(rawText || '').trim();
+  const isPlaceholder = !clean || clean === '🎤 正在识别语音…';
+  if (!isPlaceholder) {
+    lastUserRequestText = clean;
+  }
+  // If a tool of this voice turn started slightly before inputTranscription
+  // arrived, adopt the running tool-step panel instead of resetting it.
+  if (
+    planState.mode === 'tools' &&
+    planState.startedBeforeTranscript &&
+    (Date.now() - planState.startedAt < 10000)
+  ) {
+    userTurnSeq++;
+    awaitingToolsForTurnSeq = userTurnSeq;
+    planState.userTurnSeq = userTurnSeq;
+    planState.startedBeforeTranscript = false;
+    if (!isPlaceholder) {
+      planState.goal = clean;
+      renderToolSteps();
+    }
+    return;
+  }
+  userTurnSeq++;
+  awaitingToolsForTurnSeq = userTurnSeq;
+  // Clear any finished plan or previous turn's tool steps right away.
+  if (
+    (planState.mode === 'plan' && (planState.status === 'done' || planState.status === 'failed')) ||
+    planState.mode === 'tools'
+  ) {
+    resetPlan();
+  }
+}
+
+function _hasActiveExplicitPlan() {
+  return planState.mode === 'plan' &&
+    (planState.status === 'planning' || planState.status === 'in_progress');
+}
+
+function onToolStarted(msg) {
+  if (!msg || !msg.name || msg.name === 'ack') return;
+  currentThinkingContentDiv = null;
+  lastAckRow = null;
+  ackCount = 0;
+  currentGeminiMessageDiv = null;
+  currentUserMessageDiv = null;
+  recordTTFT();
+  recordTTFC();
+
+  // Live pending row in chat log (upgraded in-place when tool_call arrives).
+  const id = String(msg.id || '');
+  if (id && !pendingToolRows.has(id)) {
+    toolCallCounter++;
+    const num = toolCallCounter;
+    const label = TOOL_STEP_EXCLUDED.has(msg.name)
+      ? `${msg.name}(${_shortArg(JSON.stringify(msg.args || {}), 40)})`
+      : formatAutoToolStep({ name: msg.name, args: msg.args || {}, state: 'running', result: null });
+    const rowEl = appendMessage(
+      'tool_call tool_call_pending',
+      `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${num}] ⏳ ${label}…`
+    );
+    pendingToolRows.set(id, { rowEl, num });
+  }
+
+  if (TOOL_STEP_EXCLUDED.has(msg.name) || _hasActiveExplicitPlan()) return;
+
+  const isStalePrevTurn =
+    planState.mode !== 'tools' ||
+    planState.turnClosed ||
+    (planState.entries.length > 0 &&
+      planState.entries.every(e => e.state !== 'running') &&
+      planState.lastCompletedAt > 0 &&
+      (Date.now() - planState.lastCompletedAt > 6000) &&
+      awaitingToolsForTurnSeq !== userTurnSeq);
+
+  if (isStalePrevTurn) {
+    // Dismiss any finished previous plan / overlays before starting fresh tool steps.
+    renderActionStatus({ state: 'cleared' });
+    clearOverlay('target');
+    clearOverlay('trajectory');
+    const transcriptAlreadyArrived = (awaitingToolsForTurnSeq === userTurnSeq && userTurnSeq > 0);
+    planState = {
+      mode: 'tools',
+      status: 'in_progress',
+      goal: transcriptAlreadyArrived ? lastUserRequestText : '',
+      entries: [],
+      userTurnSeq: transcriptAlreadyArrived ? userTurnSeq : 0,
+      turnClosed: false,
+      startedBeforeTranscript: !transcriptAlreadyArrived,
+      startedAt: Date.now(),
+      lastCompletedAt: 0,
+    };
+  }
+
+  let existing = id ? planState.entries.find(e => e.id === id) : null;
+  if (!existing) {
+    planState.entries.push({
+      id,
+      name: msg.name,
+      args: msg.args || {},
+      agent: msg.agent || '',
+      state: 'running',
+      result: null,
+    });
+  } else {
+    existing.state = 'running';
+    existing.args = msg.args || existing.args;
+  }
+  planState.turnClosed = false;
+  renderToolSteps();
+}
+
+function onToolCompletedForPlan(msg) {
+  if (!msg || !msg.name || TOOL_STEP_EXCLUDED.has(msg.name) || _hasActiveExplicitPlan()) {
+    return;
+  }
+  if (planState.mode !== 'tools') {
+    const transcriptAlreadyArrived = (awaitingToolsForTurnSeq === userTurnSeq && userTurnSeq > 0);
+    planState = {
+      mode: 'tools',
+      status: 'in_progress',
+      goal: transcriptAlreadyArrived ? lastUserRequestText : '',
+      entries: [],
+      userTurnSeq: transcriptAlreadyArrived ? userTurnSeq : 0,
+      turnClosed: false,
+      startedBeforeTranscript: !transcriptAlreadyArrived,
+      startedAt: Date.now(),
+      lastCompletedAt: 0,
+    };
+  }
+  const id = String(msg.id || '');
+  let entry = id ? planState.entries.find(e => e.id === id) : null;
+  if (!entry) {
+    entry = [...planState.entries].reverse().find(e => e.name === msg.name && e.state === 'running');
+  }
+  const nextState = _isToolResultError(msg) ? 'failed' : 'done';
+  if (entry) {
+    entry.state = nextState;
+    entry.args = msg.args || entry.args;
+    entry.result = msg.result;
+  } else {
+    planState.entries.push({
+      id,
+      name: msg.name,
+      args: msg.args || {},
+      agent: msg.agent || '',
+      state: nextState,
+      result: msg.result,
+    });
+  }
+  planState.lastCompletedAt = Date.now();
+  renderToolSteps();
 }
 
 // Composite "Live + ER2" mode: make it obvious that the ER2 planner (not the
@@ -933,6 +1344,28 @@ function renderEr2Status(msg) {
   if (msg.state === 'started') {
     text = '🤖 ER2 planning…';
     line = `🤖 ER2 planner (${model}) took over the task: “${msg.instruction || ''}”`;
+    // Clear any stale steps from an earlier plan before showing the header.
+    planState = {
+      ...createEmptyPlanState(),
+      mode: 'plan',
+      status: 'planning',
+      goal: msg.instruction || '',
+      userTurnSeq,
+    };
+    const stepsEl = document.getElementById('plan-steps');
+    if (stepsEl) stepsEl.innerHTML = '';
+    const goalEl = document.getElementById('plan-goal');
+    if (goalEl) goalEl.textContent = msg.instruction || '';
+    const statusEl = document.getElementById('plan-status');
+    if (statusEl) { statusEl.textContent = 'planning'; statusEl.className = 'plan-status planning'; }
+    const progEl = document.getElementById('plan-progress');
+    if (progEl) progEl.textContent = '';
+    const bar = document.getElementById('plan-progressbar-fill');
+    if (bar) { bar.style.width = '0%'; bar.className = 'plan-progressbar-fill planning'; }
+    const noteEl = document.getElementById('plan-note');
+    if (noteEl) noteEl.classList.add('hidden');
+    const hud = document.getElementById('plan-hud');
+    if (hud) hud.classList.add('hidden');
   } else if (msg.state === 'executing') {
     text = '🤖 ER2 executing';
     line = `🤖 ER2 planned ${msg.steps || ''} steps and is executing / tracking them`;
@@ -941,6 +1374,10 @@ function renderEr2Status(msg) {
     const ok = r.status === 'done';
     text = ok ? '🤖 ER2 ✓ done' : `🤖 ER2 ✗ ${r.status || 'stopped'}`;
     line = `🤖 ER2 finished: ${r.status} (${r.steps_done}/${r.steps_total} steps, ${r.duration_s}s) → result handed to the Live model`;
+    if (planState.mode === 'plan') {
+      planState.status = ok ? 'done' : 'failed';
+      planState.turnClosed = true;
+    }
   }
   if (badge && text) {
     badge.textContent = text;
@@ -964,6 +1401,14 @@ function renderPlan(args) {
   if (!panel || !args || !Array.isArray(args.steps) || !args.steps.length) return;
   const steps = args.steps.map(String);
   const status = String(args.status || 'in_progress');
+  planState = {
+    ...createEmptyPlanState(),
+    mode: 'plan',
+    status,
+    goal: args.goal || '',
+    userTurnSeq,
+    turnClosed: status === 'done' || status === 'failed',
+  };
   let current = parseInt(args.current_step, 10);
   if (Number.isNaN(current)) current = 0;
   current = Math.max(0, Math.min(current, steps.length - 1));
@@ -1070,8 +1515,17 @@ function renderPlanHud(steps, current, status) {
 }
 
 function resetPlan() {
+  planState = createEmptyPlanState();
   const panel = document.getElementById('plan-panel');
   if (panel) panel.classList.add('hidden');
+  const badge = document.getElementById('plan-agent');
+  if (badge) { badge.className = 'plan-agent hidden'; badge.textContent = ''; }
+  const stepsEl = document.getElementById('plan-steps');
+  if (stepsEl) stepsEl.innerHTML = '';
+  const goalEl = document.getElementById('plan-goal');
+  if (goalEl) goalEl.textContent = '';
+  const noteEl = document.getElementById('plan-note');
+  if (noteEl) { noteEl.textContent = ''; noteEl.classList.add('hidden'); }
   const hud = document.getElementById('plan-hud');
   if (hud) hud.classList.add('hidden');
   renderActionStatus({ state: 'cleared' });
@@ -1272,6 +1726,8 @@ function selectAgent(type) {
   // The 3D twin models a quadruped with an arm — only meaningful for Spot.
   const twin = document.getElementById('robot-twin');
   if (twin) twin.classList.toggle('hidden', type !== 'spot');
+  const twinSlot = document.getElementById('robot-twin-slot');
+  if (twinSlot) twinSlot.classList.toggle('hidden', type !== 'spot');
 
   // Clear active state from all agent dropdown options
   if (agentDropdown) {
@@ -1323,6 +1779,26 @@ function handleJsonMessage(msg) {
     currentGeminiMessageDiv = null;
     currentUserMessageDiv = null;
     currentThinkingContentDiv = null;
+    if (!msg.had_tool_call) {
+      awaitingToolsForTurnSeq = -1;
+      if (
+        planState.mode === 'tools' &&
+        planState.entries.length > 0 &&
+        !planState.entries.some(e => e.state === 'running')
+      ) {
+        planState.turnClosed = true;
+        renderToolSteps();
+      }
+    }
+  } else if (msg.type === 'plan_clear') {
+    if (
+      !_hasActiveExplicitPlan() &&
+      !(planState.mode === 'tools' && planState.entries.some(e => e.state === 'running'))
+    ) {
+      resetPlan();
+    }
+  } else if (msg.type === 'tool_started') {
+    onToolStarted(msg);
   } else if (msg.type === 'telemetry') {
     if (msg.server_latency || msg.server_ttft_ms) {
       updateServerLatency(
@@ -1387,6 +1863,14 @@ function handleJsonMessage(msg) {
           '$1$2'
         );
       }
+      const refined = (targetDiv.textContent || '').trim();
+      if (refined && refined !== '🎤 正在识别语音…') {
+        lastUserRequestText = refined;
+        if (planState.mode === 'tools') {
+          planState.goal = refined;
+          renderToolSteps();
+        }
+      }
       const isAtBottomUser =
         chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 50;
       if (isAtBottomUser) chatLog.scrollTop = chatLog.scrollHeight;
@@ -1420,10 +1904,19 @@ function handleJsonMessage(msg) {
         /([\u4e00-\u9fff])\s+([\u4e00-\u9fff，。！？、；：])/g,
         '$1$2'
       );
+      const updated = (currentUserMessageDiv.textContent || '').trim();
+      if (updated && updated !== '🎤 正在识别语音…') {
+        lastUserRequestText = updated;
+        if (planState.mode === 'tools') {
+          planState.goal = updated;
+          renderToolSteps();
+        }
+      }
       const isAtBottomUser =
         chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 50;
       if (isAtBottomUser) chatLog.scrollTop = chatLog.scrollHeight;
     } else {
+      onNewUserRequest(msg.text);
       currentUserMessageDiv = appendMessage('user', msg.text);
       window._lastUserTranscriptDiv = currentUserMessageDiv;
       window._currentUserUtteranceId = uid;
@@ -1473,8 +1966,8 @@ function handleJsonMessage(msg) {
     currentThinkingContentDiv = null;
     recordTTFT();
     recordTTFC();
-    toolCallCounter++;
     if (msg.name === 'ack') {
+      toolCallCounter++;
       // Aggregate consecutive ack calls into a single heartbeat row
       ackCount++;
       if (lastAckRow) {
@@ -1505,10 +1998,15 @@ function handleJsonMessage(msg) {
       ackCount = 0;
       currentGeminiMessageDiv = null;
       currentUserMessageDiv = null;
+      const callId = String(msg.id || '');
+      const pending = callId ? pendingToolRows.get(callId) : null;
+      if (pending) pendingToolRows.delete(callId);
+      const displayNum = pending ? pending.num : (++toolCallCounter);
       const desc = describeToolCall(msg);
       const result =
         msg.result !== undefined ? formatFunctionResult(msg.result) : '';
 
+      let finalNode;
       if (result) {
         // Render as collapsible details
         const details = document.createElement('details');
@@ -1517,7 +2015,7 @@ function handleJsonMessage(msg) {
 
         const summary = document.createElement('summary');
         summary.className = 'tool_call_summary';
-        summary.textContent = `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${toolCallCounter}] ${desc.summary}`;
+        summary.textContent = `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${displayNum}] ${desc.summary}`;
         summary.title = `${msg.name}(${msg.args ? JSON.stringify(msg.args) : ''})`;
         details.appendChild(summary);
 
@@ -1525,15 +2023,22 @@ function handleJsonMessage(msg) {
         contentDiv.className = 'tool_response_content';
         contentDiv.textContent = (desc.argsText ? desc.argsText + '\n' : '') + result;
         details.appendChild(contentDiv);
-
-        const isAtBottom =
-          chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 50;
-        chatLog.appendChild(details);
-        if (isAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
+        finalNode = details;
       } else {
-        // Fallback if no result yet
-        appendMessage('tool_call', `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${toolCallCounter}] ${desc.summary}`);
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message tool_call';
+        msgDiv.textContent = `${msg.agent === 'er2' ? '🤖 ER2 · ' : '🔧 '}[${displayNum}] ${desc.summary}`;
+        finalNode = msgDiv;
       }
+
+      const isAtBottom =
+        chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 50;
+      if (pending && pending.rowEl && pending.rowEl.parentNode === chatLog) {
+        chatLog.replaceChild(finalNode, pending.rowEl);
+      } else {
+        chatLog.appendChild(finalNode);
+      }
+      if (isAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
 
       if (msg.name === 'update_plan') {
         // A rejected update (e.g. advancing past an unconfirmed pick), an
@@ -1554,6 +2059,7 @@ function handleJsonMessage(msg) {
           renderPlan(accepted);
         }
       } else {
+        onToolCompletedForPlan(msg);
         recordToolVisual(msg);
         renderRichToolCard(msg);
         // 3D robot twin + animated camera FX (pick/place/detect).
@@ -2721,6 +3227,7 @@ function sendText() {
   if (text && geminiClient.isConnected()) {
     mediaHandler.stopAudioPlayback();
     resetLatencyTimer();
+    onNewUserRequest(text);
     geminiClient.sendText(text);
     appendMessage('user', text);
     textInput.value = '';
@@ -2750,6 +3257,10 @@ function resetUI() {
   toolCallCounter = 0;
   lastAckRow = null;
   ackCount = 0;
+  pendingToolRows.clear();
+  lastUserRequestText = '';
+  userTurnSeq = 0;
+  awaitingToolsForTurnSeq = -1;
 }
 
 // --- Settings Modal and Theme Toggle ---

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=37" />
+    <link rel="stylesheet" href="/static/style.css?v=38" />
   </head>
   <body>
     <div class="container">
@@ -159,15 +159,18 @@
                         </div>
                       </div>
                     </div>
-                    <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
-                      <canvas id="robot-twin-canvas"></canvas>
-                      <div class="twin-hud">
-                        <span class="twin-title">🤖 Robot Twin</span>
-                        <span id="twin-action" class="twin-action">Idle</span>
-                        <span id="twin-status" class="twin-status hidden"></span>
+                    <div id="robot-twin-slot" class="robot-twin-slot">
+                      <div id="robot-twin" class="robot-twin" title="Robot twin — drag to orbit, scroll to zoom">
+                        <canvas id="robot-twin-canvas"></canvas>
+                        <div class="twin-hud">
+                          <span class="twin-title">🤖 Robot Twin</span>
+                          <span id="twin-action" class="twin-action">Idle</span>
+                          <span id="twin-status" class="twin-status hidden"></span>
+                        </div>
+                        <button id="twin-expand" class="twin-btn twin-expand" title="Expand 3D view (4×)" aria-expanded="false" aria-label="Expand 3D view"><svg class="icon-expand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><svg class="icon-collapse" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+                        <button id="twin-switch" class="twin-btn twin-switch" title="Switch robot">🐕</button>
+                        <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                       </div>
-                      <button id="twin-switch" class="twin-btn twin-switch" title="Switch robot">🐕</button>
-                      <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                     </div>
                   </div>
                 </div>
@@ -402,8 +405,8 @@
     </div>
     <script src="/static/media-handler.js?v=6"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=46"></script>
+    <script src="/static/agent-ui.js?v=47"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=8"></script>
+    <script type="module" src="/static/robot-twin.js?v=9"></script>
   </body>
 </html>
