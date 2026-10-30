@@ -79,6 +79,15 @@ KNOWN_MODELS: dict[str, ModelSpec] = {
         thinking_level="low",
         response_modalities=("TEXT",),  # 1007 on AUDIO; speech comes from our TTS
     ),
+    # Public Preview on Gemini Enterprise Agent Platform (Vertex AI global
+    # generateContent); runs via CascadeClient (Vertex ASR -> ER2 REST -> TTS)
+    # when selected directly, or via ErOrchestrator in gemini-3.8-live+er2.
+    "gemini-robotics-er-2-preview": ModelSpec(
+        name="gemini-robotics-er-2-preview",
+        thinking_level="low",
+        response_modalities=("TEXT",),
+        heartbeat_native=True,
+    ),
     # Cascade: Gemini ASR (gemini-3.5-transcribe-live) -> gemini-4-argon via
     # generateContent -> our TTS (model/cascade_client.py). Not a Live model.
     "gemini-4-argon": ModelSpec(

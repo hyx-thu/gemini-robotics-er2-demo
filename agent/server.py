@@ -52,6 +52,7 @@ from embodiment.spot import spot_sim_embodiment as spot_sim_embodiment_lib
 from embodiment.tinybot import tinybot_embodiment as tinybot_embodiment_lib
 from model import live_api_client
 from model import tts_client as tts_client_lib
+from model import vertex_rest
 from tool import tools as tools_lib
 
 
@@ -459,13 +460,33 @@ async def api_agent_config(
     else:
       decls.append(t)
 
-  # Which backend serves the selected model (Vertex AI via OAuth, or the
-  # Gemini Developer API via API key) — shown in Settings → Agent Config.
-  if live_api_client.uses_vertex(config.model):
-    service_address = (
-        f"{os.environ.get('VERTEX_LOCATION', 'us-central1')}-aiplatform.googleapis.com"
-        " (Vertex AI · OAuth)"
+  # Which backend serves the selected model (Gemini Platform / Vertex AI via
+  # OAuth, or the Gemini Developer API via API key) — shown in Settings → Agent
+  # Config.
+  target_model = model or config.model
+  orch_model = live_api_client.orchestrator_model(target_model)
+  if live_api_client.uses_vertex(target_model):
+    loc = live_api_client.vertex_live_location(target_model)
+    host = (
+        "aiplatform.googleapis.com"
+        if loc == "global"
+        else f"{loc}-aiplatform.googleapis.com"
     )
+    if orch_model and vertex_rest.uses_vertex(orch_model):
+      service_address = (
+          f"{host} + aiplatform.googleapis.com/{orch_model}"
+          " (Gemini Platform / Vertex AI · OAuth)"
+      )
+    else:
+      service_address = f"{host} (Gemini Platform / Vertex AI · OAuth)"
+  elif vertex_rest.uses_vertex(target_model):
+    loc = os.environ.get("VERTEX_GENAI_LOCATION", "global")
+    host = (
+        "aiplatform.googleapis.com"
+        if loc == "global"
+        else f"{loc}-aiplatform.googleapis.com"
+    )
+    service_address = f"{host} (Gemini Platform / Vertex AI · OAuth)"
   else:
     service_address = "generativelanguage.googleapis.com (Developer API · key)"
 

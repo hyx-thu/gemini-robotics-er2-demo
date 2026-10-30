@@ -292,14 +292,32 @@ class VertexLiveApiClient:
     return stream
 
 
-# Models served from Vertex AI (OAuth). Everything else stays on the Gemini
-# Developer API (API key). gemini-robotics-er-2 is not on Vertex yet;
+# Models served from Gemini Enterprise Agent Platform / Vertex AI (OAuth).
+# Everything else stays on the Gemini Developer API (API key).
 # gemini-3.8-live-extended-thinking is not a Vertex publisher model and Vertex
 # rejects custom thinking levels on gemini-3.8-live unless allowlisted.
-VERTEX_LIVE_MODELS = frozenset({"gemini-3.8-live"})
+# If a Vertex Live model rejects setup (e.g. project not yet allowlisted for a
+# preview Live model), disable_vertex_live() switches it to AI Studio for the
+# remainder of the process.
+VERTEX_LIVE_MODELS = frozenset({
+    "gemini-3.8-live",
+    "gemini-robotics-er-2-streaming-preview",
+})
+
+# Per-model Vertex Live location (gemini-robotics-er-2-streaming-preview is
+# configured on global aiplatform.googleapis.com; gemini-3.8-live uses
+# VERTEX_LOCATION, default us-central1).
+VERTEX_LIVE_LOCATIONS: dict[str, str] = {
+    "gemini-robotics-er-2-streaming-preview": "global",
+}
+
+_disabled_live_models: set[str] = set()
 
 # Non-Live LLMs run as a cascade: Gemini ASR -> generateContent -> our TTS.
-CASCADE_MODELS = frozenset({"gemini-4-argon"})
+CASCADE_MODELS = frozenset({
+    "gemini-4-argon",
+    "gemini-robotics-er-2-preview",
+})
 
 # Composite modes: "<live model>+<tag>" = the Live model talks to the user and
 # delegates robot task orchestration to a non-streaming model used as a tool.
@@ -322,12 +340,32 @@ def orchestrator_model(model: str) -> str | None:
   return pair[1] if pair else None
 
 
+def vertex_live_location(model: str) -> str:
+  """Return the Vertex AI location for a Live model."""
+  import os  # pylint: disable=g-import-not-at-top
+  w = wire_model(model)
+  if w in VERTEX_LIVE_LOCATIONS:
+    return os.environ.get("VERTEX_ER_LIVE_LOCATION", VERTEX_LIVE_LOCATIONS[w])
+  return os.environ.get("VERTEX_LOCATION", "us-central1")
+
+
+def disable_vertex_live(model: str, reason: str) -> None:
+  """Disable Vertex Live for ``model`` and fall back to AI Studio for this process."""
+  w = wire_model(model)
+  if w not in _disabled_live_models:
+    _disabled_live_models.add(w)
+    logger.warning(
+        "Vertex Live disabled for %s -> AI Studio fallback (%s)", w, reason
+    )
+
+
 def uses_vertex(model: str) -> bool:
   """Whether this model should be served from Vertex AI."""
   import os  # pylint: disable=g-import-not-at-top
   if os.environ.get("LIVE_BACKEND", "").lower() == "aistudio":
     return False
-  return wire_model(model) in VERTEX_LIVE_MODELS
+  w = wire_model(model)
+  return w in VERTEX_LIVE_MODELS and w not in _disabled_live_models
 
 
 def make_client(model: str, api_key: str | None):
@@ -337,9 +375,14 @@ def make_client(model: str, api_key: str | None):
     from model import cascade_client  # pylint: disable=g-import-not-at-top
     return cascade_client.CascadeClient(model, api_key)
   if uses_vertex(model):
-    return VertexLiveApiClient(
-        project=os.environ.get("VERTEX_PROJECT")
-        or os.environ.get("GOOGLE_CLOUD_PROJECT"),
-        location=os.environ.get("VERTEX_LOCATION", "us-central1"),
-    )
+    try:
+      return VertexLiveApiClient(
+          project=os.environ.get("VERTEX_PROJECT")
+          or os.environ.get("GOOGLE_CLOUD_PROJECT"),
+          location=vertex_live_location(model),
+      )
+    except Exception as e:  # pylint: disable=broad-except
+      disable_vertex_live(model, f"init failed: {e}")
+      if not api_key:
+        raise
   return GeminiLiveApiClient(api_key=api_key)

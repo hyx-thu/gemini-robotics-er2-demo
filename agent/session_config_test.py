@@ -174,4 +174,43 @@ class ModelCapabilityTest(unittest.TestCase):
         self.assertIn("LANGUAGE RULE", stripped)
         self.assertIn("Always speak and reply in the SAME language", stripped)
 
+  def test_er2_routes_to_gemini_platform_vertex(self):
+    import os
+    from unittest import mock
+    from model import live_api_client
+    from model import vertex_rest
+
+    self.assertIn("gemini-robotics-er-2-preview", vertex_rest.VERTEX_REST_MODELS)
+    self.assertIn("gemini-robotics-er-2-preview", live_api_client.CASCADE_MODELS)
+    self.assertIn(
+        "gemini-robotics-er-2-streaming-preview",
+        live_api_client.VERTEX_LIVE_MODELS,
+    )
+    self.assertEqual(
+        "global",
+        live_api_client.vertex_live_location(
+            "models/gemini-robotics-er-2-streaming-preview"
+        ),
+    )
+    with mock.patch.dict(
+        os.environ,
+        {"VERTEX_PROJECT": "test-proj", "LIVE_BACKEND": ""},
+        clear=False,
+    ), mock.patch.object(vertex_rest, "_token", return_value="tok"):
+      self.assertTrue(
+          vertex_rest.uses_vertex("models/gemini-robotics-er-2-preview")
+      )
+      url, headers, backend = vertex_rest.endpoint(
+          "models/gemini-robotics-er-2-preview", "generateContent", "k"
+      )
+      self.assertEqual("vertex", backend)
+      self.assertEqual(
+          "https://aiplatform.googleapis.com/v1/projects/test-proj/"
+          "locations/global/publishers/google/models/"
+          "gemini-robotics-er-2-preview:generateContent",
+          url,
+      )
+      self.assertEqual("Bearer tok", headers["Authorization"])
+
+
 

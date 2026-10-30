@@ -1,13 +1,14 @@
 """Vertex-first routing for non-Live (REST generateContent) Gemini calls.
 
-User preference: use the Vertex AI API wherever the model is available there,
-and the Gemini Developer API (AI Studio, API key) only as a fallback.
+User preference: use the Gemini Enterprise Agent Platform (Vertex AI API,
+aiplatform.googleapis.com) wherever the model is available there, and the
+Gemini Developer API (AI Studio, API key) only as a fallback.
 
-Verified on Vertex (project elated-terminal-503102-u0, 2026-10-16) - all on
-the ``global`` location only (us-central1 returns 404):
+Verified on Gemini Enterprise Agent Platform / Vertex AI (project
+elated-terminal-503102-u0) - all on the ``global`` location:
+  gemini-robotics-er-2-preview (Public Preview on Gemini Platform),
   gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts, gemini-4-argon,
   gemini-3.5-flash-lite, gemini-3.8-flash, gemini-3.5-transcribe.
-Not on Vertex: gemini-robotics-er-2-preview (stays on AI Studio).
 
 Auth is ADC (Cloud Run service account, needs roles/aiplatform.user). If a
 Vertex call fails with an auth / not-found style error, that model is
@@ -25,6 +26,7 @@ import urllib.error
 logger = logging.getLogger(__name__)
 
 VERTEX_REST_MODELS = frozenset({
+    "gemini-robotics-er-2-preview",
     "gemini-3.8-flash-tts",
     "gemini-3.8-flash-lite-tts",
     "gemini-4-argon",

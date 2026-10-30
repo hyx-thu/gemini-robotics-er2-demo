@@ -303,6 +303,7 @@ class SessionManager:
     # resume the conversation (plan, history) when the socket is replaced.
     self._resumption_handle: str | None = None
     self._setup_complete = asyncio.Event()
+    self._ever_setup_complete = False
     self._ui_queue: asyncio.Queue | None = None
     self._reconnect_count = 0
     # Incremented for every socket we open. Callbacks from a superseded
@@ -577,6 +578,7 @@ class SessionManager:
         if handle:
           self._resumption_handle = handle
       if "setupComplete" in msg:
+        self._ever_setup_complete = True
         self.loop.call_soon_threadsafe(self._setup_complete.set)
     self.loop.call_soon_threadsafe(
         self.bus.publish_nowait,
@@ -785,17 +787,10 @@ class SessionManager:
     except Exception:  # pylint: disable=broad-except
       pass
 
-  async def _open_stream(self, resume_handle: str | None) -> bool:
-    """Create a socket, send setup and wait for setupComplete."""
-    # Hold the send lock while swapping sockets: the audio/video sender
-    # tasks follow ``self.stream`` dynamically and must not slip a
-    # realtimeInput frame onto the new socket before its setup message.
-    async with self._stream_lock:
-      old = self.stream
-      stream = await self._start_stream()
-      if old is not None and old is not stream:
-        await self._close_stream(old)
-      await self._send_setup(resume_handle)
+  async def _wait_for_setup_complete(
+      self, stream, resume_handle: str | None = None
+  ) -> bool:
+    """Wait up to _SETUP_COMPLETE_TIMEOUT_S for setupComplete on ``stream``."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + self._SETUP_COMPLETE_TIMEOUT_S
     while not self._setup_complete.is_set():
@@ -823,6 +818,19 @@ class SessionManager:
         pass
     return True
 
+  async def _open_stream(self, resume_handle: str | None) -> bool:
+    """Create a socket, send setup and wait for setupComplete."""
+    # Hold the send lock while swapping sockets: the audio/video sender
+    # tasks follow ``self.stream`` dynamically and must not slip a
+    # realtimeInput frame onto the new socket before its setup message.
+    async with self._stream_lock:
+      old = self.stream
+      stream = await self._start_stream()
+      if old is not None and old is not stream:
+        await self._close_stream(old)
+      await self._send_setup(resume_handle)
+    return await self._wait_for_setup_complete(stream, resume_handle)
+
   async def _reconnect(self, max_retries: int = 3) -> bool:
     """Replace the Gemini stream with exponential backoff.
 
@@ -830,11 +838,31 @@ class SessionManager:
     conversation and plan context) and falls back to a fresh session.
     Returns False when the stream cannot be re-established.
     """
+    dead = self.stream
+    close_code = getattr(dead, "close_code", None)
+    close_reason = getattr(dead, "close_reason", "") or ""
+    if getattr(dead, "closed_locally", False) and close_code is None:
+      close_reason = close_reason or "closed locally (stall detected)"
+
+    vertex_fallback = False
+    if (
+        not getattr(self, "_ever_setup_complete", False)
+        and isinstance(self.client, live_api_client.VertexLiveApiClient)
+        and self.api_key
+    ):
+      live_api_client.disable_vertex_live(
+          self.model, close_reason or f"code={close_code}"
+      )
+      self.client = live_api_client.GeminiLiveApiClient(api_key=self.api_key)
+      vertex_fallback = True
+
     now = time.monotonic()
     last_rc = getattr(self, '_last_reconnect_time', 0)
     rapid_count = getattr(self, '_rapid_reconnect_count', 0)
 
-    if now - last_rc < 5.0:
+    if vertex_fallback:
+      rapid_count = 0
+    elif now - last_rc < 5.0:
       rapid_count += 1
     else:
       rapid_count = 0
@@ -850,11 +878,6 @@ class SessionManager:
       })
       return False
 
-    dead = self.stream
-    close_code = getattr(dead, "close_code", None)
-    close_reason = getattr(dead, "close_reason", "") or ""
-    if getattr(dead, "closed_locally", False) and close_code is None:
-      close_reason = close_reason or "closed locally (stall detected)"
     self._reconnect_count += 1
     # The old socket is gone: stale speech/turn flags must not survive it.
     self._reset_turn_state()
@@ -870,7 +893,7 @@ class SessionManager:
       )
 
     for attempt in range(max_retries):
-      wait_time = 2**attempt
+      wait_time = 0 if (vertex_fallback and attempt == 0) else 2**attempt
       if quota_exhausted:
         wait_time = max(wait_time, 6 * (attempt + 1))
       logger.warning(
@@ -1075,6 +1098,19 @@ class SessionManager:
 
     await self._send_setup()
     self._last_server_msg_at = time.monotonic()
+    if (
+        isinstance(self.client, live_api_client.VertexLiveApiClient)
+        and self.api_key
+    ):
+      if not await self._wait_for_setup_complete(self.stream):
+        reason = (
+            getattr(self.stream, "close_reason", "")
+            or f"code={getattr(self.stream, 'close_code', None)}"
+        )
+        live_api_client.disable_vertex_live(self.model, reason)
+        self.client = live_api_client.GeminiLiveApiClient(api_key=self.api_key)
+        await self._open_stream(None)
+        self._last_server_msg_at = time.monotonic()
 
     # --- Start input tasks and heartbeat ---
 

@@ -261,6 +261,50 @@ class StreamRecoveryTest(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(sm.client.streams[0].closed_locally)
     self.assertTrue(sm.decision_making.user_speaking.is_set())
 
+  async def test_vertex_live_setup_rejection_falls_back_to_aistudio(self):
+    from unittest import mock
+    from model import live_api_client
+
+    sm, _ = await _make_manager(["die_before_setup"], self)
+    sm.model = "models/gemini-robotics-er-2-streaming-preview"
+    live_api_client._disabled_live_models.discard(  # pylint: disable=protected-access
+        "gemini-robotics-er-2-streaming-preview"
+    )
+    self.addCleanup(
+        live_api_client._disabled_live_models.discard,  # pylint: disable=protected-access
+        "gemini-robotics-er-2-streaming-preview",
+    )
+
+    class FakeVertexLiveClient(live_api_client.VertexLiveApiClient):
+      def __init__(self):  # pylint: disable=super-init-not-called
+        self.streams = []
+
+      def create_stream(self):
+        s = FakeStream("die_before_setup")
+        self.streams.append(s)
+        return s
+
+    fallback_client = FakeClient(["ok"])
+    sm.client = FakeVertexLiveClient()
+    await sm._start_stream()  # pylint: disable=protected-access
+    dead = sm.stream
+    dead.close_code = 1008
+    dead.close_reason = "Publisher Model not allowlisted"
+    dead.closed = True
+
+    with mock.patch.object(
+        live_api_client, "GeminiLiveApiClient", return_value=fallback_client
+    ):
+      ok = await sm._reconnect()  # pylint: disable=protected-access
+
+    self.assertTrue(ok)
+    self.assertIs(sm.client, fallback_client)
+    self.assertIn(
+        "gemini-robotics-er-2-streaming-preview",
+        live_api_client._disabled_live_models,  # pylint: disable=protected-access
+    )
+    self.assertTrue(sm._ever_setup_complete)  # pylint: disable=protected-access
+
 
 if __name__ == "__main__":
   unittest.main()

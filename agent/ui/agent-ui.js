@@ -40,12 +40,13 @@ let agentDropdown = document.getElementById('agentDropdown');
 const ENDPOINT_MODELS = {
   gemini_live_api: [
     { model: 'models/gemini-robotics-er-2-streaming-preview', label: 'models/gemini-robotics-er-2-streaming-preview', modality: 'TEXT', textOnly: true },
+    { model: 'models/gemini-robotics-er-2-preview', label: 'models/gemini-robotics-er-2-preview (Gemini Platform)', modality: 'TEXT', textOnly: true },
     { model: 'models/gemini-3.8-live', label: 'models/gemini-3.8-live', modality: 'AUDIO', textOnly: false },
     { model: 'models/gemini-3.8-live-extended-thinking', label: 'models/gemini-3.8-live-extended-thinking', modality: 'AUDIO', textOnly: false },
     // Cascade: Gemini ASR -> gemini-4-argon (generateContent) -> server TTS.
     { model: 'models/gemini-4-argon', label: 'gemini-4-argon (ASR + TTS cascade)', modality: 'TEXT', textOnly: true },
     // Gemini 3.8 Live for voice + light tools; ER2 (non-streaming) plans robot tasks.
-    { model: 'models/gemini-3.8-live+er2', label: 'gemini-3.8-live + ER2 planner', modality: 'AUDIO', textOnly: false }
+    { model: 'models/gemini-3.8-live+er2', label: 'gemini-3.8-live + ER2 planner (Gemini Platform)', modality: 'AUDIO', textOnly: false }
   ]
 };
 
