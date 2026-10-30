@@ -437,11 +437,11 @@ function init() {
 
   function syncReal2SimBar() {
     if (!R) return;
-    const specEl = document.getElementById('twin-real2sim-spec');
-    if (specEl) specEl.textContent = R.spec || R.label || R.name;
-    document.querySelectorAll('[data-real2sim-rig]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-real2sim-rig') === R.name);
-    });
+    const sel = document.getElementById('twin-real2sim-select');
+    if (sel) {
+      sel.value = R.name;
+      sel.title = `${R.label || R.name} — ${R.spec || ''}`;
+    }
   }
 
   function activateRig(name, { keepView = false } = {}) {
@@ -708,41 +708,54 @@ function init() {
       setExpanded(!panel.classList.contains('expanded'));
     };
   }
-  // [INTERNAL-TEST-ONLY: Real2Sim] Wire expanded-mode robot model selector chips & quick action tests
-  document.querySelectorAll('[data-real2sim-rig]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const rigName = btn.getAttribute('data-real2sim-rig');
-      if (rigName) activateRig(rigName);
+  // [INTERNAL-TEST-ONLY: Real2Sim] Wire expanded-mode robot model dropdown & quick action dropdown
+  const real2simBar = document.getElementById('twin-real2sim-bar');
+  if (real2simBar) {
+    ['pointerdown', 'mousedown', 'click'].forEach((evName) => {
+      real2simBar.addEventListener(evName, (e) => e.stopPropagation());
     });
-  });
-  document.querySelectorAll('[data-real2sim-demo]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+  }
+  const rigSelect = document.getElementById('twin-real2sim-select');
+  if (rigSelect) {
+    rigSelect.addEventListener('change', (e) => {
       e.stopPropagation();
-      const demo = btn.getAttribute('data-real2sim-demo');
-      if (demo === 'stand') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'stand', args: {}, result: {} } }));
-      } else if (demo === 'sit') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'sit', args: {}, result: {} } }));
-      } else if (demo === 'wave') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'high_wave' }, result: {} } }));
-      } else if (demo === 'shake') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'shake_hand' }, result: {} } }));
-      } else if (demo === 'heart') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'heart' }, result: {} } }));
-      } else if (demo === 'detect') {
-        window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 640, y: 520, label: 'red_cube' } }));
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'detect', args: { instruction: 'red cube' }, result: {} } }));
-      } else if (demo === 'pick_place') {
-        clearQueue();
-        window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 660, y: 540, label: 'target' } }));
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'pick', args: { grasp_x: 660, grasp_y: 540, grasp_part: 'body' }, result: {} } }));
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'place', args: { x: 420, y: 460 }, result: {} } }));
-      } else if (demo === 'drive') {
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'drive', args: { v_x: 0.45, v_y: 0, v_rot: 0.12, duration: 2.4 }, result: {} } }));
+      if (rigSelect.value) activateRig(rigSelect.value);
+    });
+  }
+  function triggerReal2SimDemo(demo) {
+    if (demo === 'stand') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'stand', args: {}, result: {} } }));
+    } else if (demo === 'sit') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'sit', args: {}, result: {} } }));
+    } else if (demo === 'wave') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'high_wave' }, result: {} } }));
+    } else if (demo === 'shake') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'shake_hand' }, result: {} } }));
+    } else if (demo === 'heart') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'heart' }, result: {} } }));
+    } else if (demo === 'detect') {
+      window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 640, y: 520, label: 'red_cube' } }));
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'detect', args: { instruction: 'red cube' }, result: {} } }));
+    } else if (demo === 'pick_place') {
+      clearQueue();
+      window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 660, y: 540, label: 'target' } }));
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'pick', args: { grasp_x: 660, grasp_y: 540, grasp_part: 'body' }, result: {} } }));
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'place', args: { x: 420, y: 460 }, result: {} } }));
+    } else if (demo === 'drive') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'drive', args: { v_x: 0.45, v_y: 0, v_rot: 0.12, duration: 2.4 }, result: {} } }));
+    }
+  }
+  const demoSelect = document.getElementById('twin-real2sim-demo-select');
+  if (demoSelect) {
+    demoSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const demo = demoSelect.value;
+      if (demo) {
+        triggerReal2SimDemo(demo);
+        demoSelect.value = '';
       }
     });
-  });
+  }
   activateRig(localStorage.getItem('twin_rig') || 'dog');
 
   // ----------------------------------------------------------- main loop --

@@ -2675,13 +2675,14 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   right: 8px;
   bottom: 8px;
   z-index: 20;
-  flex-direction: column;
-  gap: 5px;
-  padding: 7px 9px;
-  border-radius: 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(66, 133, 244, 0.28);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
@@ -2689,124 +2690,67 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .dark-theme .twin-real2sim-bar {
   background: rgba(14, 19, 26, 0.86);
   border-color: rgba(138, 180, 248, 0.28);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.48);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 .robot-twin.expanded .twin-real2sim-bar {
   display: flex;
   animation: fadeIn 0.18s ease-out;
 }
-.real2sim-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-width: 0;
-}
 .real2sim-badge {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1.5px 7px;
+  gap: 3px;
+  padding: 2px 6px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.45px;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   color: #b06000;
   background: linear-gradient(135deg, rgba(251, 188, 4, 0.22), rgba(161, 66, 244, 0.16));
   border: 1px solid rgba(242, 153, 74, 0.55);
   cursor: help;
+  white-space: nowrap;
 }
 .dark-theme .real2sim-badge {
   color: #fdd663;
   background: linear-gradient(135deg, rgba(251, 188, 4, 0.20), rgba(161, 66, 244, 0.22));
   border-color: rgba(253, 214, 99, 0.45);
 }
-.real2sim-spec {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.real2sim-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.real2sim-chip {
-  flex: 1 1 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2.5px;
-  padding: 3px 5.5px;
-  border-radius: 999px;
+.real2sim-select,
+.real2sim-demo-select {
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 7px;
   border: 1px solid var(--border-color);
   background: var(--bg-surface);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.14s ease;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
-.real2sim-chip:hover {
-  border-color: var(--blue);
-  background: rgba(26, 115, 232, 0.08);
+.real2sim-select {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.real2sim-chip.active {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.32);
-}
-.dark-theme .real2sim-chip.active {
-  color: #0b0f14;
-}
-.real2sim-demos {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding-top: 4px;
-  border-top: 1px dashed var(--border-color);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.real2sim-demos::-webkit-scrollbar {
-  display: none;
-}
-.real2sim-demos-label {
-  flex: none;
-  font-size: 9.5px;
-  font-weight: 700;
+.real2sim-demo-select {
+  flex: 0 0 76px;
+  max-width: 76px;
+  padding: 0 4px;
+  font-size: 10.5px;
   color: var(--text-secondary);
-  margin-right: 2px;
 }
-.real2sim-demo-btn {
-  flex: none;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 9.5px;
-  font-weight: 600;
-  line-height: 1.25;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.14s ease;
-}
-.real2sim-demo-btn:hover {
-  color: var(--blue);
+.real2sim-select:hover,
+.real2sim-demo-select:hover,
+.real2sim-select:focus,
+.real2sim-demo-select:focus {
   border-color: var(--blue);
-  background: rgba(26, 115, 232, 0.08);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.14);
 }

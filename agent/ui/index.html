@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=39" />
+    <link rel="stylesheet" href="/static/style.css?v=40" />
   </head>
   <body>
     <div class="container">
@@ -172,28 +172,25 @@
                         <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
                         <!-- [INTERNAL-TEST-ONLY: Real2Sim] Test-only feature: skip when merging to main/stable -->
                         <div id="twin-real2sim-bar" class="twin-real2sim-bar" aria-label="Gemini Real2Sim robot model selector (Internal Test Feature)">
-                          <div class="real2sim-head">
-                            <span class="real2sim-badge" title="Internal test-only feature (stays in test version, skipped when merging to stable): Gemini Real2Sim cross-embodiment transfer">INTERNAL · Real2Sim</span>
-                            <span id="twin-real2sim-spec" class="real2sim-spec">Quadruped + 6-DOF Top Arm</span>
-                          </div>
-                          <div class="real2sim-chips" role="tablist" aria-label="Select robot embodiment">
-                            <button type="button" class="real2sim-chip active" data-real2sim-rig="dog" title="Spot (Quadruped + 6-DOF Arm)">🐕 Spot</button>
-                            <button type="button" class="real2sim-chip" data-real2sim-rig="unitree_r1" title="Unitree R1 (26-DOF MJCF/URDF + Dual 15-DOF 5-Finger Dex5 Hands)">🦾 宇树 R1</button>
-                            <button type="button" class="real2sim-chip" data-real2sim-rig="rby1" title="Rainbow Robotics RB-Y1 (28-DOF Wheeled Dual-Arm Manipulator)">🤖 RB-Y1</button>
-                            <button type="button" class="real2sim-chip" data-real2sim-rig="lg_cloid" title="LG CLOiD (36-DOF Home Humanoid + 5-Finger Hands + OLED Face)">✨ LG CLOiD</button>
-                            <button type="button" class="real2sim-chip" data-real2sim-rig="humanoid" title="Stylised Biped Humanoid">🧍 Humanoid</button>
-                          </div>
-                          <div class="real2sim-demos">
-                            <span class="real2sim-demos-label">Action Test:</span>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="stand" title="Test Stand">🧍 Stand</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="wave" title="Test Wave Gesture">👋 Wave</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="shake" title="Test Handshake Gesture">🤝 Shake</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="heart" title="Test Heart Gesture">🫶 Heart</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="detect" title="Test Detect">🔍 Detect</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="pick_place" title="Test Pick &amp; Place">🦾 Pick &amp; Place</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="drive" title="Test Walk / Drive">🚶 Walk</button>
-                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="sit" title="Test Sit">🪑 Sit</button>
-                          </div>
+                          <span class="real2sim-badge" title="Internal test-only feature (stays in test version, skipped when merging to stable): Gemini Real2Sim cross-embodiment transfer">INTERNAL · Real2Sim</span>
+                          <select id="twin-real2sim-select" class="real2sim-select" aria-label="Select Real2Sim robot embodiment" title="Switch Real2Sim robot model">
+                            <option value="dog">🐕 Spot (Quadruped · 6-DOF Arm)</option>
+                            <option value="unitree_r1">🦾 宇树 R1 (26-DOF · 5F Dex5 Hands)</option>
+                            <option value="rby1">🤖 RB-Y1 (28-DOF · Rainbow Dual-Arm)</option>
+                            <option value="lg_cloid">✨ LG CLOiD (36-DOF · OLED + 5F Hands)</option>
+                            <option value="humanoid">🧍 Humanoid (Stylised Biped)</option>
+                          </select>
+                          <select id="twin-real2sim-demo-select" class="real2sim-demo-select" aria-label="Run quick action test on current robot" title="Quick action preview on current robot">
+                            <option value="">⚡ 动作…</option>
+                            <option value="stand">🧍 Stand (站立)</option>
+                            <option value="wave">👋 Wave (挥手)</option>
+                            <option value="shake">🤝 Shake (握手)</option>
+                            <option value="heart">🫶 Heart (比心)</option>
+                            <option value="detect">🔍 Detect (检测)</option>
+                            <option value="pick_place">🦾 Pick &amp; Place (抓放)</option>
+                            <option value="drive">🚶 Walk / Drive (移动)</option>
+                            <option value="sit">🪑 Sit (坐下)</option>
+                          </select>
                         </div>
                       </div>
                     </div>
@@ -432,6 +429,6 @@
     <script src="/static/agent-client.js?v=2"></script>
     <script src="/static/agent-ui.js?v=48"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=11"></script>
+    <script type="module" src="/static/robot-twin.js?v=12"></script>
   </body>
 </html>
