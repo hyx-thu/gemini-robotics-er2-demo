@@ -16,6 +16,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
+// [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD)
+import { buildReal2SimRigs } from './real2sim-rigs.js?v=2';
 
 const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
@@ -132,7 +134,8 @@ function buildDog() {
   let pawMode = 'shake';
 
   return {
-    name: 'dog', icon: '🐕', group, gripPoint, cone, flashMat: stripe.material,
+    name: 'dog', icon: '🐕', label: 'Spot', spec: 'Quadruped + 6-DOF Top Arm',
+    group, gripPoint, cone, flashMat: stripe.material,
     STAND_H, SIT_H, STOW, ik,
     ready: () => ik(0.62, STAND_H + 0.32, 0, -0.25),
     carry: () => ik(0.7, STAND_H + 0.36, 0, -0.35),
@@ -164,6 +167,12 @@ function buildDog() {
         [0.4, () => {}],
         [1.8, () => { tgt.pawAmp = 1; }],
         [0.8, () => { tgt.pawAmp = 0; tgt.paw = 0; tgt.roll = 0; ctx.restorePosture(); }],
+      ],
+      heart: (tgt, setArm, ctx) => [
+        ...ctx.stowArm(),
+        [0.7, () => { tgt.rear = 1; tgt.grip = 0.6; }],
+        [1.8, () => { setArm({ yaw: 0, s: 1.65, e: -1.1, w: -0.4 }); }],
+        [0.8, () => { tgt.rear = 0; ctx.restoreArm(); ctx.restorePosture(); }],
       ],
     },
     update(c) {
@@ -282,7 +291,8 @@ function buildHumanoid() {
   const tmpV = new THREE.Vector3(), tmpM = new THREE.Matrix4();
 
   return {
-    name: 'humanoid', icon: '🧍', group, gripPoint, cone, flashMat: chest.material,
+    name: 'humanoid', icon: '🧍', label: 'Humanoid', spec: 'Stylised Biped + 2-Arm Manipulator',
+    group, gripPoint, cone, flashMat: chest.material,
     STAND_H, SIT_H, STOW, ik,
     ready: () => ik(0.45, STAND_H + 0.55, 0.25, -0.3),
     carry: () => ik(0.42, STAND_H + 0.62, 0.22, -0.2),
@@ -317,6 +327,11 @@ function buildHumanoid() {
         ...[1.17, 0.93, 1.17, 0.93, 1.17, 1.05].map(e => [0.2, () => { tgt.e = e; }]),
         [0.4, () => { tgt.grip = 1; }],
         [0.7, () => { ctx.restoreArm(); tgt.grip = 0; tgt.pitch = 0; tgt.hp = 0; }],
+      ],
+      heart: (tgt, setArm, ctx) => [
+        [0.7, () => { setArm({ yaw: -0.5, s: 0.85, e: 1.35, w: -0.4 }); tgt.ls = 0.85; tgt.le = 1.35; tgt.hp = 0.08; }],
+        [1.8, () => { tgt.hp = -0.06; }],
+        [0.7, () => { ctx.restoreArm(); tgt.ls = -1.5; tgt.le = -0.15; tgt.hp = 0; }],
       ],
     },
     update(c) {
@@ -408,7 +423,9 @@ function init() {
   let ringUntil = 0;
 
   // ----------------------------------------------------------- rigs --------
-  const rigs = { dog: buildDog(), humanoid: buildHumanoid() };
+  // [INTERNAL-TEST-ONLY: Real2Sim] Include Unitree R1, Rainbow RB-Y1, and LG CLOiD rigs
+  const rigs = { dog: buildDog(), ...buildReal2SimRigs(THREE), humanoid: buildHumanoid() };
+  const RIG_ORDER = ['dog', 'unitree_r1', 'rby1', 'lg_cloid', 'humanoid'];
   for (const r of Object.values(rigs)) { scene.add(r.group); r.group.visible = false; }
   let R = null;
   const cur = {}, tgt = {};
@@ -416,25 +433,45 @@ function init() {
   const pos = new THREE.Vector2();
   let queue = [], step = null, pendingTarget = null;
 
-  function setArm(j) { Object.assign(tgt, { yaw: j.yaw, s: j.s, e: j.e, w: j.w }); }
+  function setArm(j) { if (j) Object.assign(tgt, j); }
+
+  function syncReal2SimBar() {
+    if (!R) return;
+    const specEl = document.getElementById('twin-real2sim-spec');
+    if (specEl) specEl.textContent = R.spec || R.label || R.name;
+    document.querySelectorAll('[data-real2sim-rig]').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-real2sim-rig') === R.name);
+    });
+  }
 
   function activateRig(name, { keepView = false } = {}) {
     const next = rigs[name] || rigs.dog;
-    if (R === next) return;
+    if (R === next) { syncReal2SimBar(); return; }
     const wasHeld = itemHeld;
     if (wasHeld) { scene.add(item); itemHeld = false; }
     if (R) R.group.visible = false;
     R = next; R.group.visible = true;
+    if (R.ensureLoaded) R.ensureLoaded();
     clearQueue(); gait = null; armStowed = true; sitting = false;
+    for (const k of Object.keys(tgt)) delete tgt[k];
+    for (const k of Object.keys(cur)) delete cur[k];
     Object.assign(tgt, R.defaults); Object.assign(cur, R.defaults);
     layoutTable(R.table);
-    if (pendingTarget) { pendingTarget = imageToTable(pendingTarget.ix, pendingTarget.iy); }
-    if (item.visible && !wasHeld && pendingTarget) item.position.set(pendingTarget.x, T.top + 0.045, pendingTarget.z);
+    if (!wasHeld) {
+      hideTable();
+      item.visible = false;
+      pendingTarget = null;
+      dropTo = null;
+      ring.material.opacity = 0;
+    }
     if (wasHeld) { armStowed = false; setArm(R.carry()); tgt.grip = 0.25; Object.assign(cur, tgt); grabItem(); }
     if (!keepView) { camera.position.copy(R.homeCam); controls.target.copy(R.homeTarget); controls.update(); }
     localStorage.setItem('twin_rig', R.name);
     const sw = document.getElementById('twin-switch');
-    if (sw) { sw.textContent = R.icon; sw.title = `Robot: ${R.name} — click to switch`; }
+    if (sw) { sw.textContent = R.icon; sw.title = `Robot: ${R.label || R.name} — click to switch`; }
+    const actEl = document.getElementById('twin-action');
+    if (actEl && !wasHeld) { actEl.textContent = 'Idle'; actEl.classList.remove('active'); }
+    syncReal2SimBar();
   }
 
   // Map 0-1000 image coordinates (camera looking at the table) to the table top.
@@ -483,30 +520,47 @@ function init() {
       wait(1.2, () => { showTable(); R.detectEnter(tgt, setArm); scanUntil = now() + 1.6; })]),
     pick: (a, r) => {
       const t = targetFrom(r && r.target, a.grasp_x, a.grasp_y) || pendingTarget || imageToTable(500, 500);
-      showTable();
+      showTable(18);
       if (!itemHeld) { item.visible = true; dropTo = null; item.position.set(t.x, T.top + 0.045, t.z); }
-      const above = t.y + 0.28;
+      const above = t.y + (R.approachH || 0.28);
+      const graspY = t.y + (R.graspH || 0.05);
       enqueue([...ensureStanding(), ...ensureDeployed(),
-        wait(0.4, () => { tgt.grip = 1; tgt.hp = -0.4; }),
-        wait(0.9, () => setArm(R.ik(t.x, above, t.z, -Math.PI / 2))),
-        wait(0.7, () => setArm(R.ik(t.x, t.y + 0.05, t.z, -Math.PI / 2))),
+        wait(0.35, () => {
+          setActionLabel('pick', a);
+          showTable(18);
+          if (!itemHeld) { item.visible = true; dropTo = null; item.position.set(t.x, T.top + 0.045, t.z); }
+          if (R.preparePick) R.preparePick(t.x, t.y, t.z);
+          tgt.grip = 1;
+          tgt.hp = -0.35;
+          if (R.look) R.look(tgt, 'down', 0.24);
+        }),
+        wait(0.85, () => setArm(R.ik(t.x, above, t.z, -Math.PI / 2))),
+        wait(0.7, () => setArm(R.ik(t.x, graspY, t.z, -Math.PI / 2))),
         wait(0.45, () => { tgt.grip = 0.25; }),
         wait(0.05, () => grabItem()),
-        wait(0.8, () => setArm(R.ik(t.x - 0.08, above + 0.05, t.z, -Math.PI / 2))),
-        wait(0.8, () => { setArm(R.carry()); tgt.hp = 0; }),
+        wait(0.75, () => setArm(R.ik(t.x - 0.05, above + 0.04, t.z, -Math.PI / 2))),
+        wait(0.75, () => { setArm(R.carry()); tgt.hp = 0; if ('head_pitch_joint' in tgt) tgt.head_pitch_joint = 0.08; if ('head_1' in tgt) tgt.head_1 = 0.18; if ('neck_pitch_joint' in tgt) tgt.neck_pitch_joint = 0.08; }),
       ]);
     },
     place: (a, r) => {
       const t = targetFrom(r && r.target, a.x, a.y) || pendingTarget || imageToTable(500, 300);
-      showTable(); showRing(t);
-      const above = t.y + 0.3;
+      const above = t.y + (R.approachH || 0.28);
+      const placeY = t.y + (R.graspH || 0.05) + 0.03;
       enqueue([...ensureStanding(), ...ensureDeployed(),
-        wait(1.0, () => { tgt.hp = -0.4; setArm(R.ik(t.x, above, t.z, -Math.PI / 2)); }),
-        wait(0.7, () => setArm(R.ik(t.x, t.y + 0.1, t.z, -Math.PI / 2))),
+        wait(0.9, () => {
+          setActionLabel('place', a);
+          showTable(14);
+          showRing(t);
+          if (!itemHeld && R.preparePick) R.preparePick(t.x, t.y, t.z);
+          tgt.hp = -0.35;
+          if (R.look) R.look(tgt, 'down', 0.22);
+          setArm(R.ik(t.x, above, t.z, -Math.PI / 2));
+        }),
+        wait(0.7, () => setArm(R.ik(t.x, placeY, t.z, -Math.PI / 2))),
         wait(0.4, () => { tgt.grip = 1; }),
         wait(0.05, () => releaseItem(t)),
         wait(0.7, () => setArm(R.ik(t.x - 0.05, above, t.z, -Math.PI / 2))),
-        wait(0.8, () => { setArm(R.ready()); tgt.grip = 0.2; tgt.hp = 0; }),
+        wait(0.8, () => { setArm(R.ready()); tgt.grip = 0.2; tgt.hp = 0; if ('head_pitch_joint' in tgt) tgt.head_pitch_joint = 0.08; if ('head_1' in tgt) tgt.head_1 = 0.18; if ('neck_pitch_joint' in tgt) tgt.neck_pitch_joint = 0.08; }),
       ]);
     },
     drive: (a) => {
@@ -577,7 +631,11 @@ function init() {
     if (name === 'pick' && a.grasp_part) label += ' · ' + String(a.grasp_part).slice(0, 24);
     if (name === 'look' && a.direction) label += ' · ' + a.direction;
     if (name === 'navigate' && a.waypoint) label += ' → ' + String(a.waypoint).slice(0, 30);
-    if (name === 'make_gesture') label = a.gesture === 'shake_hand' ? '🤝 Shake hand' : '👋 High wave';
+    if (name === 'make_gesture') {
+      label = a.gesture === 'shake_hand' ? '🤝 Shake hand'
+            : a.gesture === 'heart'      ? '🫶 Heart'
+            :                              '👋 High wave';
+    }
     actionEl.textContent = label; actionEl.classList.add('active');
   }
   window.addEventListener('robot-twin:tool', (ev) => {
@@ -585,7 +643,7 @@ function init() {
     const fn = actions[name];
     if (!fn) return;
     const res = (result && typeof result === 'object') ? result : {};
-    setActionLabel(name, args || {});
+    if (!step && queue.length === 0) setActionLabel(name, args || {});
     if (res.error || res.status === 'rejected' || res.status === 'error') { flashColor(0xea4335, 0.8); return; }
     fn(args || {}, res);
   });
@@ -614,10 +672,19 @@ function init() {
     if (actionEl) { actionEl.textContent = 'Idle'; actionEl.classList.remove('active'); }
     if (statusEl) statusEl.classList.add('hidden');
   });
+  window.addEventListener('robot-twin:rig-loaded', (ev) => {
+    const d = ev.detail || {};
+    if (R && d.name === R.name && itemHeld) R.gripPoint.add(item);
+  });
   const resetBtn = document.getElementById('twin-reset');
   if (resetBtn) resetBtn.onclick = () => { camera.position.copy(R.homeCam); controls.target.copy(R.homeTarget); controls.update(); };
   const switchBtn = document.getElementById('twin-switch');
-  if (switchBtn) switchBtn.onclick = () => activateRig(R.name === 'dog' ? 'humanoid' : 'dog');
+  if (switchBtn) {
+    switchBtn.onclick = () => {
+      const idx = RIG_ORDER.indexOf(R.name);
+      activateRig(RIG_ORDER[(idx + 1) % RIG_ORDER.length]);
+    };
+  }
   const expandBtn = document.getElementById('twin-expand');
   function setExpanded(exp) {
     panel.classList.toggle('expanded', exp);
@@ -625,6 +692,13 @@ function init() {
       expandBtn.setAttribute('aria-expanded', String(exp));
       expandBtn.title = exp ? 'Restore 3D view (1×)' : 'Expand 3D view (4×)';
       expandBtn.setAttribute('aria-label', exp ? 'Restore 3D view' : 'Expand 3D view');
+    }
+    if (exp) {
+      // [INTERNAL-TEST-ONLY: Real2Sim] Preload all CAD bundles when expanded so switching is instant
+      for (const r of Object.values(rigs)) {
+        if (r.ensureLoaded) r.ensureLoaded();
+      }
+      syncReal2SimBar();
     }
     resize();
   }
@@ -634,6 +708,41 @@ function init() {
       setExpanded(!panel.classList.contains('expanded'));
     };
   }
+  // [INTERNAL-TEST-ONLY: Real2Sim] Wire expanded-mode robot model selector chips & quick action tests
+  document.querySelectorAll('[data-real2sim-rig]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rigName = btn.getAttribute('data-real2sim-rig');
+      if (rigName) activateRig(rigName);
+    });
+  });
+  document.querySelectorAll('[data-real2sim-demo]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const demo = btn.getAttribute('data-real2sim-demo');
+      if (demo === 'stand') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'stand', args: {}, result: {} } }));
+      } else if (demo === 'sit') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'sit', args: {}, result: {} } }));
+      } else if (demo === 'wave') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'high_wave' }, result: {} } }));
+      } else if (demo === 'shake') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'shake_hand' }, result: {} } }));
+      } else if (demo === 'heart') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'make_gesture', args: { gesture: 'heart' }, result: {} } }));
+      } else if (demo === 'detect') {
+        window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 640, y: 520, label: 'red_cube' } }));
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'detect', args: { instruction: 'red cube' }, result: {} } }));
+      } else if (demo === 'pick_place') {
+        clearQueue();
+        window.dispatchEvent(new CustomEvent('robot-twin:target', { detail: { x: 660, y: 540, label: 'target' } }));
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'pick', args: { grasp_x: 660, grasp_y: 540, grasp_part: 'body' }, result: {} } }));
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'place', args: { x: 420, y: 460 }, result: {} } }));
+      } else if (demo === 'drive') {
+        window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'drive', args: { v_x: 0.45, v_y: 0, v_rot: 0.12, duration: 2.4 }, result: {} } }));
+      }
+    });
+  });
   activateRig(localStorage.getItem('twin_rig') || 'dog');
 
   // ----------------------------------------------------------- main loop --
@@ -653,7 +762,7 @@ function init() {
     requestAnimationFrame(frame);
     if (panel.offsetParent === null) return;
     resize();
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const dt = Math.min(clock.getDelta(), 0.15);
     t += dt;
     if (!step || t >= step.until) {
       step = queue.shift() || null;
@@ -661,7 +770,10 @@ function init() {
       else if (actionEl && !gait && actionEl.classList.contains('active') && t > idleAt) actionEl.classList.remove('active');
     }
     const k = 1 - Math.exp(-dt * 7);
-    for (const key of Object.keys(tgt)) cur[key] += (tgt[key] - cur[key]) * k;
+    for (const key of Object.keys(tgt)) {
+      if (!Number.isFinite(cur[key])) cur[key] = tgt[key];
+      else cur[key] += (tgt[key] - cur[key]) * k;
+    }
 
     let walking = 0;
     if (gait) {
@@ -687,7 +799,7 @@ function init() {
     table.visible = tableAmt > 0.01;
     table.scale.setScalar(Math.max(0.001, tableAmt));
     table.position.y = 0;
-    if (!itemHeld) item.visible = item.visible && tableAmt > 0.3;
+    if (!itemHeld && !tableShow && tableAmt < 0.05) item.visible = false;
     item.scale.setScalar(itemHeld ? 1 : Math.max(0.001, tableAmt));
     if (dropTo && !itemHeld) {
       item.position.lerp(dropTo, 1 - Math.exp(-dt * 10));

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=38" />
+    <link rel="stylesheet" href="/static/style.css?v=39" />
   </head>
   <body>
     <div class="container">
@@ -170,6 +170,31 @@
                         <button id="twin-expand" class="twin-btn twin-expand" title="Expand 3D view (4×)" aria-expanded="false" aria-label="Expand 3D view"><svg class="icon-expand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><svg class="icon-collapse" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
                         <button id="twin-switch" class="twin-btn twin-switch" title="Switch robot">🐕</button>
                         <button id="twin-reset" class="twin-btn" title="Reset view">⟲</button>
+                        <!-- [INTERNAL-TEST-ONLY: Real2Sim] Test-only feature: skip when merging to main/stable -->
+                        <div id="twin-real2sim-bar" class="twin-real2sim-bar" aria-label="Gemini Real2Sim robot model selector (Internal Test Feature)">
+                          <div class="real2sim-head">
+                            <span class="real2sim-badge" title="Internal test-only feature (stays in test version, skipped when merging to stable): Gemini Real2Sim cross-embodiment transfer">INTERNAL · Real2Sim</span>
+                            <span id="twin-real2sim-spec" class="real2sim-spec">Quadruped + 6-DOF Top Arm</span>
+                          </div>
+                          <div class="real2sim-chips" role="tablist" aria-label="Select robot embodiment">
+                            <button type="button" class="real2sim-chip active" data-real2sim-rig="dog" title="Spot (Quadruped + 6-DOF Arm)">🐕 Spot</button>
+                            <button type="button" class="real2sim-chip" data-real2sim-rig="unitree_r1" title="Unitree R1 (26-DOF MJCF/URDF + Dual 15-DOF 5-Finger Dex5 Hands)">🦾 宇树 R1</button>
+                            <button type="button" class="real2sim-chip" data-real2sim-rig="rby1" title="Rainbow Robotics RB-Y1 (28-DOF Wheeled Dual-Arm Manipulator)">🤖 RB-Y1</button>
+                            <button type="button" class="real2sim-chip" data-real2sim-rig="lg_cloid" title="LG CLOiD (36-DOF Home Humanoid + 5-Finger Hands + OLED Face)">✨ LG CLOiD</button>
+                            <button type="button" class="real2sim-chip" data-real2sim-rig="humanoid" title="Stylised Biped Humanoid">🧍 Humanoid</button>
+                          </div>
+                          <div class="real2sim-demos">
+                            <span class="real2sim-demos-label">Action Test:</span>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="stand" title="Test Stand">🧍 Stand</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="wave" title="Test Wave Gesture">👋 Wave</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="shake" title="Test Handshake Gesture">🤝 Shake</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="heart" title="Test Heart Gesture">🫶 Heart</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="detect" title="Test Detect">🔍 Detect</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="pick_place" title="Test Pick &amp; Place">🦾 Pick &amp; Place</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="drive" title="Test Walk / Drive">🚶 Walk</button>
+                            <button type="button" class="real2sim-demo-btn" data-real2sim-demo="sit" title="Test Sit">🪑 Sit</button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -407,6 +432,6 @@
     <script src="/static/agent-client.js?v=2"></script>
     <script src="/static/agent-ui.js?v=48"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=9"></script>
+    <script type="module" src="/static/robot-twin.js?v=11"></script>
   </body>
 </html>

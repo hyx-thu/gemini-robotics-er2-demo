@@ -40,6 +40,7 @@ import fastapi
 from fastapi import responses as fastapi_responses
 from fastapi import staticfiles as fastapi_staticfiles
 from fastapi.middleware import cors as cors_middleware
+from fastapi.middleware import gzip as gzip_middleware
 import uvicorn
 
 import session_config
@@ -994,6 +995,10 @@ def create_app(config: ServerConfig) -> fastapi.FastAPI:
       allow_credentials=True,
       allow_methods=["*"],
       allow_headers=["*"],
+  )
+  application.add_middleware(
+      gzip_middleware.GZipMiddleware,
+      minimum_size=1000,
   )
 
   if ui_dir:
