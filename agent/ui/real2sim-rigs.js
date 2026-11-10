@@ -674,46 +674,73 @@ function buildUnitreeR1Rig(THREE) {
     frameJoints.head_yaw_joint = cur.hy ?? 0;
     frameJoints.head_pitch_joint = -(cur.hp ?? 0) * 0.65;
 
-    // Co-speech head & bimanual gesture overlay
+    // Co-speech head & phrase-level 3D gesture overlay (relaxed low baseline + asymmetric outward arcs)
     const tb = (talk && talk.blend > 0.001 && (walkAmt || 0) < 0.05) ? talk.blend : 0;
     const te = tb ? talk.env : 0;
     const ta = tb * ((talk && talk.armScale) ?? 1);
     const tst = (talk && talk.style) || 'explain';
+    let gR = 0, gL = 0;
     if (tb > 0) {
-      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
-      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
-      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
-      let hYaw = 0, hPitch = 0, wYaw = Math.sin(t * 1.6) * 0.05 * tb, wRoll = 0;
-      let lSp = -0.48, lSr = 0.24, lSy = -0.28, lEl = -0.12, lWr = 0;
-      let rSp = -0.48, rSr = -0.24, rSy = 0.28, rEl = -0.12, rWr = 0;
+      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
+      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
+      let hYaw = 0, hPitch = 0, wYaw = 0, wRoll = 0;
+      // Relaxed low baseline (arms comfortably down at sides, never horizontal tray)
+      let lSp = 0.06, lSr = 0.22, lSy = -0.12, lEl = 0.76, lWr = 0;
+      let rSp = 0.06, rSr = -0.22, rSy = 0.12, rEl = 0.76, rWr = 0;
       if (tst === 'affirm') {
-        hPitch = (0.18 * te + 0.08 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
-        lSp = -0.52 - 0.12 * beatL; lSr = 0.26; lSy = -0.32; lEl = -0.18 - 0.14 * beatL;
-        rSp = -0.52 - 0.12 * beatR; rSr = -0.26; rSy = 0.32; rEl = -0.18 - 0.14 * beatR;
+        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.35), 1.3);
+        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.35 - 0.55), 1.3);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.17 * te + 0.08 * nodSoft) * tb;
+        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
+        wYaw = -0.05 * (gR - gL) * tb;
+        lSp = 0.06 - 0.54 * gL; lSr = 0.22 + 0.14 * gL; lSy = -0.12 + 0.28 * gL; lEl = 0.76 - 0.88 * gL; lWr = -0.30 * gL;
+        rSp = 0.06 - 0.54 * gR; rSr = -0.22 - 0.14 * gR; rSy = 0.12 - 0.28 * gR; rEl = 0.76 - 0.88 * gR; rWr =  0.30 * gR;
       } else if (tst === 'think') {
-        wRoll = 0.05 * tb;
-        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
-        hPitch = (-0.08 + 0.05 * te) * tb;
-        rSp = -0.82; rSr = -0.20; rSy = 0.48; rEl = -0.58 - 0.08 * beatR; rWr = 0.18;
-        lSp = -0.22; lSr = 0.22; lSy = -0.20; lEl = 0.42 - 0.08 * beatL;
+        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
+        gR = 0.85 + 0.15 * slowDrift;
+        gL = 0.05 * slowDrift;
+        wRoll = 0.04 * tb;
+        wYaw = 0.05 * tb;
+        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
+        hPitch = (-0.08 + 0.04 * te) * tb;
+        // Right hand thoughtfully near chin; left arm relaxed down at side
+        rSp = -0.82 - 0.03 * slowDrift; rSr = -0.18; rSy = 0.48; rEl = -0.60 - 0.04 * slowDrift; rWr = 0.20;
+        lSp = 0.08; lSr = 0.22; lSy = -0.12; lEl = 0.78; lWr = 0;
       } else if (tst === 'emphasize') {
-        hPitch = 0.15 * te * tb;
-        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
-        lSp = -0.62 - 0.18 * beatL; lSr = 0.34; lSy = -0.24; lEl = -0.28 - 0.18 * beatL; lWr = -0.20 * beatL;
-        rSp = -0.62 - 0.18 * beatR; rSr = -0.34; rSy = 0.24; rEl = -0.28 - 0.18 * beatR; rWr = 0.20 * beatR;
+        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.55), 0, 1), 1.2);
+        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.55 - 0.85), 0, 1), 1.2);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
+        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
+        wYaw = -0.08 * (gR - gL) * tb;
+        lSp = 0.04 - 0.68 * gL; lSr = 0.22 + 0.20 * gL; lSy = -0.12 + 0.34 * gL; lEl = 0.76 - 1.02 * gL; lWr = -0.36 * gL;
+        rSp = 0.04 - 0.68 * gR; rSr = -0.22 - 0.20 * gR; rSy = 0.12 - 0.34 * gR; rEl = 0.76 - 1.02 * gR; rWr =  0.36 * gR;
       } else if (tst === 'empathy') {
+        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.05);
+        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
+        gL = clamp((0.22 + 0.35 * (1 - wCalm)) * amp, 0, 1);
         wRoll = -0.04 * tb;
+        wYaw = 0.04 * tb;
         hPitch = (0.09 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
-        lSp = -0.36 - 0.09 * beatL; lSr = 0.20; lSy = -0.34; lEl = 0.10 - 0.12 * beatL;
-        rSp = -0.36 - 0.09 * beatR; rSr = -0.20; rSy = 0.34; rEl = 0.10 - 0.12 * beatR;
+        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
+        rSp = 0.04 - 0.50 * gR; rSr = -0.18; rSy = 0.12 + 0.30 * gR; rEl = 0.76 - 0.92 * gR; rWr = 0.24 * gR;
+        lSp = 0.06 - 0.36 * gL; lSr = 0.22 + 0.10 * gL; lSy = -0.12 + 0.18 * gL; lEl = 0.76 - 0.64 * gL; lWr = -0.20 * gL;
       } else {
-        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
-        wRoll = Math.sin(t * 1.3) * 0.03 * tb;
-        lSp = -0.46 - 0.14 * beatL; lSr = 0.24; lSy = -0.28; lEl = -0.10 - 0.16 * beatL; lWr = -0.18 * Math.sin(t * 3.4 + 1.2);
-        rSp = -0.48 - 0.14 * beatR; rSr = -0.24; rSy = 0.28; rEl = -0.12 - 0.16 * beatR; rWr = 0.18 * Math.sin(t * 3.4);
+        const ph = t * 1.65;
+        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
+        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
+        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
+        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
+        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
+        wYaw = (-0.07 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
+        wRoll = (0.03 * (gR - gL) + 0.02 * Math.sin(t * 0.95)) * tb;
+        lSp = 0.06 - 0.56 * gL; lSr = 0.22 + 0.15 * gL; lSy = -0.12 + 0.28 * gL; lEl = 0.76 - 0.90 * gL; lWr = -0.32 * gL;
+        rSp = 0.06 - 0.56 * gR; rSr = -0.22 - 0.15 * gR; rSy = 0.12 - 0.28 * gR; rEl = 0.76 - 0.90 * gR; rWr =  0.32 * gR;
       }
       frameJoints.head_yaw_joint += hYaw;
       frameJoints.head_pitch_joint += hPitch;
@@ -746,10 +773,12 @@ function buildUnitreeR1Rig(THREE) {
 
     // Update Dual 5-Finger Dexterous Hands (`cur.grip`: 1 = open, 0.25 = closed grasp)
     const rawClose = clamp(1 - (cur.grip ?? 0.25), 0, 1);
-    const closeAmt = ta > 0 ? lerp(rawClose, 0.22, ta) : rawClose;
-    const mode = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || ta > 0.25) ? 'open' : 'normal';
-    if (hands.left) hands.left.setCloseAmount(closeAmt, mode);
-    if (hands.right) hands.right.setCloseAmount(closeAmt, mode);
+    const closeL = ta > 0 ? lerp(rawClose, clamp(0.55 - 0.38 * gL, 0.14, 0.65), ta) : rawClose;
+    const closeR = ta > 0 ? lerp(rawClose, clamp(0.55 - 0.38 * gR, 0.14, 0.65), ta) : rawClose;
+    const modeL = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && gL > 0.25)) ? 'open' : 'normal';
+    const modeR = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && gR > 0.25)) ? 'open' : 'normal';
+    if (hands.left) hands.left.setCloseAmount(closeL, modeL);
+    if (hands.right) hands.right.setCloseAmount(closeR, modeR);
   }
 
   return {
@@ -1195,56 +1224,83 @@ function buildRby1Rig(THREE) {
     };
 
     if (tb > 0) {
-      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
-      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
-      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
-      let hYaw = 0, hPitch = 0, tLean = 0.02 * tb;
-      let r0 = -0.54, r1 = -0.22, r2 = 0.18, r3 = -1.02, r5 = -0.18;
-      let l0 = -0.54, l1 = 0.22, l2 = -0.18, l3 = -1.02, l5 = -0.18;
+      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
+      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
+      let hYaw = 0, hPitch = 0, tLean = 0, tYaw = 0, gR = 0, gL = 0;
+      let r0 = -0.18, r1 = -0.14, r2 = 0.0, r3 = -0.46, r4 = 0.0, r5 = -0.16;
+      let l0 = -0.18, l1 =  0.14, l2 = 0.0, l3 = -0.46, l4 = 0.0, l5 = -0.16;
       if (tst === 'affirm') {
-        hPitch = (0.18 * te + 0.07 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
-        tLean = 0.04 * tb;
-        r0 = -0.58 - 0.12 * beatR; r1 = -0.24; r2 = 0.22; r3 = -1.06 - 0.16 * beatR; r5 = -0.12 + 0.10 * beatR;
-        l0 = -0.58 - 0.12 * beatL; l1 = 0.24;  l2 = -0.22; l3 = -1.06 - 0.16 * beatL; l5 = -0.12 + 0.10 * beatL;
+        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
+        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.17 * te + 0.07 * nodSoft) * tb;
+        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
+        tLean = (0.025 + 0.02 * nodSoft) * tb;
+        tYaw = -0.04 * (gR - gL) * tb;
+        r0 = -0.18 - 0.22 * gR; r1 = -0.14 - 0.12 * gR; r2 = -0.22 * gR; r3 = -0.46 - 0.88 * gR; r4 =  0.42 * gR; r5 = -0.16 + 0.12 * gR;
+        l0 = -0.18 - 0.22 * gL; l1 =  0.14 + 0.12 * gL; l2 =  0.22 * gL; l3 = -0.46 - 0.88 * gL; l4 = -0.42 * gL; l5 = -0.16 + 0.12 * gL;
       } else if (tst === 'think') {
-        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
-        hPitch = (-0.08 + 0.05 * te) * tb;
-        r0 = -0.92; r1 = -0.18; r2 = 0.52; r3 = -1.46 - 0.08 * beatR; r5 = -0.06;
-        l0 = -0.42; l1 = 0.20;  l2 = -0.16; l3 = -0.88 - 0.06 * beatL; l5 = -0.22;
+        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
+        gR = 0.85 + 0.15 * slowDrift;
+        gL = 0.05 * slowDrift;
+        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
+        hPitch = (-0.08 + 0.04 * te) * tb;
+        tYaw = 0.05 * tb;
+        r0 = -0.90 - 0.03 * slowDrift; r1 = -0.18; r2 = 0.52; r3 = -1.46 - 0.04 * slowDrift; r4 = 0.24; r5 = -0.06;
+        l0 = -0.18; l1 = 0.14; l2 = 0.0; l3 = -0.46; l4 = 0.0; l5 = -0.16;
       } else if (tst === 'emphasize') {
-        hPitch = 0.15 * te * tb;
-        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
-        tLean = 0.05 * te * tb;
-        r0 = -0.68 - 0.18 * beatR; r1 = -0.34; r2 = 0.14; r3 = -1.16 - 0.22 * beatR; r5 = -0.10 + 0.18 * beatR;
-        l0 = -0.68 - 0.18 * beatL; l1 = 0.34;  l2 = -0.14; l3 = -1.16 - 0.22 * beatL; l5 = -0.10 + 0.18 * beatL;
+        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
+        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
+        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
+        tLean = (0.02 + 0.04 * te) * tb;
+        tYaw = -0.07 * (gR - gL) * tb;
+        r0 = -0.18 - 0.30 * gR; r1 = -0.14 - 0.18 * gR; r2 = -0.30 * gR; r3 = -0.46 - 1.04 * gR; r4 =  0.50 * gR; r5 = -0.16 + 0.16 * gR;
+        l0 = -0.18 - 0.30 * gL; l1 =  0.14 + 0.18 * gL; l2 =  0.30 * gL; l3 = -0.46 - 1.04 * gL; l4 = -0.50 * gL; l5 = -0.16 + 0.16 * gL;
       } else if (tst === 'empathy') {
-        hPitch = (0.10 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
+        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
+        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
+        gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
+        hPitch = (0.09 * te + 0.04) * tb;
+        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
         tLean = 0.03 * tb;
-        r0 = -0.46 - 0.08 * beatR; r1 = -0.18; r2 = 0.26; r3 = -0.94 - 0.10 * beatR; r5 = -0.20;
-        l0 = -0.46 - 0.08 * beatL; l1 = 0.18;  l2 = -0.26; l3 = -0.94 - 0.10 * beatL; l5 = -0.20;
+        tYaw = 0.04 * tb;
+        r0 = -0.18 - 0.24 * gR; r1 = -0.14; r2 = 0.34 * gR; r3 = -0.46 - 0.96 * gR; r4 = 0.34 * gR; r5 = -0.15;
+        l0 = -0.18 - 0.16 * gL; l1 =  0.14 + 0.10 * gL; l2 = 0.16 * gL; l3 = -0.46 - 0.68 * gL; l4 = -0.28 * gL; l5 = -0.16;
       } else {
-        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
-        r0 = -0.54 - 0.12 * beatR; r1 = -0.22; r2 = 0.18; r3 = -1.02 - 0.18 * beatR; r5 = -0.18 + 0.14 * beatR;
-        l0 = -0.52 - 0.12 * beatL; l1 = 0.22;  l2 = -0.18; l3 = -1.00 - 0.16 * beatL; l5 = -0.18 + 0.14 * beatL;
+        const ph = t * 1.65;
+        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
+        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
+        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
+        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
+        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
+        tLean = (0.015 + 0.022 * Math.max(gR, gL)) * tb;
+        tYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
+        r0 = -0.18 - 0.24 * gR; r1 = -0.14 - 0.14 * gR; r2 = -0.24 * gR; r3 = -0.46 - 0.92 * gR; r4 =  0.46 * gR; r5 = -0.16 + 0.12 * gR;
+        l0 = -0.18 - 0.24 * gL; l1 =  0.14 + 0.14 * gL; l2 =  0.24 * gL; l3 = -0.46 - 0.92 * gL; l4 = -0.46 * gL; l5 = -0.16 + 0.12 * gL;
       }
       frameJoints.head_0 += hYaw;
       frameJoints.head_1 += hPitch;
       frameJoints.torso_3 += tLean;
-      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + Math.sin(t * 1.6) * 0.05 * tb;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + tYaw;
       if (ta > 0) {
-        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.36, r0, ta);
-        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.18, r1, ta);
+        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.24, r0, ta);
+        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.15, r1, ta);
         frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
-        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.78, r3, ta);
-        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.25, r5, ta);
-        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.36, l0, ta);
-        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.18, l1, ta);
+        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.58, r3, ta);
+        frameJoints.right_arm_4 = lerp(frameJoints.right_arm_4 ?? 0, r4, ta);
+        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.22, r5, ta);
+        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.24, l0, ta);
+        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.15, l1, ta);
         frameJoints.left_arm_2 = lerp(frameJoints.left_arm_2 ?? 0, l2, ta);
-        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.78, l3, ta);
-        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.25, l5, ta);
+        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.58, l3, ta);
+        frameJoints.left_arm_4 = lerp(frameJoints.left_arm_4 ?? 0, l4, ta);
+        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.22, l5, ta);
       }
     }
 
@@ -1838,61 +1894,101 @@ function buildLgCloidRig(THREE) {
     };
 
     if (tb > 0) {
-      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
-      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
-      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
-      let hYaw = 0, hPitch = 0, tLean = 0.02 * tb;
-      let r0 = -0.52, r1 = -0.20, r2 = 0.18, r3 = -0.98, r5 = -0.16;
-      let l0 = -0.52, l1 = 0.20, l2 = -0.18, l3 = -0.98, l5 = -0.16;
+      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
+      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
+      let hYaw = 0, hPitch = 0, tLean = 0, tYaw = 0, gR = 0, gL = 0;
+      let r0 = -0.16, r1 = -0.13, r2 = 0.0, r3 = -0.44, r4 = 0.0, r5 = -0.16;
+      let l0 = -0.16, l1 =  0.13, l2 = 0.0, l3 = -0.44, l4 = 0.0, l5 = -0.16;
       if (tst === 'affirm') {
-        hPitch = (0.18 * te + 0.07 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
-        tLean = 0.04 * tb;
+        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
+        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.17 * te + 0.07 * nodSoft) * tb;
+        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
+        tLean = (0.025 + 0.02 * nodSoft) * tb;
+        tYaw = -0.04 * (gR - gL) * tb;
         if (expr === 0 && tb > 0.25) expr = 1;
-        r0 = -0.56 - 0.12 * beatR; r1 = -0.22; r2 = 0.22; r3 = -1.04 - 0.16 * beatR; r5 = -0.12 + 0.10 * beatR;
-        l0 = -0.56 - 0.12 * beatL; l1 = 0.22;  l2 = -0.22; l3 = -1.04 - 0.16 * beatL; l5 = -0.12 + 0.10 * beatL;
+        r0 = -0.16 - 0.22 * gR; r1 = -0.13 - 0.12 * gR; r2 = -0.22 * gR; r3 = -0.44 - 0.88 * gR; r4 =  0.44 * gR; r5 = -0.16 + 0.12 * gR;
+        l0 = -0.16 - 0.22 * gL; l1 =  0.13 + 0.12 * gL; l2 =  0.22 * gL; l3 = -0.44 - 0.88 * gL; l4 = -0.44 * gL; l5 = -0.16 + 0.12 * gL;
       } else if (tst === 'think') {
-        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
-        hPitch = (-0.08 + 0.05 * te) * tb;
+        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
+        gR = 0.85 + 0.15 * slowDrift;
+        gL = 0.05 * slowDrift;
+        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
+        hPitch = (-0.08 + 0.04 * te) * tb;
+        tYaw = 0.05 * tb;
         if (expr === 0 && tb > 0.25) expr = 3;
-        r0 = -0.88; r1 = -0.16; r2 = 0.50; r3 = -1.42 - 0.08 * beatR; r5 = -0.06;
-        l0 = -0.40; l1 = 0.18;  l2 = -0.16; l3 = -0.84 - 0.06 * beatL; l5 = -0.20;
+        r0 = -0.86 - 0.03 * slowDrift; r1 = -0.16; r2 = 0.50; r3 = -1.42 - 0.04 * slowDrift; r4 = 0.22; r5 = -0.06;
+        l0 = -0.16; l1 = 0.13; l2 = 0.0; l3 = -0.44; l4 = 0.0; l5 = -0.16;
       } else if (tst === 'emphasize') {
-        hPitch = 0.15 * te * tb;
-        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
-        tLean = 0.05 * te * tb;
+        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
+        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
+        gR = clamp(wR * amp, 0, 1);
+        gL = clamp(wL * amp, 0, 1);
+        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
+        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
+        tLean = (0.02 + 0.04 * te) * tb;
+        tYaw = -0.07 * (gR - gL) * tb;
         if (expr === 0 && tb > 0.25) expr = 1;
-        r0 = -0.66 - 0.18 * beatR; r1 = -0.32; r2 = 0.14; r3 = -1.14 - 0.22 * beatR; r5 = -0.10 + 0.18 * beatR;
-        l0 = -0.66 - 0.18 * beatL; l1 = 0.32;  l2 = -0.14; l3 = -1.14 - 0.22 * beatL; l5 = -0.10 + 0.18 * beatL;
+        r0 = -0.16 - 0.30 * gR; r1 = -0.13 - 0.18 * gR; r2 = -0.30 * gR; r3 = -0.44 - 1.04 * gR; r4 =  0.52 * gR; r5 = -0.16 + 0.16 * gR;
+        l0 = -0.16 - 0.30 * gL; l1 =  0.13 + 0.18 * gL; l2 =  0.30 * gL; l3 = -0.44 - 1.04 * gL; l4 = -0.52 * gL; l5 = -0.16 + 0.16 * gL;
       } else if (tst === 'empathy') {
-        hPitch = (0.10 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
+        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
+        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
+        gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
+        hPitch = (0.09 * te + 0.04) * tb;
+        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
         tLean = 0.03 * tb;
-        r0 = -0.44 - 0.08 * beatR; r1 = -0.18; r2 = 0.24; r3 = -0.90 - 0.10 * beatR; r5 = -0.18;
-        l0 = -0.44 - 0.08 * beatL; l1 = 0.18;  l2 = -0.24; l3 = -0.90 - 0.10 * beatL; l5 = -0.18;
+        tYaw = 0.04 * tb;
+        r0 = -0.16 - 0.24 * gR; r1 = -0.13; r2 = 0.34 * gR; r3 = -0.44 - 0.96 * gR; r4 = 0.34 * gR; r5 = -0.15;
+        l0 = -0.16 - 0.16 * gL; l1 =  0.13 + 0.10 * gL; l2 = 0.16 * gL; l3 = -0.44 - 0.68 * gL; l4 = -0.28 * gL; l5 = -0.16;
       } else {
-        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
-        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
-        r0 = -0.52 - 0.12 * beatR; r1 = -0.20; r2 = 0.18; r3 = -0.98 - 0.18 * beatR; r5 = -0.16 + 0.14 * beatR;
-        l0 = -0.50 - 0.12 * beatL; l1 = 0.20;  l2 = -0.18; l3 = -0.96 - 0.16 * beatL; l5 = -0.16 + 0.14 * beatL;
+        const ph = t * 1.65;
+        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
+        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
+        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
+        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
+        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
+        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
+        tLean = (0.015 + 0.022 * Math.max(gR, gL)) * tb;
+        tYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
+        r0 = -0.16 - 0.24 * gR; r1 = -0.13 - 0.14 * gR; r2 = -0.24 * gR; r3 = -0.44 - 0.94 * gR; r4 =  0.48 * gR; r5 = -0.16 + 0.12 * gR;
+        l0 = -0.16 - 0.24 * gL; l1 =  0.13 + 0.14 * gL; l2 =  0.24 * gL; l3 = -0.44 - 0.94 * gL; l4 = -0.48 * gL; l5 = -0.16 + 0.12 * gL;
       }
       headYaw += hYaw;
       headPitch += hPitch;
       frameJoints.head_0 = headYaw;
       frameJoints.head_1 = headPitch;
       frameJoints.torso_3 += tLean;
-      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + Math.sin(t * 1.6) * 0.05 * tb;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + tYaw;
       if (ta > 0) {
-        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.34, r0, ta);
-        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.16, r1, ta);
+        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.20, r0, ta);
+        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.14, r1, ta);
         frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
-        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.72, r3, ta);
-        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.22, r5, ta);
-        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.34, l0, ta);
-        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.16, l1, ta);
+        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.52, r3, ta);
+        frameJoints.right_arm_4 = lerp(frameJoints.right_arm_4 ?? 0, r4, ta);
+        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.18, r5, ta);
+        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.20, l0, ta);
+        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.14, l1, ta);
         frameJoints.left_arm_2 = lerp(frameJoints.left_arm_2 ?? 0, l2, ta);
-        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.72, l3, ta);
-        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.22, l5, ta);
+        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.52, l3, ta);
+        frameJoints.left_arm_4 = lerp(frameJoints.left_arm_4 ?? 0, l4, ta);
+        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.18, l5, ta);
+        // Expressively open the active gesturing 5-finger hand while keeping the resting hand softly relaxed
+        const rCurl = lerp(0.32, 0.08, gR);
+        const lCurl = lerp(0.32, 0.08, gL);
+        frameJoints.r_thumb = lerp(frameJoints.r_thumb, rCurl * 0.7, ta);
+        frameJoints.r_index = lerp(frameJoints.r_index, rCurl * 0.85, ta);
+        frameJoints.r_middle = lerp(frameJoints.r_middle, rCurl, ta);
+        frameJoints.r_ring = lerp(frameJoints.r_ring, rCurl * 1.1, ta);
+        frameJoints.r_pinky = lerp(frameJoints.r_pinky, rCurl * 1.2, ta);
+        frameJoints.l_thumb = lerp(frameJoints.l_thumb, lCurl * 0.7, ta);
+        frameJoints.l_index = lerp(frameJoints.l_index, lCurl * 0.85, ta);
+        frameJoints.l_middle = lerp(frameJoints.l_middle, lCurl, ta);
+        frameJoints.l_ring = lerp(frameJoints.l_ring, lCurl * 1.1, ta);
+        frameJoints.l_pinky = lerp(frameJoints.l_pinky, lCurl * 1.2, ta);
       }
     }
 

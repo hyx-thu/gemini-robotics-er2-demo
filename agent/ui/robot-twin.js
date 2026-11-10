@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 // [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD)
-import { buildReal2SimRigs } from './real2sim-rigs.js?v=3';
+import { buildReal2SimRigs } from './real2sim-rigs.js?v=4';
 
 const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
