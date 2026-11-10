@@ -10,6 +10,8 @@ class MediaHandler {
     this.videoInterval = null;
     this.nextStartTime = 0;
     this.scheduledSources = [];
+    this.playbackAnalyser = null;
+    this._playbackSamples = null;
     this.isRecording = false;
     this.onBargeIn = null;
     this._loudFrames = 0;
@@ -249,6 +251,35 @@ class MediaHandler {
     onFrame(base64);
   }
 
+  _ensurePlaybackAnalyser() {
+    if (!this.audioContext) return null;
+    if (!this.playbackAnalyser || this.playbackAnalyser.context !== this.audioContext) {
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      analyser.connect(this.audioContext.destination);
+      this.playbackAnalyser = analyser;
+      this._playbackSamples = new Float32Array(analyser.fftSize);
+    }
+    return this.playbackAnalyser;
+  }
+
+  getPlaybackSpeechState() {
+    if (!this.audioContext || this.scheduledSources.length === 0 || !this.playbackAnalyser) {
+      return { speaking: false, level: 0 };
+    }
+    this.playbackAnalyser.getFloatTimeDomainData(this._playbackSamples);
+    let sumSq = 0;
+    const n = this._playbackSamples.length;
+    for (let i = 0; i < n; i++) {
+      const s = this._playbackSamples[i];
+      sumSq += s * s;
+    }
+    const rms = Math.sqrt(sumSq / n);
+    const level = Math.min(1, Math.max(0, (rms - 0.004) * 5.2));
+    return { speaking: true, level };
+  }
+
   playAudio(arrayBuffer) {
     if (!this.audioContext) return;
     if (this.audioContext.state === 'suspended') {
@@ -272,7 +303,8 @@ class MediaHandler {
 
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.audioContext.destination);
+    const sink = this._ensurePlaybackAnalyser() || this.audioContext.destination;
+    source.connect(sink);
 
     const now = this.audioContext.currentTime;
     this.nextStartTime = Math.max(now, this.nextStartTime);

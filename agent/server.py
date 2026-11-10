@@ -130,8 +130,8 @@ _LIVE_FRONTEND_ADDENDUM = """### ROBOT TASKS ARE DELEGATED (LIVE + ER2 MODE) ###
   Never call robot_task because of such a message.
 - If the user changes or cancels the task, call `robot_task` with the new request
   (it replaces the running one) or `stop`.
-- Keep using your other tools (look, navigate, stand, sit, gestures, search,
-  maps, location) directly as usual."""
+- Keep using your other tools (look, navigate, stand, sit, gestures,
+  talk_motion, search, maps, location) directly as usual."""
 _GENERIC_POST_SPEECH_GRACE_S = 2.5
 
 # DI lines written for the text-only ER + TTS path that contradict native

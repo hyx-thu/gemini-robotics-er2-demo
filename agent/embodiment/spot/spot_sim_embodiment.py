@@ -540,6 +540,25 @@ class SimulatedSpotEmbodiment(base.Embodiment):
           "note": "Social gesture performed; no visual confirmation needed. Keep the conversation going.",
       }
 
+    if action_name == "talk_motion":
+      style = str(kwargs.get("style", "explain")).strip().lower() or "explain"
+      if style not in tools_lib.TALK_MOTION_STYLES:
+        return {
+            "error": (
+                f"Unknown style '{style}'. Use one of"
+                f" {list(tools_lib.TALK_MOTION_STYLES)}."
+            )
+        }
+      return {
+          "status": "active",
+          "style": style,
+          "note": (
+              "Conversational head and upper-limb motion active while speaking"
+              " (automatically yields to any physical action); no visual"
+              " confirmation needed. Speak your reply naturally now."
+          ),
+      }
+
     if action_name == "stow":
       s["arm"] = "carry" if s["holding"] else "stowed"
       return {"status": s["arm"], "holding": s["holding"], "note": _VERIFY}

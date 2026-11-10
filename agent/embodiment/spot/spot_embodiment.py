@@ -63,6 +63,21 @@ class SpotEmbodiment(base.Embodiment):
     if action_name == "ack":
       return "No action needed."
 
+    if action_name == "talk_motion":
+      style = str(kwargs.get("style", "explain")).strip().lower() or "explain"
+      if style not in tools_lib.TALK_MOTION_STYLES:
+        return {
+            "error": (
+                f"Unknown style '{style}'. Use one of"
+                f" {list(tools_lib.TALK_MOTION_STYLES)}."
+            )
+        }
+      return {
+          "status": "active",
+          "style": style,
+          "note": "Conversational motion active while speaking.",
+      }
+
     if action_name not in {
         "detect",
         "pick",

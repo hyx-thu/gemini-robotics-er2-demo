@@ -3,6 +3,7 @@ import asyncio
 import unittest
 
 from embodiment.spot import spot_sim_embodiment
+from tool import tools as tools_lib
 
 
 class MovedObjectTest(unittest.IsolatedAsyncioTestCase):
@@ -139,6 +140,42 @@ class TargetContextTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([530, 510], r["hand_position"])
     self.assertIn("confirm_action", r["next_action"])
     self.assertIn("from_x=530, from_y=510", r["next_action"])
+
+
+class TalkMotionTest(unittest.IsolatedAsyncioTestCase):
+
+  async def test_talk_motion_valid_styles_and_preserves_detected_target(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    await e.execute_action("detect", instruction="mug", x=412, y=635)
+    for style in tools_lib.TALK_MOTION_STYLES:
+      res = await e.execute_action("talk_motion", style=style)
+      self.assertEqual("active", res["status"])
+      self.assertEqual(style, res["style"])
+    # Detected target is preserved so any subsequent physical pick still works.
+    pick_res = await e.execute_action("pick")
+    self.assertEqual([412, 635], pick_res["grasp_point"])
+
+  async def test_talk_motion_rejects_unknown_style(self):
+    e = spot_sim_embodiment.SimulatedSpotEmbodiment()
+    res = await e.execute_action("talk_motion", style="backflip")
+    self.assertIn("error", res)
+
+  def test_talk_motion_stays_on_live_frontend_in_composite_split(self):
+    live_tools, er_tools = tools_lib.split_for_orchestration(
+        tools_lib.spot_sim_tools()
+    )
+    live_names = {
+        d["name"]
+        for g in live_tools
+        for d in g.get("functionDeclarations", [])
+    }
+    er_names = {
+        d["name"]
+        for g in er_tools
+        for d in g.get("functionDeclarations", [])
+    }
+    self.assertIn("talk_motion", live_names)
+    self.assertNotIn("talk_motion", er_names)
 
 
 if __name__ == "__main__":

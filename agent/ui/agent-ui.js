@@ -772,6 +772,7 @@ function updateTokenUsage(tu) {
 }
 
 let mediaHandler = new MediaHandler();
+window.__getRobotSpeechState = () => mediaHandler.getPlaybackSpeechState();
 let audioFlushPending = false;
 mediaHandler.onBargeIn = () => {
   if (geminiClient && geminiClient.isConnected()) {
@@ -934,6 +935,7 @@ const TOOL_STEP_EXCLUDED = new Set([
   'retry_step',
   'send_message',
   'clear_overlay',
+  'talk_motion',
 ]);
 
 // Physical embodiment tools where the Stop button remains relevant in tool-step mode.
@@ -1050,6 +1052,10 @@ function formatAutoToolStep(entry) {
   if (name === 'make_gesture') {
     const g = qStr(a.gesture);
     return zh ? `👋 make_gesture(${g}) — 执行动作手势` : `👋 make_gesture(${g}) — Perform gesture`;
+  }
+  if (name === 'talk_motion') {
+    const st = qStr(a.style || 'explain');
+    return zh ? `💬 talk_motion(${st}) — 说话伴随肢体微动` : `💬 talk_motion(${st}) — Co-speech motion`;
   }
   if (name === 'detect') {
     const q = qStr(a.instruction);
@@ -1948,6 +1954,11 @@ function handleJsonMessage(msg) {
     } else {
       currentGeminiMessageDiv = appendMessage('gemini', msg.text);
     }
+    if (!selectedAudioEnabled && msg.text) {
+      window.dispatchEvent(new CustomEvent('robot-twin:speech-text', {
+        detail: { text: msg.text },
+      }));
+    }
   } else if (msg.type === 'gemini_thought') {
     // Gemini thought message breaks ack streak
     lastAckRow = null;
@@ -2061,7 +2072,9 @@ function handleJsonMessage(msg) {
         }
       } else {
         onToolCompletedForPlan(msg);
-        recordToolVisual(msg);
+        if (msg.name !== 'talk_motion') {
+          recordToolVisual(msg);
+        }
         renderRichToolCard(msg);
         // 3D robot twin + animated camera FX (pick/place/detect).
         window.dispatchEvent(new CustomEvent('robot-twin:tool', {
@@ -3007,6 +3020,20 @@ function describeToolCall(msg) {
   if (name === 'send_message') {
     return { summary: `send_message(${a.target || 'user'}): ${a.message || ''}`, open: false, argsText: '' };
   }
+  if (name === 'talk_motion') {
+    const st = a.style || r.style || 'explain';
+    if (r.error) {
+      return { summary: `💬 talk_motion(${q(st)}) ✗ ${r.error}`, open: false, argsText: '' };
+    }
+    return { summary: `💬 talk_motion(${q(st)})`, open: false, argsText: '' };
+  }
+  if (name === 'make_gesture') {
+    const g = a.gesture || r.gesture || '';
+    if (r.error) {
+      return { summary: `👋 make_gesture(${q(g)}) ✗ ${r.error}`, open: false, argsText: '' };
+    }
+    return { summary: `👋 make_gesture(${q(g)})`, open: false, argsText: '' };
+  }
   return { summary: `${name}(${rawArgs})`, open: true, argsText: '' };
 }
 
@@ -3896,5 +3923,11 @@ function renderRichToolCard(msg) {
   });
   document.addEventListener('mouseout', (e) => {
     if (e.target.closest && e.target.closest('.fc-tool')) tipEl.classList.add('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!(e.target.closest && e.target.closest('.fc-tool'))) tipEl.classList.add('hidden');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') tipEl.classList.add('hidden');
   });
 }

@@ -682,6 +682,7 @@ def close_gripper_tool() -> dict[str, Any]:
 
 
 SPOT_GESTURES = ("high_wave", "shake_hand")
+TALK_MOTION_STYLES = ("explain", "affirm", "think", "emphasize", "empathy")
 
 
 def spot_gesture_tool() -> dict[str, Any]:
@@ -716,6 +717,45 @@ def spot_gesture_tool() -> dict[str, Any]:
               },
           },
           "required": ["gesture"],
+      },
+      behavior="BLOCKING",
+  )
+
+
+def spot_talk_motion_tool() -> dict[str, Any]:
+  """Co-speech head and upper-limb body language during normal conversation."""
+  return _tool(
+      name="talk_motion",
+      description=(
+          "Expressive conversational body language while speaking: naturally"
+          " animates the robot's head (nods, attentive tilts, gaze shifts) and"
+          " upper limbs (rhythmic beat gestures) in sync with your spoken voice"
+          " to match the tone and meaning of what you say."
+          " Styles: 'explain' (calm explanatory beat gestures & gentle nods),"
+          " 'affirm' (warm agreement / confirmation nods),"
+          " 'think' (thoughtful head tilt & pondering hand poise),"
+          " 'emphasize' (energetic bimanual emphasis on key points),"
+          " 'empathy' (soft attentive head tilt & reassuring motion)."
+          " Call it during normal conversation, Q&A, explanations, or status"
+          " relays while you answer; it automatically yields whenever any"
+          " physical action (pick, place, drive, navigate, look, stand, sit,"
+          " make_gesture) runs. Never call it on [HEARTBEAT] ticks or instead"
+          " of physical task tools. No visual confirmation is needed."
+      ),
+      parameters={
+          "type": "OBJECT",
+          "properties": {
+              "style": {
+                  "type": "STRING",
+                  "enum": list(TALK_MOTION_STYLES),
+                  "description": (
+                      "Conversational motion style matching your spoken"
+                      " content: 'explain', 'affirm', 'think', 'emphasize',"
+                      " or 'empathy'."
+                  ),
+              },
+          },
+          "required": ["style"],
       },
       behavior="BLOCKING",
   )
@@ -1290,6 +1330,7 @@ def spot_sim_tools() -> list[dict[str, Any]]:
       stand_tool(),
       sit_tool(),
       spot_gesture_tool(),
+      spot_talk_motion_tool(),
       stow_tool(),
       draw_points_tool(),
       clear_overlay_tool(),

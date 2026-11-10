@@ -51,14 +51,14 @@ INPUTS = [('🎤 Voice', 'Microphone audio stream'), ('📹 Camera video', 'Live
           ('📍 Location', 'Current position')]
 CATS = [
     ('🐾 Locomotion', 'move around', 'drive · get_waypoints · navigate · stop', 'c-move'),
-    ('🧍 Posture & gestures', 'body pose · greet', 'stand · sit · make_gesture(high_wave|shake_hand)', 'c-pose'),
+    ('🧍 Posture & gestures', 'body pose · greet · co-speech', 'stand · sit · make_gesture(high_wave|shake_hand) · talk_motion', 'c-pose'),
     ('👁️ Perception', 'see & locate', 'look · detect', 'c-see'),
     ('🦾 Manipulation', 'arm & gripper', 'pick · place · stow · wait_for_pick_up', 'c-arm'),
     ('💬 Communication', 'talk to people', 'send_message · ack', 'c-talk'),
     ('🌐 World knowledge', 'grounded lookup', 'get_current_location · google_search · google_maps_search', 'c-web'),
 ]
 
-W = 1220
+W = 1250
 o = []
 A = o.append
 
@@ -78,7 +78,7 @@ def line(pts, cls='fc-line', arrow=True):
 
 
 # Tools column defines the vertical extent.
-sx, sw, sh, sy0, sgap = 660, 470, 56, 80, 70
+sx, sw, sh, sy0, sgap = 660, 500, 56, 80, 70
 cy = [sy0 + i * sgap + sh / 2 for i in range(len(CATS))]
 mid = (cy[0] + cy[-1]) / 2
 

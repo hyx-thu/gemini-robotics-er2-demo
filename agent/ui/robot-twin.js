@@ -93,11 +93,14 @@ function buildDog() {
   torso.castShadow = true; body.add(torso);
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(BODY_L * 0.7, 0.025, BODY_W + 0.004), mat(C_ACCENT, { roughness: 0.4 }));
   stripe.position.y = 0.02; body.add(stripe);
+  const headG = new THREE.Group();
+  headG.position.set(BODY_L / 2 + 0.02, -0.01, 0);
+  body.add(headG);
   const head = new THREE.Mesh(roundedBox(0.12, 0.13, 0.28, 0.04), mat(C_DARK));
-  head.position.set(BODY_L / 2 + 0.02, -0.01, 0); head.castShadow = true; body.add(head);
+  head.castShadow = true; headG.add(head);
   for (const z of [-0.07, 0.07]) {
     const eye = new THREE.Mesh(new THREE.CircleGeometry(0.022, 20), glow(0x4285f4));
-    eye.position.set(BODY_L / 2 + 0.081, 0, z); eye.rotation.y = Math.PI / 2; body.add(eye);
+    eye.position.set(0.061, 0.01, z); eye.rotation.y = Math.PI / 2; headG.add(eye);
   }
   const L1 = 0.32, L2 = 0.34, HIP_X = 0.33, HIP_Z = 0.2, HIP_Y = -0.06;
   const legs = [];
@@ -176,15 +179,47 @@ function buildDog() {
       ],
     },
     update(c) {
-      const { cur, t, walkAmt, gaitPhase, gait } = c;
+      const { cur, t, walkAmt, gaitPhase, gait, talk } = c;
       const breathe = Math.sin(t * 2.2) * 0.006 * (1 - walkAmt);
+      const tb = (talk && talk.blend > 0.001 && walkAmt < 0.05 && cur.rear < 0.05 && cur.paw < 0.05) ? talk.blend : 0;
+      const te = tb ? talk.env : 0;
+      const tst = (talk && talk.style) || 'explain';
+      let talkBodyPitch = 0, talkBodyRoll = 0, hYaw = 0, hPitch = 0, hRoll = 0;
+      if (tb > 0) {
+        const nodWave = Math.sin(t * 7.4) * 0.5 + 0.5;
+        if (tst === 'affirm') {
+          hPitch = (-0.18 * te - 0.10 * nodWave) * tb;
+          hYaw = Math.sin(t * 1.6) * 0.08 * tb;
+          talkBodyPitch = (0.04 - 0.035 * te) * tb;
+        } else if (tst === 'think') {
+          hRoll = (0.26 + Math.sin(t * 1.9) * 0.06) * tb;
+          hPitch = (0.09 - 0.06 * te) * tb;
+          hYaw = (0.14 + Math.sin(t * 1.5) * 0.08) * tb;
+          talkBodyRoll = 0.025 * tb;
+        } else if (tst === 'emphasize') {
+          hPitch = (-0.16 * te - 0.06 * nodWave) * tb;
+          hYaw = Math.sin(t * 2.8) * 0.14 * tb;
+          talkBodyPitch = (0.05 - 0.045 * te) * tb;
+        } else if (tst === 'empathy') {
+          hRoll = -0.18 * tb;
+          hPitch = (-0.08 * te - 0.04) * tb;
+          hYaw = Math.sin(t * 1.4) * 0.07 * tb;
+          talkBodyPitch = 0.025 * tb;
+        } else {
+          hPitch = (-0.12 * te - 0.04 * nodWave) * tb;
+          hYaw = Math.sin(t * 2.0) * 0.12 * tb;
+          hRoll = Math.sin(t * 1.5) * 0.07 * tb;
+          talkBodyPitch = (0.03 - 0.025 * te) * tb;
+        }
+      }
+      headG.rotation.set(hRoll, hYaw, hPitch);
       const q = cur.rear * REAR_PITCH;
       const rx = -HIP_X, ry = HIP_Y;
       const pivX = rx - (rx * Math.cos(q) - ry * Math.sin(q));
       const pivY = ry - (rx * Math.sin(q) + ry * Math.cos(q));
       body.position.x = pivX;
       body.position.y = cur.h + pivY + breathe + Math.abs(Math.sin(gaitPhase)) * 0.015 * walkAmt;
-      body.rotation.set(cur.roll, 0, cur.pitch + q);
+      body.rotation.set(cur.roll + talkBodyRoll, 0, cur.pitch + q + talkBodyPitch);
       group.rotation.y = gait ? Math.sin(t * 3) * 0.02 : 0;
       body.updateMatrixWorld(true);
       tmpM.copy(body.matrixWorld).invert();
@@ -335,13 +370,58 @@ function buildHumanoid() {
       ],
     },
     update(c) {
-      const { cur, t, walkAmt, gaitPhase, gait } = c;
+      const { cur, t, walkAmt, gaitPhase, gait, talk } = c;
       const breathe = Math.sin(t * 1.8) * 0.005 * (1 - walkAmt);
+      const tb = (talk && talk.blend > 0.001 && walkAmt < 0.05) ? talk.blend : 0;
+      const te = tb ? talk.env : 0;
+      const ta = tb * ((talk && talk.armScale) ?? 1);
+      const tst = (talk && talk.style) || 'explain';
+      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
+      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
+      let hRoll = 0, hYawOff = 0, hPitchOff = 0, torsoLean = 0, abduct = 0;
+      let tRyaw = -0.12, tRs = -1.16, tRe = 1.04, tRw = -0.04;
+      let tLyaw = 0.12, tLs = -1.18, tLe = 0.98, tLw = -0.04;
+      if (tb > 0) {
+        if (tst === 'affirm') {
+          hPitchOff = (-0.18 * te - 0.08 * (0.5 + 0.5 * Math.sin(t * 6.8))) * tb;
+          hYawOff = Math.sin(t * 1.5) * 0.07 * tb;
+          torsoLean = 0.035 * tb;
+          tRyaw = -0.18; tRs = -1.14 + 0.10 * beatR; tRe = 1.08 + 0.24 * beatR; tRw = -0.05;
+          tLyaw = 0.18;  tLs = -1.14 + 0.10 * beatL; tLe = 1.08 + 0.24 * beatL; tLw = -0.05;
+        } else if (tst === 'think') {
+          hRoll = 0.16 * tb;
+          hYawOff = (0.15 + Math.sin(t * 1.4) * 0.06) * tb;
+          hPitchOff = (0.08 - 0.06 * te) * tb;
+          tRyaw = 0.28;  tRs = -0.94; tRe = 1.62 + 0.12 * beatR; tRw = -0.18;
+          tLyaw = -0.22; tLs = -1.26; tLe = 0.92 + 0.10 * beatL; tLw = 0;
+        } else if (tst === 'emphasize') {
+          hPitchOff = -0.15 * te * tb;
+          hYawOff = Math.sin(t * 2.6) * 0.12 * tb;
+          torsoLean = 0.05 * te * tb;
+          abduct = 0.14 * ta;
+          tRyaw = -0.34; tRs = -1.02 + 0.18 * beatR; tRe = 1.16 + 0.32 * beatR; tRw = 0.06;
+          tLyaw = 0.34;  tLs = -1.02 + 0.18 * beatL; tLe = 1.16 + 0.32 * beatL; tLw = 0.06;
+        } else if (tst === 'empathy') {
+          hRoll = -0.14 * tb;
+          hPitchOff = (-0.09 * te - 0.04) * tb;
+          hYawOff = Math.sin(t * 1.3) * 0.07 * tb;
+          torsoLean = 0.03 * tb;
+          tRyaw = 0.16;  tRs = -1.24; tRe = 0.92 + 0.15 * beatR; tRw = -0.06;
+          tLyaw = -0.16; tLs = -1.24; tLe = 0.92 + 0.15 * beatL; tLw = -0.06;
+        } else {
+          hPitchOff = (-0.11 * te - 0.03 * Math.sin(t * 5.4)) * tb;
+          hYawOff = Math.sin(t * 1.8) * 0.11 * tb;
+          hRoll = Math.sin(t * 1.3) * 0.05 * tb;
+          torsoLean = 0.02 * tb;
+          tRyaw = -0.12 + 0.08 * Math.sin(t * 2.4); tRs = -1.16 + 0.12 * beatR; tRe = 1.04 + 0.28 * beatR; tRw = -0.04;
+          tLyaw = 0.12 - 0.08 * Math.sin(t * 2.4 + 1.4); tLs = -1.18 + 0.10 * beatL; tLe = 0.98 + 0.25 * beatL; tLw = -0.04;
+        }
+      }
       body.position.y = cur.h + breathe + Math.abs(Math.sin(gaitPhase)) * 0.02 * walkAmt;
       body.rotation.set(cur.roll, 0, 0);
-      torsoG.rotation.z = cur.pitch + (gait ? 0.08 : 0) - 0.05 * cur.rear;
-      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt;
-      headG.rotation.y = cur.hy; headG.rotation.z = cur.hp;
+      torsoG.rotation.z = cur.pitch + (gait ? 0.08 : 0) - 0.05 * cur.rear + torsoLean;
+      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt + Math.sin(t * 1.6) * 0.02 * tb;
+      headG.rotation.set(hRoll, cur.hy + hYawOff, cur.hp + hPitchOff);
       // Legs: feet planted below the hips, stride + lift when walking.
       body.updateMatrixWorld(true);
       tmpM.copy(body.matrixWorld).invert();
@@ -356,12 +436,20 @@ function buildHumanoid() {
         L.ankle.rotation.z = -(j.hip + j.knee);     // keep the foot level
       }
       // Right (manipulator) arm from the shared pose; left arm relaxed / swinging.
-      R.yawG.rotation.y = cur.yaw; R.sh.rotation.z = cur.s; R.el.rotation.z = cur.e; R.wr.rotation.z = cur.w;
-      for (const f of fingers) f.g.rotation.y = -f.s * (0.05 + cur.grip * 0.45);
+      const mix = (a, b, w) => a + (b - a) * w;
+      R.yawG.rotation.y = mix(cur.yaw, tRyaw, ta);
+      R.sh.rotation.z = mix(cur.s, tRs, ta);
+      R.el.rotation.z = mix(cur.e, tRe, ta);
+      R.wr.rotation.z = mix(cur.w, tRw, ta);
+      const gripEff = mix(cur.grip, 0.72, ta);
+      for (const f of fingers) f.g.rotation.y = -f.s * (0.05 + gripEff * 0.45);
       const swing = Math.sin(gaitPhase) * 0.5 * walkAmt;
-      Lm.yawG.rotation.y = 0; Lm.sh.rotation.z = cur.ls + swing; Lm.el.rotation.z = cur.le; Lm.wr.rotation.z = 0;
-      Lm.sh.rotation.x = 0.08;   // elbows slightly out
-      R.sh.rotation.x = -0.08;
+      Lm.yawG.rotation.y = mix(0, tLyaw, ta);
+      Lm.sh.rotation.z = mix(cur.ls + swing, tLs, ta);
+      Lm.el.rotation.z = mix(cur.le, tLe, ta);
+      Lm.wr.rotation.z = mix(0, tLw, ta);
+      Lm.sh.rotation.x = 0.08 + abduct;   // elbows slightly out
+      R.sh.rotation.x = -0.08 - abduct;
     },
   };
 }
@@ -432,6 +520,24 @@ function init() {
   let armStowed = true, sitting = false, gait = null, heading = 0, scanUntil = 0, flash = null;
   const pos = new THREE.Vector2();
   let queue = [], step = null, pendingTarget = null;
+  const TALK_STYLES = new Set(['explain', 'affirm', 'think', 'emphasize', 'empathy']);
+  const talkState = {
+    style: 'explain',
+    explicitUntil: 0,
+    synthUntil: 0,
+    audioSeen: false,
+    audioEndGraceUntil: 0,
+    blend: 0,
+    env: 0,
+    showingHud: false,
+  };
+  function clearTalkState() {
+    talkState.explicitUntil = 0;
+    talkState.synthUntil = 0;
+    talkState.audioSeen = false;
+    talkState.audioEndGraceUntil = 0;
+    talkState.showingHud = false;
+  }
 
   function setArm(j) { if (j) Object.assign(tgt, j); }
 
@@ -452,7 +558,8 @@ function init() {
     if (R) R.group.visible = false;
     R = next; R.group.visible = true;
     if (R.ensureLoaded) R.ensureLoaded();
-    clearQueue(); gait = null; armStowed = true; sitting = false;
+    clearQueue(); clearTalkState(); talkState.blend = 0; talkState.env = 0;
+    gait = null; armStowed = true; sitting = false;
     for (const k of Object.keys(tgt)) delete tgt[k];
     for (const k of Object.keys(cur)) delete cur[k];
     Object.assign(tgt, R.defaults); Object.assign(cur, R.defaults);
@@ -585,7 +692,20 @@ function init() {
       enqueue([...(R.isUp(tgt) ? [wait(0.9, () => R.downEnter(tgt))] : []),
         ...g(tgt, setArm, ctx).map(([d, f]) => wait(d, f))]);
     },
-    stop: () => { clearQueue(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
+    talk_motion: (a) => {
+      const st = String((a && a.style) || 'explain').toLowerCase();
+      talkState.style = TALK_STYLES.has(st) ? st : 'explain';
+      talkState.explicitUntil = now() + 20.0;
+      talkState.synthUntil = now() + 3.2;
+      talkState.audioSeen = false;
+      talkState.audioEndGraceUntil = 0;
+      if (!step && queue.length === 0 && !gait && !sitting && !(R.isUp && R.isUp(tgt))) {
+        setActionLabel('talk_motion', { style: talkState.style });
+        talkState.showingHud = true;
+        idleAt = now() + 3.4;
+      }
+    },
+    stop: () => { clearQueue(); clearTalkState(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
   };
 
   function targetFrom(t, x, y) {
@@ -623,6 +743,7 @@ function init() {
     deploy_arm: '🦾 Deploy arm', open_gripper: '🖐 Open gripper', close_gripper: '✊ Close gripper',
     look: '👀 Look', turn_head_to_uv: '👀 Look', detect: '🔍 Detect', pick: '🤏 Pick',
     place: '📦 Place', drive: '🐾 Drive', navigate: '🧭 Navigate', stop: '⏹ Stop', make_gesture: '👋 Gesture',
+    talk_motion: '💬 Talk',
   };
   function setActionLabel(name, a) {
     if (!actionEl) return;
@@ -631,6 +752,9 @@ function init() {
     if (name === 'pick' && a.grasp_part) label += ' · ' + String(a.grasp_part).slice(0, 24);
     if (name === 'look' && a.direction) label += ' · ' + a.direction;
     if (name === 'navigate' && a.waypoint) label += ' → ' + String(a.waypoint).slice(0, 30);
+    if (name === 'talk_motion') {
+      label = '💬 Talk · ' + String(a.style || 'explain');
+    }
     if (name === 'make_gesture') {
       label = a.gesture === 'shake_hand' ? '🤝 Shake hand'
             : a.gesture === 'heart'      ? '🫶 Heart'
@@ -643,9 +767,17 @@ function init() {
     const fn = actions[name];
     if (!fn) return;
     const res = (result && typeof result === 'object') ? result : {};
-    if (!step && queue.length === 0) setActionLabel(name, args || {});
+    if (name !== 'talk_motion') {
+      clearTalkState();
+      if (!step && queue.length === 0) setActionLabel(name, args || {});
+    }
     if (res.error || res.status === 'rejected' || res.status === 'error') { flashColor(0xea4335, 0.8); return; }
     fn(args || {}, res);
+  });
+  window.addEventListener('robot-twin:speech-text', () => {
+    if (!step && queue.length === 0 && !gait && !sitting && !talkState.audioSeen) {
+      talkState.synthUntil = Math.min(now() + 3.0, Math.max(talkState.synthUntil, now() + 1.4));
+    }
   });
   window.addEventListener('robot-twin:target', (ev) => {
     const p = ev.detail || {};
@@ -666,7 +798,8 @@ function init() {
     if (m[1] === 'bad') flashColor(0xea4335, 0.8);
   });
   window.addEventListener('robot-twin:reset', () => {
-    clearQueue(); gait = null; itemHeld = false; scene.add(item); item.visible = false;
+    clearQueue(); clearTalkState(); talkState.blend = 0; talkState.env = 0;
+    gait = null; itemHeld = false; scene.add(item); item.visible = false;
     pendingTarget = null; dropTo = null; ring.material.opacity = 0; hideTable();
     sitting = false; armStowed = true; Object.assign(tgt, R.defaults);
     if (actionEl) { actionEl.textContent = 'Idle'; actionEl.classList.remove('active'); }
@@ -801,7 +934,59 @@ function init() {
     walkAmt += ((walking ? 1 : 0) - walkAmt) * k;
     gaitPhase += dt * (R.name === 'dog' ? 9 : 6.5) * walkAmt;
 
-    R.update({ cur, t, dt, k, walkAmt, gaitPhase, gait });
+    // Co-speech head & upper-limb overlay (strictly yields to any physical action).
+    const speech = typeof window.__getRobotSpeechState === 'function'
+      ? window.__getRobotSpeechState()
+      : { speaking: false, level: 0 };
+    const isBusy = Boolean(
+      step || queue.length > 0 || gait || sitting || (R.isUp && R.isUp(tgt))
+    );
+    let wantTalk = false;
+    let rawEnv = 0;
+    let intensity = 1.0;
+    if (isBusy) {
+      talkState.synthUntil = 0;
+      talkState.audioEndGraceUntil = 0;
+      talkState.showingHud = false;
+    } else if (speech && speech.speaking) {
+      wantTalk = true;
+      talkState.audioSeen = true;
+      talkState.audioEndGraceUntil = t + 0.22;
+      if (t < talkState.explicitUntil) {
+        talkState.explicitUntil = Math.max(talkState.explicitUntil, t + 1.0);
+        intensity = 1.0;
+      } else {
+        talkState.style = 'explain';
+        intensity = 0.58;
+      }
+      rawEnv = clamp(0.18 + speech.level * 0.85, 0, 1);
+      if (talkState.showingHud) idleAt = Math.max(idleAt, t + 0.6);
+    } else if (talkState.audioSeen && t < talkState.audioEndGraceUntil) {
+      wantTalk = true;
+      intensity = t < talkState.explicitUntil ? 1.0 : 0.58;
+      rawEnv = talkState.env * 0.85;
+    } else if (!talkState.audioSeen && t < talkState.synthUntil) {
+      wantTalk = true;
+      intensity = 1.0;
+      rawEnv = clamp(0.42 + 0.30 * Math.sin(t * 7.2) + 0.18 * Math.sin(t * 11.9), 0.12, 0.95);
+    } else if (talkState.showingHud) {
+      talkState.showingHud = false;
+      idleAt = Math.min(idleAt, t + 0.2);
+    }
+    const blendRate = isBusy ? 14 : (wantTalk ? 7.5 : 5.5);
+    const targetBlend = wantTalk ? intensity : 0;
+    talkState.blend += (targetBlend - talkState.blend) * (1 - Math.exp(-dt * blendRate));
+    if (talkState.blend < 0.0005) talkState.blend = 0;
+    const envRate = rawEnv > talkState.env ? 18 : 9;
+    talkState.env += (rawEnv - talkState.env) * (1 - Math.exp(-dt * envRate));
+    const talk = {
+      style: talkState.style,
+      blend: talkState.blend,
+      env: talkState.env,
+      armScale: itemHeld ? 0 : 1,
+    };
+
+    R.update({ cur, t, dt, k, walkAmt, gaitPhase, gait, talk });
 
     const scanning = t < scanUntil;
     R.cone.material.opacity += ((scanning ? 0.14 + Math.sin(t * 14) * 0.05 : 0) - R.cone.material.opacity) * k;

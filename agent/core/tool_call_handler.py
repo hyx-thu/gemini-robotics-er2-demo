@@ -459,7 +459,7 @@ class ToolCallHandler:
       # A blocking FunctionResponse resumes model generation. Send the latest
       # visual context first instead of creating a competing heartbeat turn.
       post_action_frame_sent = False
-      if is_blocking and sink is None:
+      if is_blocking and sink is None and func_name != "talk_motion":
         send_frame = getattr(
             self._session_manager, "send_latest_video_frame", None
         )
