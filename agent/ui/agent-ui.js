@@ -3927,11 +3927,11 @@ function appendKnowledgeCard(r) {
   const head = _el('div', 'rich-head');
   const icon = sid === 'cymbal_hospital' ? '🏥' : sid === 'cymbal_bank' ? '🏦' : '📖';
   head.appendChild(_el('span', 'rich-icon', icon));
-  const orgTitle = (r.organization ? `${r.organization} · 知识检索` : '场景 RAG 知识检索');
+  const orgTitle = (r.organization ? `${r.organization} · RAG Grounding` : 'Scenario RAG Lookup');
   head.appendChild(_el('span', 'rich-title', orgTitle));
   const matches = Array.isArray(r.matches) ? r.matches : [];
-  const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? '混合检索' : 'RAG 检索';
-  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · 命中 ${matches.length} 条`));
+  const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? 'Hybrid RRF' : 'BM25 RAG';
+  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · ${matches.length} match${matches.length === 1 ? '' : 'es'}`));
   card.appendChild(head);
   if (r.query) {
     card.appendChild(_el('div', 'rich-sub', `🔎 “${r.query}”`));
@@ -3941,7 +3941,7 @@ function appendKnowledgeCard(r) {
     const item = _el('div', 'kb-card-item');
     const itemHead = _el('div', 'kb-item-head');
     if (m.category) itemHead.appendChild(_el('span', 'kb-item-cat', m.category));
-    itemHead.appendChild(_el('span', 'kb-item-title', m.title || '知识条目'));
+    itemHead.appendChild(_el('span', 'kb-item-title', m.title || 'Knowledge Entry'));
     item.appendChild(itemHead);
     if (m.location || m.waypoint) {
       const meta = _el('div', 'kb-item-meta');
@@ -3979,19 +3979,19 @@ function renderRichToolCard(msg) {
 // --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
 const SCENARIO_UI_PLACEHOLDERS = {
   cymbal_hospital: {
-    filter: '🔍 搜索医院导诊知识（如：缴费、抽血、空腹、挂号、取药、核磁共振、体检、急诊）...',
-    persona: '例如：你是 Cymbal Hospital 5楼国际医疗部的双语陪诊专员机器人，语气亲切温和，主动提醒患者诊前准备事项……',
-    kb: '### 今日专科义诊通知\n本周五上午 09:00–11:30 在门诊 1 楼中庭举办心血管内科与内分泌科主任免费健康咨询及血压血糖筛查。\n\n### 地铁院区接驳车\n地铁 2 号线馨博站 A 口每 15 分钟一班免费无障碍接驳巴士直达门诊 1 楼正门。',
+    filter: '🔍 Filter hospital guides (e.g., billing, blood draw, fasting, triage, pharmacy, MRI, checkup, emergency)...',
+    persona: 'e.g. You are the bilingual concierge robot on 5F International Clinic of Cymbal Hospital. Greet patients warmly and remind them of pre-exam preparation steps...',
+    kb: '### International Clinic Desk\nLocated on 6F of the Outpatient Podium with English & Japanese medical interpreters (Mon–Fri 08:00–17:00).\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium.',
   },
   cymbal_bank: {
-    filter: '🔍 搜索银行业务知识（如：理财、存款、大额存单、水电缴费、大额取现、SWIFT、房贷）...',
-    persona: '例如：你是 Cymbal Bank 旗舰支行 VIP 财富管理中心的专属迎宾顾问，接待贵宾客户时专业稳重，主动引导至南侧贵宾室……',
-    kb: '### 新客稳健理财专享礼遇\n首次在本行完成风险测评并签约「馨稳季季添利 90 天」的新客户，可至南侧 VIP 财富室享一对一资产配置服务。\n\n### 周末贵宾财富沙龙\n本周六下午 14:30 在大堂南侧贵宾厅举办家庭稳健配置与黄金定投专题分享会。',
+    filter: '🔍 Filter banking guides (e.g., wealth, term deposit, CD, utility bill, cash withdrawal, SWIFT, mortgage)...',
+    persona: 'e.g. You are the dedicated VIP Private Wealth greeter robot in the 1F South Lounge of Cymbal Bank Flagship Branch. Escort Gold & Private clients courteously...',
+    kb: '### New-Client Steady Yield Offer\nFirst-time clients completing a risk assessment at Smart Kiosks 1–8 can consult a Relationship Manager in the 1F South VIP Lounge.\n\n### Saturday Family Asset Allocation Briefing\nHeld Saturdays at 14:30 in the 1F South VIP Wealth Lounge covering low-volatility fixed-income & gold accumulation.',
   },
   default: {
-    filter: '🔍 搜索自定义知识条目...',
-    persona: '例如：你是企业展厅智能接待机器人，负责向来宾热情介绍展区亮点并协助桌面物品递送……',
-    kb: '### 展厅开放时间\n展厅每周一至周五 09:30–18:00 开放参观，前台可扫码领取访客通行证。',
+    filter: '🔍 Filter custom knowledge entries...',
+    persona: 'e.g. You are the executive showroom concierge robot welcoming visitors, introducing demo zones, and assisting with tabletop handoffs...',
+    kb: '### Showroom Visiting Hours\nOpen Monday–Friday 09:30–18:00. Visitors can scan the QR badge at the 1F reception desk for guest Wi-Fi and passes.',
   },
 };
 
@@ -4010,7 +4010,7 @@ function _parseCustomKbPreview(rawText) {
     const body = lines.length > 1 ? lines.slice(1).join('\n') : first;
     out.push({
       id: `custom_${idx + 1}`,
-      category: '自定义补充知识',
+      category: 'Custom Knowledge',
       title,
       location: '',
       waypoint: '',
@@ -4031,15 +4031,15 @@ function updateScenarioHeaderBadge() {
   btn.classList.remove('scenario-active', 'scenario-hospital', 'scenario-bank');
   if (selectedScenarioId === 'cymbal_hospital') {
     btn.classList.add('scenario-active', 'scenario-hospital');
-    txt.textContent = '🏥 Cymbal Hospital · 导诊';
+    txt.textContent = '🏥 Cymbal Hospital';
   } else if (selectedScenarioId === 'cymbal_bank') {
     btn.classList.add('scenario-active', 'scenario-bank');
-    txt.textContent = '🏦 Cymbal Bank · 大堂';
+    txt.textContent = '🏦 Cymbal Bank';
   } else if (hasCustom) {
     btn.classList.add('scenario-active');
-    txt.textContent = '📖 自定义知识库';
+    txt.textContent = '📖 Custom RAG';
   } else {
-    txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 场景角色';
+    txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 Scenario';
   }
 }
 
@@ -4064,23 +4064,45 @@ function openScenarioSettingsTab() {
   loadScenariosCatalog();
 }
 
-function _sampleQuestionForDoc(doc, scenarioId) {
-  const t = String(doc.title || '');
-  if (t.includes('缴费')) return scenarioId === 'cymbal_bank' ? '请问水电燃气费和社保去哪里缴费？' : '请问去哪里缴费？支持刷医保码吗？';
-  if (t.includes('抽血')) return '请问去哪里抽血化验？需要空腹几个小时？';
-  if (t.includes('尿常规') || t.includes('尿检')) return '尿常规检验去哪里留样送检？';
-  if (t.includes('理财')) return '请问现在有哪些稳健型的理财产品？收益率和风险等级怎么样？';
-  if (t.includes('存款') || t.includes('大额存单')) return '现在定期存款和大额存单利率是多少？';
-  if (t.includes('取现') || t.includes('现金')) return '我要取10万现金需要提前预约吗？';
-  if (t.includes('外汇') || t.includes('SWIFT')) return '给国外大学汇学费需要什么材料？SWIFT代码是多少？';
-  if (t.includes('流水') || t.includes('证明')) return '买房打银行流水和办签证存款证明去哪里办？';
-  if (t.includes('贷款') || t.includes('房贷')) return '首套房贷利率和提前还款怎么办理？';
-  if (t.includes('核磁') || t.includes('MRI')) return '做核磁共振检查在哪里？需要注意什么禁忌？';
-  if (t.includes('分诊') || t.includes('症状')) return '我最近有点头晕胸闷，应该挂什么科？';
-  if (t.includes('取药')) return '交完费去哪里取药？中药可以代煎寄回家吗？';
-  if (t.includes('体检')) return '入职体检在几楼？几点前截止采血？';
-  if (t.includes('急诊')) return '被猫抓伤了可以打狂犬疫苗吗？在哪里打？';
-  return `请问关于「${t.split('（')[0]}」怎么办理？在哪里？`;
+const _SAMPLE_QUESTIONS_BY_DOC_ID = {
+  hosp_billing: 'Where do I pay my outpatient bill, settle health insurance, and print an invoice?',
+  hosp_blood_draw: 'Where do I go for a blood draw and how many hours do I need to fast beforehand?',
+  hosp_specimen_drop: 'Where do I drop off my urine and stool lab specimens?',
+  hosp_registration: 'How do I book or check in for an outpatient appointment, and what if I miss my queue call?',
+  hosp_departments: 'Which floor are Internal Medicine, Orthopedics, Pediatrics, and Radiology located on?',
+  hosp_symptom_triage: 'I have been feeling dizzy with chest tightness lately—which clinic should I register for?',
+  hosp_pharmacy: 'After paying, where do I pick up my prescription and can herbal decoctions be delivered home?',
+  hosp_imaging_mri: 'Where are CT and MRI scans performed, and what metal safety rules apply?',
+  hosp_endoscopy: 'How do I schedule a sedated gastroscopy or colonoscopy and what preparation is required?',
+  hosp_doctor_schedule: 'What are the outpatient clinic hours on weekdays and weekends, and what are the consultation fees?',
+  hosp_inpatient: 'Where do I complete inpatient admission, pay the deposit, and what are ward visiting hours?',
+  hosp_checkup: 'Which floor is the pre-employment health checkup center on and when does morning blood draw close?',
+  hosp_records_certs: 'Where do I get an official stamp on my sick-leave certificate or request inpatient chart copies?',
+  hosp_emergency: 'Where can I get a 24/7 rabies vaccine and wound treatment after a cat scratch?',
+  hosp_amenities: 'Where can I borrow a wheelchair, find parking rates, or locate the cafeteria?',
+  bank_wealth_products: 'What low-volatility wealth management products do you offer and what are their annualized benchmarks?',
+  bank_deposits_bonds: 'What are your current term deposit and large-denomination CD interest rates?',
+  bank_bill_payment: 'Where can I pay electricity, water, gas, and municipal social-security bills?',
+  bank_account_card: 'What documents are required to open a Class-I debit card and activate mobile banking?',
+  bank_card_security: 'I forgot my debit card PIN—which counter or kiosk can reset it or raise my transfer limit?',
+  bank_cash_withdrawal: 'Do I need an advance appointment to withdraw 100,000 in cash, and can I exchange small-denomination notes?',
+  bank_forex_wire: 'What documents and SWIFT code do I need to wire overseas university tuition?',
+  bank_loans_mortgage: 'What is your first-home mortgage interest rate and how do I apply for early repayment?',
+  bank_certificates: 'Where can I print stamped bank statements, a visa solvency certificate, or my credit report?',
+  bank_corporate: 'How do I schedule a corporate basic account opening and print corporate tax vouchers?',
+  bank_vip_tiers: 'What are the AUM tiers and priority benefits for Gold, Platinum, and Private Banking clients?',
+  bank_pension_gold: 'How do I open a tax-deferred personal pension account or set up physical gold accumulation?',
+  bank_antifraud_unfreeze: 'Why were non-counter transfers suspended on my card and what documents lift the restriction?',
+  bank_accessibility: 'Can you arrange a two-officer home visit for a bedridden senior who cannot visit the branch in person?',
+  bank_hours_parking: 'What are the branch counter hours on weekdays and weekends, and is client parking free?',
+};
+
+function _sampleQuestionForDoc(doc, _scenarioId) {
+  if (doc && doc.id && _SAMPLE_QUESTIONS_BY_DOC_ID[doc.id]) {
+    return _SAMPLE_QUESTIONS_BY_DOC_ID[doc.id];
+  }
+  const cleanTitle = String((doc && doc.title) || 'this service').split('(')[0].trim();
+  return `Could you tell me the location, hours, and requirements for ${cleanTitle}?`;
 }
 
 function renderScenarioKbList() {
@@ -4095,8 +4117,8 @@ function renderScenarioKbList() {
   const allDocs = customDocs.concat(sc.documents || []);
   if (countPill) {
     countPill.textContent = allDocs.length
-      ? `共 ${allDocs.length} 篇知识${customDocs.length ? `（含 ${customDocs.length} 篇自定义）` : ''}`
-      : '无行业预设开销';
+      ? `${allDocs.length} KB Entr${allDocs.length === 1 ? 'y' : 'ies'}${customDocs.length ? ` (${customDocs.length} custom)` : ''}`
+      : 'Zero Preset Overhead';
   }
   if (!allDocs.length) {
     kbSec.classList.add('hidden');
@@ -4113,19 +4135,19 @@ function renderScenarioKbList() {
 
   listEl.innerHTML = '';
   if (!filtered.length) {
-    listEl.appendChild(_el('div', 'config-help-text', '未找到匹配的知识条目，请尝试更换搜索关键词。'));
+    listEl.appendChild(_el('div', 'config-help-text', 'No matching knowledge entries found. Try another keyword.'));
     return;
   }
   filtered.forEach((doc) => {
     const det = _el('details', 'scenario-kb-item');
     const sum = document.createElement('summary');
     if (doc.category) {
-      const shortCat = String(doc.category).split(/\s*[（(]/)[0].trim();
+      const shortCat = String(doc.category).split(/\s*\(/)[0].trim();
       const catEl = _el('span', 'scenario-kb-cat', shortCat || doc.category);
       catEl.title = doc.category;
       sum.appendChild(catEl);
     }
-    sum.appendChild(_el('span', 'scenario-kb-title', doc.title || '知识条目'));
+    sum.appendChild(_el('span', 'scenario-kb-title', doc.title || 'Knowledge Entry'));
     if (doc.location) {
       const locEl = _el('span', 'scenario-kb-loc', `📍 ${doc.location}`);
       locEl.title = doc.location;
@@ -4136,9 +4158,9 @@ function renderScenarioKbList() {
     const body = _el('div', 'scenario-kb-body');
     body.appendChild(_el('div', '', doc.summary || doc.content || ''));
     const actions = _el('div', 'scenario-kb-actions');
-    const wpInfo = doc.waypoint ? `🧭 关联导航点：${doc.waypoint}` : '';
+    const wpInfo = doc.waypoint ? `🧭 Linked Waypoint: ${doc.waypoint}` : '';
     actions.appendChild(_el('span', 'config-help-text', wpInfo));
-    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 填入测试问题');
+    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 Try Sample Question');
     askBtn.type = 'button';
     askBtn.onclick = (ev) => {
       ev.preventDefault();
@@ -4166,7 +4188,7 @@ function renderScenarioPanel() {
   grid.innerHTML = '';
 
   const fallbackList = scenarioCatalog.length ? scenarioCatalog : [
-    { id: 'default', name: '默认通用模式', label_zh: '通用具身操作与语音交互（无行业预设）', badge: '🤖 默认通用', organization: '', role: '通用具身操作与语音助手', persona_prompt: '', waypoints: [], documents: [] },
+    { id: 'default', name: 'Default (General)', subtitle: 'General embodied manipulation & voice assistant (no industry preset)', badge: '🤖 Default', organization: '', role: 'General Embodied Manipulation & Voice Assistant', persona_prompt: '', waypoints: [], documents: [] },
   ];
 
   fallbackList.forEach((sc) => {
@@ -4177,9 +4199,9 @@ function renderScenarioPanel() {
     top.appendChild(_el('span', 'scenario-card-title', sc.badge || sc.name));
     const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '').length;
     const totalCnt = (sc.documents ? sc.documents.length : (sc.doc_count || 0)) + customCnt;
-    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} 篇知识` : '通用模式'));
+    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} KB Docs` : 'General'));
     card.appendChild(top);
-    card.appendChild(_el('div', 'scenario-card-sub', sc.label_zh || sc.role || sc.name));
+    card.appendChild(_el('div', 'scenario-card-sub', sc.subtitle || sc.role || sc.name));
     card.onclick = () => selectScenario(sc.id);
     grid.appendChild(card);
   });
@@ -4200,20 +4222,20 @@ function renderScenarioPanel() {
   if (kbInput) kbInput.placeholder = uiHints.kb;
 
   if (orgEl) {
-    orgEl.textContent = active.organization || active.name || '默认通用模式';
+    orgEl.textContent = active.organization || active.name || 'Default (General)';
   }
   if (roleEl) {
-    roleEl.textContent = active.role || '通用具身操作与语音助手（不启用特定行业角色与知识库）';
+    roleEl.textContent = active.role || 'General Embodied Manipulation & Voice Assistant (no industry persona or RAG preset)';
   }
   if (personaEl) {
     const cleanMd = (s) => String(s || '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
     const customP = String(scenarioCustomPersonaMap[selectedScenarioId] || '').trim();
     if (customP) {
-      personaEl.textContent = `✨ 已启用自定义角色指令：\n${cleanMd(customP)}`;
+      personaEl.textContent = `✨ Active Custom Role Persona:\n${cleanMd(customP)}`;
     } else if (active.persona_prompt) {
       personaEl.textContent = cleanMd(active.persona_prompt);
     } else {
-      personaEl.textContent = '当前未启用行业角色预设。请在上方选择「Cymbal Hospital」或「Cymbal Bank」（或在下方补充自定义角色与知识条目），即可开启行业专属角色人设与 search_knowledge_base 知识库检索能力。';
+      personaEl.textContent = 'No industry persona preset is active. Select "Cymbal Hospital" or "Cymbal Bank" above (or add custom role instructions & RAG entries below) to enable a venue-specific persona and grounded search_knowledge_base retrieval.';
     }
   }
   if (wpWrap && wpChips) {
@@ -4261,7 +4283,7 @@ async function selectScenario(scenarioId) {
       const data = await resp.json();
       scenarioCustomPersonaMap = data.custom_persona || scenarioCustomPersonaMap;
       scenarioCustomKbMap = data.custom_kb || scenarioCustomKbMap;
-      _flashScenarioStatus(data.requires_reconnect ? '已保存 · 重连会话后生效 ⚡' : '场景已切换 ✅');
+      _flashScenarioStatus(data.requires_reconnect ? 'Saved · Reconnect session to apply ⚡' : 'Scenario switched ✅');
       updateScenarioReconnectBanner();
       if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
     }
@@ -4333,12 +4355,12 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
           scenarioCustomKbMap = data.custom_kb || {};
           updateScenarioHeaderBadge();
           renderScenarioPanel();
-          _flashScenarioStatus('自定义配置已保存 ✅');
+          _flashScenarioStatus('Custom config saved ✅');
           if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
         }
       } catch (e) {
         console.error('Save scenario customizations failed:', e);
-        _flashScenarioStatus('保存失败 ❌');
+        _flashScenarioStatus('Save failed ❌');
       } finally {
         saveBtn.disabled = false;
       }
@@ -4369,7 +4391,7 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
           scenarioCustomKbMap = data.custom_kb || {};
           updateScenarioHeaderBadge();
           renderScenarioPanel();
-          _flashScenarioStatus('已清空自定义内容 ✅');
+          _flashScenarioStatus('Custom entries cleared ✅');
           if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
         }
       } catch (e) {

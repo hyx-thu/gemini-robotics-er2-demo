@@ -182,35 +182,13 @@ function buildDog() {
       const { cur, t, walkAmt, gaitPhase, gait, talk } = c;
       const breathe = Math.sin(t * 2.2) * 0.006 * (1 - walkAmt);
       const tb = (talk && talk.blend > 0.001 && walkAmt < 0.05 && cur.rear < 0.05 && cur.paw < 0.05) ? talk.blend : 0;
-      const te = tb ? talk.env : 0;
-      const tst = (talk && talk.style) || 'explain';
       let talkBodyPitch = 0, talkBodyRoll = 0, hYaw = 0, hPitch = 0, hRoll = 0;
       if (tb > 0) {
-        const nodWave = Math.sin(t * 3.0) * 0.5 + 0.5;
-        if (tst === 'affirm') {
-          hPitch = (-0.18 * te - 0.09 * nodWave) * tb;
-          hYaw = Math.sin(t * 1.2) * 0.08 * tb;
-          talkBodyPitch = (0.04 - 0.03 * te) * tb;
-        } else if (tst === 'think') {
-          hRoll = (0.26 + Math.sin(t * 1.1) * 0.05) * tb;
-          hPitch = (0.09 - 0.05 * te) * tb;
-          hYaw = (0.14 + Math.sin(t * 1.0) * 0.07) * tb;
-          talkBodyRoll = 0.025 * tb;
-        } else if (tst === 'emphasize') {
-          hPitch = (-0.16 * te - 0.06 * nodWave) * tb;
-          hYaw = Math.sin(t * 1.9) * 0.14 * tb;
-          talkBodyPitch = (0.05 - 0.04 * te) * tb;
-        } else if (tst === 'empathy') {
-          hRoll = -0.18 * tb;
-          hPitch = (-0.08 * te - 0.04) * tb;
-          hYaw = Math.sin(t * 1.0) * 0.07 * tb;
-          talkBodyPitch = 0.025 * tb;
-        } else {
-          hPitch = (-0.11 * te - 0.04 * nodWave) * tb;
-          hYaw = Math.sin(t * 1.35) * 0.12 * tb;
-          hRoll = Math.sin(t * 1.05) * 0.07 * tb;
-          talkBodyPitch = (0.03 - 0.025 * te) * tb;
-        }
+        hPitch = clamp(talk.headPitch * 1.15, -0.32, 0.24);
+        hYaw = clamp(talk.headYaw * 1.05, -0.30, 0.30);
+        hRoll = clamp(talk.headRoll * 1.35, -0.30, 0.32);
+        talkBodyPitch = -talk.torsoLean * 0.75 + talk.beat * 0.015 * tb;
+        talkBodyRoll = talk.torsoRoll * 0.85;
       }
       headG.rotation.set(hRoll, hYaw, hPitch);
       const q = cur.rear * REAR_PITCH;
@@ -373,97 +351,44 @@ function buildHumanoid() {
       const { cur, t, walkAmt, gaitPhase, gait, talk } = c;
       const breathe = Math.sin(t * 1.8) * 0.005 * (1 - walkAmt);
       const tb = (talk && talk.blend > 0.001 && walkAmt < 0.05) ? talk.blend : 0;
-      const te = tb ? talk.env : 0;
       const ta = tb * ((talk && talk.armScale) ?? 1);
-      const tst = (talk && talk.style) || 'explain';
-      // Phrase-level 3D conversational gesture model:
-      // Upper arms remain naturally relaxed near vertical beside the ribs (s ≈ -1.50..-1.28),
-      // while the active hand flexes smoothly from the elbow (e ≈ 0.16 -> 1.50) along a
-      // diagonal forward-outward arc with forearm supination & waist/gaze coupling, and the
-      // non-leading hand rests low at the side (eliminating any horizontal tray-holding bob).
-      let hRoll = 0, hYawOff = 0, hPitchOff = 0, torsoLean = 0, torsoYaw = 0;
-      let rAbd = 0, lAbd = 0, rWrX = 0, lWrX = 0, gR = 0, gL = 0;
-      let tRyaw = -0.04, tRs = -1.50, tRe = 0.16, tRw = 0.04;
-      let tLyaw =  0.04, tLs = -1.50, tLe = 0.16, tLw = 0.04;
-      if (tb > 0) {
-        const amp = clamp((0.30 + 0.70 * te) * (0.90 + 0.10 * Math.sin(t * 2.6)), 0, 1);
-        const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.6);
-        if (tst === 'affirm') {
-          const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
-          const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
-          gR = clamp(wR * amp, 0, 1);
-          gL = clamp(wL * amp, 0, 1);
-          hPitchOff = (-0.16 * te - 0.08 * nodSoft) * tb;
-          hYawOff = Math.sin(t * 1.1) * 0.06 * tb;
-          torsoLean = (0.025 + 0.02 * nodSoft) * tb;
-          torsoYaw = -0.045 * (gR - gL) * tb;
-          tRyaw = -0.04 - 0.22 * gR; tRs = -1.50 + 0.18 * gR; tRe = 0.16 + 1.24 * gR; tRw = 0.04 - 0.16 * gR;
-          tLyaw =  0.04 + 0.22 * gL; tLs = -1.50 + 0.18 * gL; tLe = 0.16 + 1.24 * gL; tLw = 0.04 - 0.16 * gL;
-          rWrX = -0.46 * gR; lWrX = 0.46 * gL;
-          rAbd = 0.06 * gR;  lAbd = 0.06 * gL;
-        } else if (tst === 'think') {
-          const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
-          gR = 0.85 + 0.15 * slowDrift;
-          gL = 0.05 * slowDrift;
-          hRoll = 0.15 * tb;
-          hYawOff = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
-          hPitchOff = (0.09 - 0.04 * te) * tb;
-          torsoYaw = 0.05 * tb;
-          // Right hand thoughtfully near chin; left arm relaxed naturally down at side
-          tRyaw = 0.28; tRs = -0.92 + 0.04 * slowDrift; tRe = 1.62 + 0.05 * slowDrift; tRw = -0.18;
-          tLyaw = 0.04; tLs = -1.50 + 0.02 * slowDrift; tLe = 0.16 + 0.04 * slowDrift; tLw = 0.04;
-          rWrX = -0.34; lWrX = 0;
-          rAbd = 0.06;  lAbd = 0.02;
-        } else if (tst === 'emphasize') {
-          const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
-          const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
-          gR = clamp(wR * amp, 0, 1);
-          gL = clamp(wL * amp, 0, 1);
-          hPitchOff = (-0.14 * te - 0.05 * nodSoft) * tb;
-          hYawOff = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
-          torsoLean = (0.02 + 0.04 * te) * tb;
-          torsoYaw = -0.075 * (gR - gL) * tb;
-          tRyaw = -0.04 - 0.30 * gR; tRs = -1.50 + 0.24 * gR; tRe = 0.16 + 1.46 * gR; tRw = 0.04 - 0.18 * gR;
-          tLyaw =  0.04 + 0.30 * gL; tLs = -1.50 + 0.24 * gL; tLe = 0.16 + 1.46 * gL; tLw = 0.04 - 0.18 * gL;
-          rWrX = -0.54 * gR; lWrX = 0.54 * gL;
-          rAbd = 0.09 * gR;  lAbd = 0.09 * gL;
-        } else if (tst === 'empathy') {
-          const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
-          gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
-          gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
-          hRoll = -0.13 * tb;
-          hPitchOff = (-0.08 * te - 0.04) * tb;
-          hYawOff = Math.sin(t * 0.95) * 0.06 * tb;
-          torsoLean = 0.035 * tb;
-          torsoYaw = 0.035 * tb;
-          // Right hand gently inward toward chest; left hand softly open/low
-          tRyaw = -0.04 + 0.30 * gR; tRs = -1.48 + 0.24 * gR; tRe = 0.16 + 1.42 * gR; tRw = 0.04 - 0.14 * gR;
-          tLyaw =  0.04 + 0.20 * gL; tLs = -1.50 + 0.14 * gL; tLe = 0.16 + 0.96 * gL; tLw = 0.04 - 0.10 * gL;
-          rWrX = -0.38 * gR; lWrX = 0.34 * gL;
-          rAbd = 0.05 * gR;  lAbd = 0.06 * gL;
-        } else {
-          // 'explain': natural alternating single-hand bent-elbow arcs + occasional open two-hand phrase
-          const ph = t * 1.65;
-          const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
-          const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
-          const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
-          gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
-          gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
-          torsoYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
-          torsoLean = (0.014 + 0.024 * Math.max(gR, gL)) * tb;
-          hYawOff = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
-          hPitchOff = (-0.09 * te - 0.035 * nodSoft) * tb;
-          hRoll = (0.045 * (gR - gL) + 0.03 * Math.sin(t * 0.95)) * tb;
-          tRyaw = -0.04 - 0.26 * gR; tRs = -1.50 + 0.22 * gR; tRe = 0.16 + 1.36 * gR; tRw = 0.04 - 0.16 * gR;
-          tLyaw =  0.04 + 0.26 * gL; tLs = -1.50 + 0.22 * gL; tLe = 0.16 + 1.36 * gL; tLw = 0.04 - 0.16 * gL;
-          rWrX = -0.46 * gR; lWrX = 0.46 * gL;
-          rAbd = 0.07 * gR;  lAbd = 0.07 * gL;
-        }
+      // Kendon/McNeill phase-structured co-speech gestures in Center-Center space:
+      // Forearms angle INWARD toward the body midline (`tRyaw > 0`, `tLyaw < 0`) with
+      // minimum-jerk preparation/stroke, held postures, prosodic micro-beats, and
+      // proximal-to-distal follow-through (eliminating outward wing-splay & sine bobbing).
+      let hRoll = 0, hYawOff = 0, hPitchOff = 0, torsoLean = 0, torsoYaw = 0, torsoRoll = 0;
+      let rAbd = 0, lAbd = 0, rWrX = 0, lWrX = 0, rOpen = 0, lOpen = 0;
+      let tRyaw = 0.02, tRs = -1.50, tRe = 0.14, tRw = 0.05;
+      let tLyaw = -0.02, tLs = -1.50, tLe = 0.14, tLw = 0.05;
+      if (tb > 0 && talk.R && talk.L) {
+        const gR = talk.R, gL = talk.L;
+        hPitchOff = talk.headPitch;
+        hYawOff = talk.headYaw;
+        hRoll = talk.headRoll;
+        torsoLean = -talk.torsoLean;   // negative Z-rot leans upper torso gently forward (+X)
+        torsoYaw = talk.torsoYaw;
+        torsoRoll = talk.torsoRoll;
+
+        tRyaw = 0.02 + 0.50 * gR.inward;
+        tRs   = -1.50 + 0.62 * gR.lift;
+        tRe   = 0.14 + 1.46 * gR.flex;
+        tRw   = 0.05 - 0.24 * gR.wristPitch;
+        rWrX  = -0.58 * gR.supinate;
+        rAbd  = gR.abd;
+        rOpen = gR.open;
+
+        tLyaw = -0.02 - 0.50 * gL.inward;
+        tLs   = -1.50 + 0.62 * gL.lift;
+        tLe   = 0.14 + 1.46 * gL.flex;
+        tLw   = 0.05 - 0.24 * gL.wristPitch;
+        lWrX  = 0.58 * gL.supinate;
+        lAbd  = gL.abd;
+        lOpen = gL.open;
       }
       body.position.y = cur.h + breathe + Math.abs(Math.sin(gaitPhase)) * 0.02 * walkAmt;
       body.rotation.set(cur.roll, 0, 0);
-      torsoG.rotation.z = cur.pitch + (gait ? 0.08 : 0) - 0.05 * cur.rear + torsoLean;
-      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt + Math.sin(t * 1.05) * 0.016 * tb;
+      torsoG.rotation.z = cur.pitch + (gait ? -0.06 : 0) - 0.05 * cur.rear + torsoLean;
+      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt + torsoRoll;
       torsoG.rotation.y = torsoYaw;
       headG.rotation.set(hRoll, cur.hy + hYawOff, cur.hp + hPitchOff);
       // Legs: feet planted below the hips, stride + lift when walking.
@@ -479,14 +404,14 @@ function buildHumanoid() {
         L.hip.rotation.z = j.hip; L.knee.rotation.z = j.knee;
         L.ankle.rotation.z = -(j.hip + j.knee);     // keep the foot level
       }
-      // Symmetrical dual-gripper arms: right manipulates items; both express 3D conversational arcs.
+      // Symmetrical dual-gripper arms: right manipulates items; both express 3D Center-Center gestures.
       const mix = (a, b, w) => a + (b - a) * w;
       R.yawG.rotation.y = mix(cur.yaw, tRyaw, ta);
       R.sh.rotation.z = mix(cur.s, tRs, ta);
       R.el.rotation.z = mix(cur.e, tRe, ta);
       R.wr.rotation.z = mix(cur.w, tRw, ta);
       R.wr.rotation.x = mix(0, rWrX, ta);
-      const rGripEff = mix(cur.grip, 0.20 + 0.55 * gR, ta);
+      const rGripEff = mix(cur.grip, 0.10 + 0.68 * rOpen, ta);
       for (const f of fingers) f.g.rotation.y = -f.s * (0.05 + rGripEff * 0.45);
 
       const swing = Math.sin(gaitPhase) * 0.5 * walkAmt;
@@ -495,11 +420,11 @@ function buildHumanoid() {
       Lm.el.rotation.z = mix(cur.le, tLe, ta);
       Lm.wr.rotation.z = mix(0, tLw, ta);
       Lm.wr.rotation.x = mix(0, lWrX, ta);
-      const lGripEff = mix(cur.lgrip || 0, 0.20 + 0.55 * gL, ta);
+      const lGripEff = mix(cur.lgrip || 0, 0.10 + 0.68 * lOpen, ta);
       for (const f of lfingers) f.g.rotation.y = -f.s * (0.05 + lGripEff * 0.45);
 
-      Lm.sh.rotation.x = 0.08 + lAbd * ta;
-      R.sh.rotation.x = -0.08 - rAbd * ta;
+      Lm.sh.rotation.x = 0.07 + lAbd * ta;
+      R.sh.rotation.x = -0.07 - rAbd * ta;
     },
   };
 }
@@ -571,6 +496,7 @@ function init() {
   const pos = new THREE.Vector2();
   let queue = [], step = null, pendingTarget = null;
   const TALK_STYLES = new Set(['explain', 'affirm', 'think', 'emphasize', 'empathy']);
+  const coSpeech = createCoSpeechController();
   const talkState = {
     style: 'explain',
     explicitUntil: 0,
@@ -587,6 +513,7 @@ function init() {
     talkState.audioSeen = false;
     talkState.audioEndGraceUntil = 0;
     talkState.showingHud = false;
+    coSpeech.reset();
   }
 
   function setArm(j) { if (j) Object.assign(tgt, j); }
@@ -746,13 +673,14 @@ function init() {
       const st = String((a && a.style) || 'explain').toLowerCase();
       talkState.style = TALK_STYLES.has(st) ? st : 'explain';
       talkState.explicitUntil = now() + 20.0;
-      talkState.synthUntil = now() + 5.2;
+      talkState.synthUntil = now() + 6.4;
       talkState.audioSeen = false;
       talkState.audioEndGraceUntil = 0;
+      coSpeech.setStyle(talkState.style, true);
       if (!step && queue.length === 0 && !gait && !sitting && !(R.isUp && R.isUp(tgt))) {
         setActionLabel('talk_motion', { style: talkState.style });
         talkState.showingHud = true;
-        idleAt = now() + 5.4;
+        idleAt = now() + 6.6;
       }
     },
     stop: () => { clearQueue(); clearTalkState(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
@@ -1020,23 +948,28 @@ function init() {
     } else if (!talkState.audioSeen && t < talkState.synthUntil) {
       wantTalk = true;
       intensity = 1.0;
-      rawEnv = clamp(0.48 + 0.34 * Math.sin(t * 2.1) + 0.15 * Math.sin(t * 3.7 + 0.8), 0.14, 0.96);
+      // Realistic speech-like syllable bursts + short breath pauses for offline preview
+      const phraseGate = clamp(0.65 + 0.55 * Math.sin(t * 1.45 + 0.3), 0.12, 1.0);
+      const sylBurst = Math.pow(0.5 + 0.5 * Math.sin(t * 9.2 + Math.sin(t * 2.3)), 1.8);
+      rawEnv = clamp(phraseGate * (0.24 + 0.70 * sylBurst), 0.10, 0.96);
     } else if (talkState.showingHud) {
       talkState.showingHud = false;
       idleAt = Math.min(idleAt, t + 0.2);
     }
-    const blendRate = isBusy ? 14 : (wantTalk ? 5.0 : 3.8);
+    const blendRate = isBusy ? 14 : (wantTalk ? 5.2 : 3.6);
     const targetBlend = wantTalk ? intensity : 0;
     talkState.blend += (targetBlend - talkState.blend) * (1 - Math.exp(-dt * blendRate));
     if (talkState.blend < 0.0005) talkState.blend = 0;
-    const envRate = rawEnv > talkState.env ? 10 : 4.5;
+    const envRate = rawEnv > talkState.env ? 12 : 4.8;
     talkState.env += (rawEnv - talkState.env) * (1 - Math.exp(-dt * envRate));
-    const talk = {
+    const talk = coSpeech.step(dt, t, {
+      active: wantTalk || talkState.blend > 0.001,
       style: talkState.style,
-      blend: talkState.blend,
+      rawEnv,
       env: talkState.env,
+      blend: talkState.blend,
       armScale: itemHeld ? 0 : 1,
-    };
+    });
 
     R.update({ cur, t, dt, k, walkAmt, gaitPhase, gait, talk });
 
@@ -1069,6 +1002,390 @@ function init() {
 }
 
 // ---------------------------------------------------------------- helpers --
+// Phase-structured co-speech gesture generator grounded in:
+//   * Kendon (1980, 2004) & McNeill (1992): discrete Gesture Units (Prep -> Stroke -> Post-Stroke Hold -> Rest)
+//     in McNeill's Center-Center space (forearms angled inward in front of the solar plexus, never splayed wide).
+//   * Flash & Hogan (1985): 5th-order Minimum-Jerk trajectory s(u) = 10u^3 - 15u^4 + 6u^5.
+//   * Kopp & Wachsmuth (2004) & USC SmartBody / TalkingHead: proximal-to-distal kinematic cascade
+//     (Torso -> Shoulder -> Elbow -> Distal Wrist/Hand) + prosody-onset syllable micro-beats + deictic gaze coupling.
+function minJerk(u) {
+  const s = clamp(u, 0, 1);
+  return s * s * s * (10 - 15 * s + 6 * s * s);
+}
+
+const ARM_REST = Object.freeze({
+  lift: 0.0, abd: 0.0, inward: 0.04, flex: 0.02, supinate: 0.0, wristPitch: 0.0, open: 0.12,
+});
+const ARM_POISE_LOW = Object.freeze({
+  lift: 0.05, abd: 0.02, inward: 0.12, flex: 0.14, supinate: 0.10, wristPitch: 0.02, open: 0.20,
+});
+
+const GESTURE_CLIPS = {
+  // --- EXPLAIN ---
+  rh_present: {
+    lead: 'R', prep: 0.34, stroke: 0.20, hold: 0.72,
+    torsoYaw: -0.055, torsoLean: 0.024, torsoRoll: 0.015,
+    headYaw: -0.04, headPitch: -0.03, headRoll: 0.03,
+    R: { lift: 0.25, abd: 0.07, inward: 0.42, flex: 0.68, supinate: 0.56, wristPitch: 0.14, open: 0.80 },
+    L: ARM_REST,
+  },
+  bimanual_frame: {
+    lead: 'B', prep: 0.36, stroke: 0.22, hold: 0.78,
+    torsoYaw: -0.015, torsoLean: 0.028, torsoRoll: 0.0,
+    headYaw: 0.0, headPitch: -0.04, headRoll: 0.015,
+    R: { lift: 0.23, abd: 0.08, inward: 0.38, flex: 0.66, supinate: 0.48, wristPitch: 0.12, open: 0.76 },
+    L: { lift: 0.19, abd: 0.07, inward: 0.34, flex: 0.58, supinate: 0.44, wristPitch: 0.10, open: 0.72 },
+  },
+  lh_counterpoint: {
+    lead: 'L', prep: 0.34, stroke: 0.20, hold: 0.68,
+    torsoYaw: 0.052, torsoLean: 0.022, torsoRoll: -0.015,
+    headYaw: 0.04, headPitch: -0.03, headRoll: -0.025,
+    R: ARM_POISE_LOW,
+    L: { lift: 0.24, abd: 0.07, inward: 0.40, flex: 0.65, supinate: 0.54, wristPitch: 0.14, open: 0.78 },
+  },
+  rh_open_offer: {
+    lead: 'R', prep: 0.32, stroke: 0.20, hold: 0.66,
+    torsoYaw: -0.045, torsoLean: 0.026, torsoRoll: 0.012,
+    headYaw: -0.03, headPitch: -0.04, headRoll: 0.02,
+    R: { lift: 0.28, abd: 0.10, inward: 0.24, flex: 0.63, supinate: 0.68, wristPitch: 0.18, open: 0.86 },
+    L: ARM_POISE_LOW,
+  },
+  rest_attentive: {
+    lead: 'none', prep: 0.42, stroke: 0.16, hold: 0.56,
+    torsoYaw: 0.0, torsoLean: 0.016, torsoRoll: 0.0,
+    headYaw: 0.0, headPitch: -0.035, headRoll: 0.01,
+    R: ARM_REST,
+    L: ARM_REST,
+  },
+
+  // --- AFFIRM ---
+  open_welcome: {
+    lead: 'B', prep: 0.32, stroke: 0.20, hold: 0.74,
+    torsoYaw: 0.0, torsoLean: 0.034, torsoRoll: 0.0,
+    headYaw: 0.0, headPitch: -0.09, headRoll: 0.02,
+    R: { lift: 0.24, abd: 0.09, inward: 0.30, flex: 0.62, supinate: 0.64, wristPitch: 0.16, open: 0.84 },
+    L: { lift: 0.21, abd: 0.08, inward: 0.28, flex: 0.57, supinate: 0.60, wristPitch: 0.14, open: 0.80 },
+  },
+  rh_nod_agree: {
+    lead: 'R', prep: 0.30, stroke: 0.18, hold: 0.68,
+    torsoYaw: -0.04, torsoLean: 0.032, torsoRoll: 0.01,
+    headYaw: -0.02, headPitch: -0.10, headRoll: 0.02,
+    R: { lift: 0.22, abd: 0.06, inward: 0.38, flex: 0.64, supinate: 0.52, wristPitch: 0.14, open: 0.76 },
+    L: ARM_REST,
+  },
+
+  // --- THINK ---
+  chin_ponder: {
+    lead: 'R', prep: 0.44, stroke: 0.24, hold: 1.25,
+    torsoYaw: 0.045, torsoLean: 0.012, torsoRoll: 0.028,
+    headYaw: 0.14, headPitch: 0.06, headRoll: 0.13,
+    R: { lift: 0.88, abd: 0.07, inward: 0.74, flex: 0.98, supinate: 0.40, wristPitch: -0.18, open: 0.32 },
+    L: ARM_REST,
+  },
+  rh_weigh_idea: {
+    lead: 'R', prep: 0.40, stroke: 0.22, hold: 0.96,
+    torsoYaw: 0.03, torsoLean: 0.018, torsoRoll: 0.022,
+    headYaw: 0.10, headPitch: 0.04, headRoll: 0.10,
+    R: { lift: 0.36, abd: 0.07, inward: 0.48, flex: 0.78, supinate: 0.52, wristPitch: 0.08, open: 0.58 },
+    L: ARM_POISE_LOW,
+  },
+
+  // --- EMPHASIZE ---
+  rh_precision_beat: {
+    lead: 'R', prep: 0.26, stroke: 0.17, hold: 0.60,
+    torsoYaw: -0.065, torsoLean: 0.038, torsoRoll: 0.018,
+    headYaw: -0.05, headPitch: -0.08, headRoll: 0.02,
+    R: { lift: 0.30, abd: 0.08, inward: 0.44, flex: 0.74, supinate: 0.46, wristPitch: 0.18, open: 0.68 },
+    L: ARM_POISE_LOW,
+  },
+  bimanual_frame_strong: {
+    lead: 'B', prep: 0.28, stroke: 0.18, hold: 0.64,
+    torsoYaw: 0.0, torsoLean: 0.042, torsoRoll: 0.0,
+    headYaw: 0.0, headPitch: -0.09, headRoll: 0.0,
+    R: { lift: 0.29, abd: 0.09, inward: 0.40, flex: 0.72, supinate: 0.50, wristPitch: 0.16, open: 0.76 },
+    L: { lift: 0.26, abd: 0.08, inward: 0.36, flex: 0.66, supinate: 0.46, wristPitch: 0.14, open: 0.72 },
+  },
+  lh_precision_beat: {
+    lead: 'L', prep: 0.28, stroke: 0.18, hold: 0.58,
+    torsoYaw: 0.06, torsoLean: 0.034, torsoRoll: -0.016,
+    headYaw: 0.045, headPitch: -0.07, headRoll: -0.02,
+    R: ARM_POISE_LOW,
+    L: { lift: 0.28, abd: 0.08, inward: 0.42, flex: 0.70, supinate: 0.46, wristPitch: 0.16, open: 0.68 },
+  },
+
+  // --- EMPATHY ---
+  heart_touch: {
+    lead: 'R', prep: 0.42, stroke: 0.24, hold: 1.10,
+    torsoYaw: 0.03, torsoLean: 0.036, torsoRoll: -0.025,
+    headYaw: 0.03, headPitch: -0.06, headRoll: -0.11,
+    R: { lift: 0.38, abd: 0.04, inward: 0.76, flex: 0.88, supinate: 0.34, wristPitch: -0.10, open: 0.46 },
+    L: { lift: 0.14, abd: 0.06, inward: 0.26, flex: 0.42, supinate: 0.42, wristPitch: 0.08, open: 0.62 },
+  },
+  warm_bimanual_low: {
+    lead: 'B', prep: 0.40, stroke: 0.24, hold: 0.95,
+    torsoYaw: -0.02, torsoLean: 0.034, torsoRoll: -0.02,
+    headYaw: -0.02, headPitch: -0.06, headRoll: -0.09,
+    R: { lift: 0.20, abd: 0.07, inward: 0.34, flex: 0.58, supinate: 0.58, wristPitch: 0.12, open: 0.76 },
+    L: { lift: 0.17, abd: 0.06, inward: 0.30, flex: 0.52, supinate: 0.54, wristPitch: 0.10, open: 0.72 },
+  },
+};
+
+const STYLE_SEQUENCES = {
+  explain: ['rh_present', 'bimanual_frame', 'lh_counterpoint', 'rest_attentive', 'rh_open_offer', 'bimanual_frame'],
+  affirm: ['open_welcome', 'rh_nod_agree', 'rest_attentive', 'open_welcome'],
+  think: ['chin_ponder', 'rh_weigh_idea'],
+  emphasize: ['rh_precision_beat', 'bimanual_frame_strong', 'lh_precision_beat', 'rh_precision_beat'],
+  empathy: ['heart_touch', 'warm_bimanual_low'],
+};
+
+function cloneArm(a) {
+  return {
+    lift: a.lift, abd: a.abd, inward: a.inward, flex: a.flex,
+    supinate: a.supinate, wristPitch: a.wristPitch, open: a.open,
+  };
+}
+
+function lerpArm(a, b, w, out) {
+  out.lift = a.lift + (b.lift - a.lift) * w;
+  out.abd = a.abd + (b.abd - a.abd) * w;
+  out.inward = a.inward + (b.inward - a.inward) * w;
+  out.flex = a.flex + (b.flex - a.flex) * w;
+  out.supinate = a.supinate + (b.supinate - a.supinate) * w;
+  out.wristPitch = a.wristPitch + (b.wristPitch - a.wristPitch) * w;
+  out.open = a.open + (b.open - a.open) * w;
+  return out;
+}
+
+function makePrepArm(targetArm) {
+  // Kendon Preparation: brings proximal arm ~80% toward gesture space while keeping wrist/hand relaxed before stroke.
+  return {
+    lift: targetArm.lift * 0.82,
+    abd: targetArm.abd * 0.80,
+    inward: targetArm.inward * 0.85,
+    flex: Math.max(0.04, targetArm.flex * 0.78),
+    supinate: targetArm.supinate * 0.32,
+    wristPitch: targetArm.wristPitch * 0.25,
+    open: 0.18 + (targetArm.open - 0.18) * 0.35,
+  };
+}
+
+function createCoSpeechController() {
+  let curStyle = 'explain';
+  let seqIdx = 0;
+  let clipName = 'rh_present';
+  let phase = 'prep';     // 'prep' | 'stroke' | 'hold'
+  let phaseT = 0;
+  let phaseDur = 0.34;
+  let wasActive = false;
+
+  let fastEnv = 0;
+  let slowEnv = 0;
+  let beatSmooth = 0;
+
+  let fromR = cloneArm(ARM_REST), fromL = cloneArm(ARM_REST);
+  let fromBody = { torsoYaw: 0, torsoLean: 0, torsoRoll: 0, headYaw: 0, headPitch: 0, headRoll: 0 };
+
+  const rawR = cloneArm(ARM_REST), rawL = cloneArm(ARM_REST);
+  const rawBody = { torsoYaw: 0, torsoLean: 0, torsoRoll: 0, headYaw: 0, headPitch: 0, headRoll: 0 };
+
+  // Proximal-to-distal filtered state
+  const filtR = cloneArm(ARM_REST), filtL = cloneArm(ARM_REST);
+  const filtBody = { torsoYaw: 0, torsoLean: 0, torsoRoll: 0, headYaw: 0, headPitch: 0, headRoll: 0 };
+
+  const outR = cloneArm(ARM_REST), outL = cloneArm(ARM_REST);
+
+  function startClip(name) {
+    clipName = GESTURE_CLIPS[name] ? name : 'rh_present';
+    const c = GESTURE_CLIPS[clipName];
+    fromR = cloneArm(rawR);
+    fromL = cloneArm(rawL);
+    fromBody = { ...rawBody };
+    phase = 'prep';
+    phaseT = 0;
+    phaseDur = c.prep;
+  }
+
+  function advanceClip() {
+    const seq = STYLE_SEQUENCES[curStyle] || STYLE_SEQUENCES.explain;
+    seqIdx = (seqIdx + 1) % seq.length;
+    startClip(seq[seqIdx]);
+  }
+
+  function setStyle(style, immediate = false) {
+    const next = STYLE_SEQUENCES[style] ? style : 'explain';
+    if (next !== curStyle || immediate) {
+      curStyle = next;
+      seqIdx = 0;
+      startClip(STYLE_SEQUENCES[curStyle][0]);
+    }
+  }
+
+  function reset() {
+    wasActive = false;
+    fastEnv = 0;
+    slowEnv = 0;
+    beatSmooth = 0;
+    Object.assign(rawR, ARM_REST); Object.assign(rawL, ARM_REST);
+    Object.assign(filtR, ARM_REST); Object.assign(filtL, ARM_REST);
+    Object.assign(rawBody, { torsoYaw: 0, torsoLean: 0, torsoRoll: 0, headYaw: 0, headPitch: 0, headRoll: 0 });
+    Object.assign(filtBody, rawBody);
+  }
+
+  function step(dt, t, { active, style, rawEnv, env, blend, armScale }) {
+    if (style && style !== curStyle) setStyle(style, true);
+    if (active && !wasActive) {
+      wasActive = true;
+      seqIdx = 0;
+      startClip((STYLE_SEQUENCES[curStyle] || STYLE_SEQUENCES.explain)[0]);
+    } else if (!active && blend <= 0.001) {
+      wasActive = false;
+    }
+
+    // 1. Dual-timescale prosody onset detector (Marsella et al. SIGGRAPH 2013 / EMAGE)
+    const fastRate = rawEnv > fastEnv ? 22.0 : 11.0;
+    fastEnv += (rawEnv - fastEnv) * (1 - Math.exp(-dt * fastRate));
+    slowEnv += (rawEnv - slowEnv) * (1 - Math.exp(-dt * 3.0));
+    const rawOnset = clamp((fastEnv - slowEnv) * 2.6 + 0.12 * rawEnv, 0, 1);
+    beatSmooth += (rawOnset - beatSmooth) * (1 - Math.exp(-dt * 14.0));
+
+    // 2. Advance Kendon/McNeill Gesture Unit phase machine
+    if (active) {
+      phaseT += dt;
+      const c = GESTURE_CLIPS[clipName] || GESTURE_CLIPS.rh_present;
+      if (phaseT >= phaseDur) {
+        phaseT -= phaseDur;
+        if (phase === 'prep') {
+          phase = 'stroke';
+          phaseDur = c.stroke;
+          fromR = cloneArm(rawR);
+          fromL = cloneArm(rawL);
+          fromBody = { ...rawBody };
+        } else if (phase === 'stroke') {
+          phase = 'hold';
+          phaseDur = c.hold;
+        } else {
+          advanceClip();
+        }
+      }
+    }
+
+    const c = GESTURE_CLIPS[clipName] || GESTURE_CLIPS.rh_present;
+    const u = phaseDur > 1e-4 ? clamp(phaseT / phaseDur, 0, 1) : 1;
+    const w = minJerk(u);
+    const prepR = makePrepArm(c.R);
+    const prepL = makePrepArm(c.L);
+
+    if (!active) {
+      lerpArm(rawR, ARM_REST, 1 - Math.exp(-dt * 5.0), rawR);
+      lerpArm(rawL, ARM_REST, 1 - Math.exp(-dt * 5.0), rawL);
+      rawBody.torsoYaw *= Math.exp(-dt * 5.0);
+      rawBody.torsoLean *= Math.exp(-dt * 5.0);
+      rawBody.torsoRoll *= Math.exp(-dt * 5.0);
+      rawBody.headYaw *= Math.exp(-dt * 5.0);
+      rawBody.headPitch *= Math.exp(-dt * 5.0);
+      rawBody.headRoll *= Math.exp(-dt * 5.0);
+    } else if (phase === 'prep') {
+      lerpArm(fromR, prepR, w, rawR);
+      lerpArm(fromL, prepL, w, rawL);
+      rawBody.torsoYaw = fromBody.torsoYaw + (c.torsoYaw - fromBody.torsoYaw) * w;
+      rawBody.torsoLean = fromBody.torsoLean + (c.torsoLean - fromBody.torsoLean) * w;
+      rawBody.torsoRoll = fromBody.torsoRoll + (c.torsoRoll - fromBody.torsoRoll) * w;
+      // Deictic glance ~35% toward the preparing hand before returning to eye contact during hold
+      const glanceYaw = c.lead === 'R' ? -0.07 : c.lead === 'L' ? 0.07 : 0.0;
+      rawBody.headYaw = fromBody.headYaw + (c.headYaw + glanceYaw - fromBody.headYaw) * w;
+      rawBody.headPitch = fromBody.headPitch + (c.headPitch - fromBody.headPitch) * w;
+      rawBody.headRoll = fromBody.headRoll + (c.headRoll - fromBody.headRoll) * w;
+    } else if (phase === 'stroke') {
+      lerpArm(fromR, c.R, w, rawR);
+      lerpArm(fromL, c.L, w, rawL);
+      rawBody.torsoYaw = fromBody.torsoYaw + (c.torsoYaw - fromBody.torsoYaw) * w;
+      rawBody.torsoLean = fromBody.torsoLean + (c.torsoLean + 0.008 - fromBody.torsoLean) * w;
+      rawBody.torsoRoll = fromBody.torsoRoll + (c.torsoRoll - fromBody.torsoRoll) * w;
+      const glanceFade = (1 - 0.65 * w) * (c.lead === 'R' ? -0.07 : c.lead === 'L' ? 0.07 : 0.0);
+      rawBody.headYaw = c.headYaw + glanceFade;
+      rawBody.headPitch = c.headPitch - 0.035 * w;
+      rawBody.headRoll = c.headRoll;
+    } else {
+      // 'hold': Post-Stroke Hold in Center-Center space with subtle syllable micro-beats (3°-5°)
+      const beatAmp = curStyle === 'emphasize' ? 0.075 : (curStyle === 'think' ? 0.018 : 0.048);
+      const bPulse = beatSmooth * beatAmp;
+      Object.assign(rawR, c.R);
+      Object.assign(rawL, c.L);
+      if (c.lead === 'R' || c.lead === 'B') {
+        rawR.flex = clamp(c.R.flex + bPulse * 0.65, 0, 1.05);
+        rawR.wristPitch = c.R.wristPitch - bPulse * 1.15;
+        rawR.open = clamp(c.R.open + bPulse * 0.45, 0, 1);
+      }
+      if (c.lead === 'L' || c.lead === 'B') {
+        rawL.flex = clamp(c.L.flex + bPulse * 0.58, 0, 1.05);
+        rawL.wristPitch = c.L.wristPitch - bPulse * 1.05;
+        rawL.open = clamp(c.L.open + bPulse * 0.40, 0, 1);
+      }
+      rawBody.torsoYaw = c.torsoYaw;
+      rawBody.torsoLean = c.torsoLean + beatSmooth * 0.008;
+      rawBody.torsoRoll = c.torsoRoll;
+      // Eye contact returns cleanly to the user during the hold
+      rawBody.headYaw = c.headYaw * (1 - 0.35 * minJerk(u));
+      rawBody.headPitch = c.headPitch;
+      rawBody.headRoll = c.headRoll;
+    }
+
+    // 3. Irrational-frequency multi-octave 1/f postural life + prosodic head nods
+    const swayYaw = 0.018 * Math.sin(t * 2.32) + 0.010 * Math.sin(t * 4.46 + 1.1);
+    const swayRoll = 0.014 * Math.sin(t * 1.95 + 0.7) + 0.007 * Math.sin(t * 3.83);
+    const nodScale = curStyle === 'affirm' ? 0.13 : curStyle === 'emphasize' ? 0.11 : curStyle === 'think' ? 0.035 : 0.075;
+    const prosodicNod = -nodScale * beatSmooth - 0.025 * env;
+
+    // 4. Proximal-to-distal kinematic cascade (Torso -> Shoulder -> Elbow -> Wrist/Hand)
+    const kTorso = 1 - Math.exp(-dt * 9.5);
+    const kSh = 1 - Math.exp(-dt * 7.2);
+    const kEl = 1 - Math.exp(-dt * 5.4);
+    const kWr = 1 - Math.exp(-dt * 4.0);
+
+    filtBody.torsoYaw += ((rawBody.torsoYaw + swayYaw * 0.45) - filtBody.torsoYaw) * kTorso;
+    filtBody.torsoLean += (rawBody.torsoLean - filtBody.torsoLean) * kTorso;
+    filtBody.torsoRoll += ((rawBody.torsoRoll + swayRoll * 0.5) - filtBody.torsoRoll) * kTorso;
+    filtBody.headYaw += ((rawBody.headYaw + swayYaw) - filtBody.headYaw) * kSh;
+    filtBody.headPitch += ((rawBody.headPitch + prosodicNod) - filtBody.headPitch) * kSh;
+    filtBody.headRoll += ((rawBody.headRoll + swayRoll) - filtBody.headRoll) * kSh;
+
+    for (const [src, dst] of [[rawR, filtR], [rawL, filtL]]) {
+      dst.lift += (src.lift - dst.lift) * kSh;
+      dst.abd += (src.abd - dst.abd) * kSh;
+      dst.inward += (src.inward - dst.inward) * kSh;
+      dst.flex += (src.flex - dst.flex) * kEl;
+      dst.supinate += (src.supinate - dst.supinate) * kWr;
+      dst.wristPitch += (src.wristPitch - dst.wristPitch) * kWr;
+      dst.open += (src.open - dst.open) * kWr;
+    }
+
+    Object.assign(outR, filtR);
+    Object.assign(outL, filtL);
+
+    const state = {
+      style: curStyle,
+      blend,
+      env,
+      armScale,
+      phase,
+      clip: clipName,
+      beat: beatSmooth,
+      torsoYaw: filtBody.torsoYaw * blend,
+      torsoLean: filtBody.torsoLean * blend,
+      torsoRoll: filtBody.torsoRoll * blend,
+      headYaw: filtBody.headYaw * blend,
+      headPitch: filtBody.headPitch * blend,
+      headRoll: filtBody.headRoll * blend,
+      R: outR,
+      L: outL,
+    };
+    window.__lastCoSpeechState = state;
+    return state;
+  }
+
+  return { step, setStyle, reset };
+}
+
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
 function capsule(r, len, alongX = false) {

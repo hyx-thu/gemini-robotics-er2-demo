@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -14,6 +16,8 @@ from core import tool_call_handler
 from embodiment.spot import spot_sim_embodiment
 from tool import scenario_rag
 
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
 
 class ScenarioRagTest(unittest.TestCase):
 
@@ -21,6 +25,7 @@ class ScenarioRagTest(unittest.TestCase):
     super().setUp()
     self._orig_embed_env = os.environ.get("SCENARIO_RAG_EMBEDDINGS")
     os.environ["SCENARIO_RAG_EMBEDDINGS"] = "0"
+    scenario_rag._scenarios_cache = None  # pylint: disable=protected-access
 
   def tearDown(self):
     if self._orig_embed_env is None:
@@ -29,7 +34,7 @@ class ScenarioRagTest(unittest.TestCase):
       os.environ["SCENARIO_RAG_EMBEDDINGS"] = self._orig_embed_env
     super().tearDown()
 
-  def test_catalog_contains_hospital_and_bank(self):
+  def test_catalog_contains_hospital_and_bank_pure_english(self):
     items = {s["id"]: s for s in scenario_rag.list_scenarios()}
     self.assertIn("default", items)
     self.assertIn("cymbal_hospital", items)
@@ -40,35 +45,57 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertIn("blood_draw_center_1f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("vip_wealth_lounge", items["cymbal_bank"]["waypoints"])
 
+    # Every UI-facing scenario field, persona block, and tool schema must be 100% English (zero CJK).
+    catalog_json = json.dumps(items, ensure_ascii=False)
+    self.assertIsNone(
+        _CJK_RE.search(catalog_json),
+        f"Found unexpected CJK characters in scenario catalog: {_CJK_RE.findall(catalog_json)[:10]}",
+    )
+    for sid in ("default", "cymbal_hospital", "cymbal_bank"):
+      persona = scenario_rag.build_scenario_persona_block(sid, custom_kb="### Lobby Info\nOpen daily." if sid == "default" else "")
+      tool_str = json.dumps(scenario_rag.search_knowledge_base_tool(sid), ensure_ascii=False)
+      self.assertIsNone(_CJK_RE.search(persona), f"CJK found in persona for {sid}")
+      self.assertIsNone(_CJK_RE.search(tool_str), f"CJK found in tool schema for {sid}")
+
   def test_default_mode_zero_overhead(self):
     self.assertFalse(scenario_rag.is_rag_active("default", ""))
     self.assertEqual(scenario_rag.build_scenario_persona_block("default"), "")
     self.assertIsNone(scenario_rag.get_scenario_waypoints("default"))
 
   def test_strict_scenario_isolation_no_cross_domain_terms(self):
-    hosp_tool = str(scenario_rag.search_knowledge_base_tool("cymbal_hospital"))
-    hosp_persona = scenario_rag.build_scenario_persona_block("cymbal_hospital")
-    for bank_term in ("理财", "大额存单", "取现", "SWIFT", "房贷"):
-      self.assertNotIn(bank_term, hosp_tool)
-      self.assertNotIn(bank_term, hosp_persona)
+    hosp_full = (
+        json.dumps(scenario_rag.get_scenario("cymbal_hospital"), ensure_ascii=False).lower()
+        + " "
+        + json.dumps(scenario_rag.search_knowledge_base_tool("cymbal_hospital"), ensure_ascii=False).lower()
+        + " "
+        + scenario_rag.build_scenario_persona_block("cymbal_hospital").lower()
+    )
+    for bank_term in ("wealth", "mortgage", "swift", "teller", "atm", "bullion", "理财", "大额存单"):
+      self.assertNotIn(bank_term.lower(), hosp_full)
 
-    bank_tool = str(scenario_rag.search_knowledge_base_tool("cymbal_bank"))
-    bank_persona = scenario_rag.build_scenario_persona_block("cymbal_bank")
-    for hosp_term in ("抽血", "义诊", "核磁", "胃镜", "门诊"):
-      self.assertNotIn(hosp_term, bank_tool)
-      self.assertNotIn(hosp_term, bank_persona)
+    bank_full = (
+        json.dumps(scenario_rag.get_scenario("cymbal_bank"), ensure_ascii=False).lower()
+        + " "
+        + json.dumps(scenario_rag.search_knowledge_base_tool("cymbal_bank"), ensure_ascii=False).lower()
+        + " "
+        + scenario_rag.build_scenario_persona_block("cymbal_bank").lower()
+    )
+    for hosp_term in ("hospital", "patient", "phlebotomy", "triage", "pharmacy", "mri", "endoscopy", "rabies", "义诊", "抽血"):
+      self.assertNotIn(hosp_term.lower(), bank_full)
 
-  def test_hospital_rag_queries(self):
+  def test_hospital_rag_queries_english_and_chinese(self):
     cases = [
+        ("Where do I pay my outpatient bill and print an invoice?", "hosp_billing"),
+        ("Where do I go for a blood draw and how many hours should I fast?", "hosp_blood_draw"),
+        ("Where do I drop off a urine sample?", "hosp_specimen_drop"),
+        ("Can I wear a metal watch or pacemaker into the MRI room?", "hosp_imaging_mri"),
+        ("Which clinic should I register for dizziness and chest tightness?", "hosp_symptom_triage"),
+        ("Where is the pharmacy and can herbal decoctions be delivered home?", "hosp_pharmacy"),
+        ("What floor is the pre-employment health checkup center on?", "hosp_checkup"),
+        ("Where can I get a rabies vaccine after a cat scratch?", "hosp_emergency"),
         ("请问去哪里缴费？支持刷医保码吗？", "hosp_billing"),
         ("去哪里抽血化验？需要空腹几个小时？", "hosp_blood_draw"),
-        ("尿常规和大便样本去哪里留样？", "hosp_specimen_drop"),
-        ("做核磁共振能带手机和手表吗？", "hosp_imaging_mri"),
-        ("我最近头晕胸闷应该挂什么科？", "hosp_symptom_triage"),
         ("交完钱去哪里取药？中药可以代煎寄回家吗？", "hosp_pharmacy"),
-        ("入职体检在几楼？几点截止采血？", "hosp_checkup"),
-        ("被猫抓伤了去哪里打狂犬疫苗？", "hosp_emergency"),
-        ("Where do I pay my bill and print an invoice?", "hosp_billing"),
     ]
     for query, expected_id in cases:
       with self.subTest(query=query):
@@ -82,16 +109,18 @@ class ScenarioRagTest(unittest.TestCase):
             f"Expected {expected_id} first for {query!r}, got {ids}",
         )
 
-  def test_bank_rag_queries(self):
+  def test_bank_rag_queries_english_and_chinese(self):
     cases = [
+        ("What low-volatility wealth management products do you offer and what is the yield?", "bank_wealth_products"),
+        ("What are your 3-year term deposit and CD interest rates?", "bank_deposits_bonds"),
+        ("Where can I pay my electricity, water, and gas utility bills?", "bank_bill_payment"),
+        ("Do I need an advance appointment to withdraw 100,000 in cash?", "bank_cash_withdrawal"),
+        ("What is your SWIFT code for an overseas university tuition wire transfer?", "bank_forex_wire"),
+        ("Where can I print bank statements and a visa solvency certificate?", "bank_certificates"),
+        ("What is the first-home mortgage rate and how does early repayment work?", "bank_loans_mortgage"),
+        ("Can you arrange a home visit for a bedridden senior who forgot their PIN?", "bank_accessibility"),
         ("请问有什么稳健型的理财产品？收益率多少？", "bank_wealth_products"),
-        ("现在定期存款和大额存单利率是多少？", "bank_deposits_bonds"),
-        ("水电燃气费和社保去哪里缴费？", "bank_bill_payment"),
         ("我要取十万现金需要提前预约吗？", "bank_cash_withdrawal"),
-        ("给国外大学汇学费需要什么材料？SWIFT代码是多少？", "bank_forex_wire"),
-        ("买房打银行流水和签证存款证明去哪里办？", "bank_certificates"),
-        ("首套房贷利率和提前还款怎么办理？", "bank_loans_mortgage"),
-        ("家里老人卧床忘记银行卡密码可以上门办理吗？", "bank_accessibility"),
     ]
     for query, expected_id in cases:
       with self.subTest(query=query):
@@ -107,20 +136,21 @@ class ScenarioRagTest(unittest.TestCase):
 
   def test_custom_kb_parsing_and_retrieval(self):
     custom_md = (
-        "### 国际医疗部特需门诊\n"
-        "国际医疗部位于门诊裙楼 6F，提供英语与日语全流程陪诊，预约电话 400-800-9999。\n\n"
-        "### 免费摆渡车时刻表\n"
-        "地铁2号线馨博站 A 口每 15 分钟一班免费院区接驳巴士。"
+        "### International VIP Clinic\n"
+        "Located on 6F of the Outpatient Podium with dedicated English and Japanese medical interpreters; booking hotline 400-800-9999.\n\n"
+        "### Free Metro Shuttle Schedule\n"
+        "Complimentary wheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium."
     )
     chunks = scenario_rag.parse_custom_kb(custom_md, "cymbal_hospital")
     self.assertEqual(len(chunks), 2)
+    self.assertEqual(chunks[0]["category"], "Custom Knowledge")
     res = scenario_rag.run_rag_tool(
-        {"query": "地铁站有免费接驳摆渡车吗"},
+        {"query": "Is there a free shuttle bus from the metro station?"},
         "cymbal_hospital",
         custom_kb=custom_md,
     )
-    self.assertEqual(res["matches"][0]["title"], "免费摆渡车时刻表")
-    self.assertIn("15 分钟", res["matches"][0]["content"])
+    self.assertEqual(res["matches"][0]["title"], "Free Metro Shuttle Schedule")
+    self.assertIn("15 minutes", res["matches"][0]["content"])
 
   def test_hybrid_vector_rrf_reranking(self):
     os.environ["SCENARIO_RAG_EMBEDDINGS"] = "1"
@@ -133,7 +163,7 @@ class ScenarioRagTest(unittest.TestCase):
     for i in range(n_docs):
       fake_vecs.append([0.99, 0.01] if i == target_idx else [0.0, 1.0])
     with mock.patch.object(scenario_rag, "_vertex_embed_batch", return_value=fake_vecs):
-      res = scenario_rag.run_rag_tool({"query": "手头闲钱怎么打理"}, "cymbal_bank")
+      res = scenario_rag.run_rag_tool({"query": "how to grow idle savings safely"}, "cymbal_bank")
       self.assertEqual(res["retrieval_mode"], "hybrid_vector_bm25")
       self.assertEqual(res["matches"][0]["id"], "bank_wealth_products")
 
@@ -191,7 +221,7 @@ class ScenarioRagTest(unittest.TestCase):
       await handler._execute_single_tool({
           "id": "call-rag-1",
           "name": "search_knowledge_base",
-          "args": {"query": "去哪里抽血"},
+          "args": {"query": "where do I get a blood draw"},
       })
       return bus, sm
 
@@ -226,7 +256,7 @@ class ScenarioRagTest(unittest.TestCase):
         "/api/scenarios",
         json={
             "scenario_id": "cymbal_bank",
-            "custom_kb": "### 周末理财沙龙\n每周六下午14:00在1F贵宾厅举办黄金投资讲座。",
+            "custom_kb": "### Saturday Wealth Seminar\nEvery Saturday at 14:00 in the 1F South VIP Lounge: gold allocation & retirement planning briefing.",
         },
     )
     self.assertEqual(r1.status_code, 200)

@@ -37,38 +37,48 @@ _KNOWLEDGE_FILE = os.path.join(
     "scenarios.json",
 )
 
-# Colloquial bilingual synonym clusters so natural visitor phrasing ("交钱",
-# "验血", "存钱利息", "买房流水", "打钱出国") hits exact policy chunks even
-# before vector reranking.
+# Colloquial bilingual synonym clusters so natural visitor phrasing (in either
+# English or Chinese) hits exact English policy chunks even before vector RRF.
 _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
-    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "收费", "结算", "刷医保", "医保", "报销", "发票", "收据", "水费", "电费", "燃气费", "煤气", "学费", "pay", "payment", "billing", "cashier", "invoice", "utilities"),
-    ("抽血", "采血", "验血", "查血", "化验", "血常规", "空腹", "肝功", "肾功", "血糖", "血脂", "blood", "phlebotomy", "fasting", "lab"),
-    ("尿检", "验尿", "尿常规", "大便", "便常规", "留样", "标本", "urine", "stool", "specimen"),
-    ("理财", "买理财", "收益", "收益率", "年化", "活钱", "稳健", "固收", "基金", "风险测评", "风险评估", "天天盈", "wealth", "investment", "yield", "fund", "r1", "r2", "r3"),
-    ("存款", "存钱", "定期", "定存", "利息", "利率", "大额存单", "国债", "保本", "养老金", "黄金", "积存金", "deposit", "interest", "bond", "gold", "cd"),
-    ("取钱", "取现", "取款", "拿现金", "大额取现", "预约取款", "零钱", "零钱包", "新钞", "残币", "atm", "cash", "withdrawal", "change"),
-    ("办卡", "开卡", "开户", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡", "debit", "account"),
-    ("密码", "忘密码", "锁住", "挂失", "补卡", "换卡", "手机号", "限额", "提额", "password", "lost", "limit"),
-    ("外汇", "换汇", "购汇", "结汇", "美元", "日元", "欧元", "港币", "跨境", "电汇", "汇款", "打钱", "留学", "swift", "forex", "wire", "currency", "usd"),
-    ("贷款", "借钱", "房贷", "按揭", "买房", "提前还款", "提前还贷", "消费贷", "经营贷", "抵押", "mortgage", "loan", "prepayment"),
-    ("流水", "打流水", "存款证明", "资信证明", "资产证明", "征信", "信用报告", "签证", "statement", "credit", "certificate", "visa"),
-    ("对公", "公司", "企业", "基本户", "营业执照", "公章", "回单", "u盾", "corporate", "business"),
-    ("贵宾", "金卡", "金葵馨", "私人银行", "优先叫号", "vip", "private"),
-    ("冻结", "止付", "非柜面", "解冻", "解控", "诈骗", "反诈", "frozen", "scam", "fraud"),
-    ("老人", "长者", "卧床", "上门", "已故", "去世", "遗产", "轮椅", "无障碍", "elderly", "senior", "wheelchair"),
-    ("挂号", "预约", "加号", "放号", "退号", "签到", "报到", "過號", "过号", "register", "appointment"),
-    ("几楼", "在哪", "楼层", "怎么走", "科室", "导航", "floor", "where", "directory", "department"),
-    ("挂什么科", "看什么科", "分诊", "头晕", "头痛", "胸闷", "胃痛", "咳嗽", "发烧", "发热", "腰痛", "扭伤", "triage", "symptom", "fever"),
-    ("取药", "拿药", "药房", "中药", "代煎", "快递", "处方", "pharmacy", "medicine", "prescription"),
-    ("核磁", "核磁共振", "拍片", "胸片", "彩超", "b超", "超声", "心电图", "憋尿", "金属", "mri", "ct", "xray", "ultrasound"),
-    ("胃镜", "肠镜", "胃肠镜", "无痛", "内镜", "清肠", "endoscopy", "colonoscopy"),
-    ("专家", "主任", "排班", "出诊", "坐诊", "几点开门", "营业时间", "周末", "挂号费", "特需", "schedule", "specialist", "hours", "weekend"),
-    ("住院", "入院", "出院", "押金", "病房", "探视", "陪护", "inpatient", "ward", "admission"),
-    ("体检", "入职体检", "驾照体检", "健康证", "早癌", "checkup", "physical"),
-    ("病历", "病假条", "请假条", "诊断证明", "盖章", "理赔", "record", "stamp", "certificate"),
-    ("急诊", "急救", "狗咬", "猫抓", "狂犬", "破伤风", "24小时", "emergency", "rabies", "tetanus"),
-    ("停车", "停车费", "车库", "母婴室", "餐厅", "食堂", "咖啡", "充电宝", "parking", "cafe"),
+    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "收费", "结算", "发票", "收据", "pay", "payment", "billing", "cashier", "invoice", "receipt"),
+    ("刷医保", "医保", "报销", "异地医保", "商保", "insurance", "medicare", "reimbursement", "copay"),
+    ("水费", "电费", "燃气", "煤气", "暖气", "宽带", "话费", "社保缴费", "交社保", "罚款", "非税", "utility", "utilities", "electricity", "water", "gas", "heating", "social_security", "municipal"),
+    ("抽血", "采血", "验血", "查血", "化验", "血常规", "空腹", "肝功", "肾功", "血糖", "血脂", "blood", "phlebotomy", "venipuncture", "fasting", "cbc", "lab"),
+    ("尿检", "验尿", "尿常规", "大便", "便常规", "留样", "标本", "痰", "urine", "urinalysis", "stool", "sputum", "specimen", "sample"),
+    ("理财", "买理财", "收益", "收益率", "年化", "活钱", "稳健", "固收", "基金", "风险测评", "风险评估", "天天盈", "闲钱", "打理", "wealth", "investment", "yield", "return", "annualized", "fund", "savings", "idle"),
+    ("存款", "存钱", "定期", "定存", "利息", "利率", "大额存单", "国债", "保本", "养老金", "黄金", "积存金", "deposit", "deposits", "interest", "cd", "cds", "treasury", "bond", "bonds", "pension", "gold", "bullion"),
+    ("取钱", "取现", "取款", "拿现金", "大额取现", "预约取款", "十万", "五万", "零钱", "零钱包", "新钞", "残币", "atm", "cash", "withdrawal", "withdraw", "change", "banknotes"),
+    ("办卡", "开卡", "开户", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡激活", "debit", "account", "payroll"),
+    ("密码", "忘密码", "忘记密码", "锁住", "挂失", "补卡", "换卡", "手机号", "限额", "提额", "password", "pin", "locked", "lost", "limit"),
+    ("外汇", "换汇", "购汇", "结汇", "美元", "日元", "欧元", "港币", "跨境", "电汇", "汇款", "打钱", "留学", "学费", "swift", "forex", "fx", "wire", "remittance", "currency", "usd", "overseas", "tuition"),
+    ("贷款", "借钱", "房贷", "按揭", "提前还款", "提前还贷", "消费贷", "经营贷", "抵押", "mortgage", "mortgages", "loan", "loans", "prepayment", "repayment", "refinance", "lpr", "sme", "apr"),
+    ("流水", "打流水", "交易明细", "存款证明", "资信证明", "资产证明", "征信", "信用报告", "签证", "statement", "statements", "solvency", "certificate", "certificates", "credit_report", "visa", "embassy"),
+    ("对公", "公司开户", "企业开户", "基本户", "营业执照", "公章", "回单", "u盾", "corporate", "ukey", "voucher", "vouchers"),
+    ("贵宾", "金卡", "金葵馨", "私人银行", "优先叫号", "vip", "private_banking", "aum"),
+    ("冻结", "止付", "非柜面", "解冻", "解控", "不能转账", "诈骗", "反诈", "安全账户", "frozen", "blocked", "suspended", "scam", "fraud", "unfreeze"),
+    ("老人", "长者", "卧床", "不能本人来", "上门", "已故", "去世", "遗产", "elderly", "senior", "bedridden", "homebound", "doorstep", "mobility", "bereavement", "estate", "deceased"),
+    ("挂号", "预约挂号", "加号", "放号", "退号", "签到", "报到", "过号", "初诊", "register", "registration", "appointment", "booking", "missed"),
+    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "floor", "directory", "department", "departments"),
+    ("挂什么科", "看什么科", "分诊", "头晕", "头痛", "胸闷", "心慌", "肚子疼", "胃痛", "咳嗽", "发烧", "发热", "腰痛", "扭伤", "皮疹", "triage", "symptom", "dizziness", "dizzy", "headache", "chest", "stomachache", "cough", "fever", "sprain", "rash"),
+    ("取药", "拿药", "药房", "中药", "代煎", "煎药", "寄回家", "快递", "处方", "用药", "pharmacy", "dispensary", "medication", "medicine", "prescription", "herbal", "decoction", "delivery"),
+    ("核磁", "核磁共振", "拍片", "胸片", "彩超", "b超", "超声", "心电图", "憋尿", "金属", "起搏器", "mri", "ct", "xray", "radiology", "imaging", "ultrasound", "ecg", "scan", "metal", "pacemaker"),
+    ("胃镜", "肠镜", "胃肠镜", "无痛", "内镜", "清肠", "麻醉", "endoscopy", "gastroscopy", "colonoscopy", "sedation", "sedated"),
+    ("专家", "主任", "排班", "出诊", "坐诊", "几点开门", "营业时间", "周末", "挂号费", "特需", "schedule", "specialist", "weekend"),
+    ("住院", "入院", "出院", "押金", "病房", "探视", "陪护", "inpatient", "admission", "discharge", "ward"),
+    ("体检", "入职体检", "驾照体检", "健康证", "早癌", "checkup", "physical", "onboarding", "employment", "screening"),
+    ("病历", "病假条", "请假条", "诊断证明", "盖章", "复印病历", "record", "records", "stamp", "seal", "chart"),
+    ("急诊", "急救", "狗咬", "猫抓", "狂犬", "破伤风", "24小时", "emergency", "urgent", "rabies", "tetanus", "scratch", "bite"),
+    ("轮椅", "平车", "停车", "停车费", "车库", "母婴室", "餐厅", "食堂", "咖啡", "充电宝", "wheelchair", "parking", "garage", "cafe", "cafeteria"),
 )
+
+_STOP_WORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "could", "do",
+    "does", "for", "from", "get", "go", "have", "how", "i", "if", "in", "into",
+    "is", "it", "me", "my", "need", "of", "on", "or", "our", "please", "should",
+    "so", "some", "take", "tell", "that", "the", "their", "there", "these",
+    "this", "to", "up", "us", "want", "we", "what", "when", "where", "which",
+    "who", "why", "will", "with", "work", "would", "you", "your",
+})
 
 _TOKEN_RE = re.compile(r"[a-z0-9_]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 _CJK_RUN_RE = re.compile(r"^[\u4e00-\u9fff]+$")
@@ -150,7 +160,7 @@ def parse_custom_kb(custom_kb: str, scenario_id: str = "") -> list[dict[str, Any
       summary = summary[:179].rstrip() + "…"
     chunks.append({
         "id": f"custom_{scenario_id or 'kb'}_{idx + 1}",
-        "category": "自定义补充知识",
+        "category": "Custom Knowledge",
         "title": title,
         "location": "",
         "waypoint": "",
@@ -206,10 +216,12 @@ def list_scenarios() -> list[dict[str, Any]]:
         }
         for d in (sc.get("documents") or [])
     ]
+    subtitle = sc.get("subtitle", sc.get("label_zh", sc.get("name", sid)))
     out.append({
         "id": sid,
         "name": sc.get("name", sid),
-        "label_zh": sc.get("label_zh", sc.get("name", sid)),
+        "subtitle": subtitle,
+        "label_zh": subtitle,
         "badge": sc.get("badge", ""),
         "organization": sc.get("organization", ""),
         "role": sc.get("role", ""),
@@ -234,31 +246,34 @@ def build_scenario_persona_block(
     return ""
 
   sc = _load_scenarios_map().get(sid, {})
-  org = sc.get("organization") or "自定义业务场景"
-  role = sc.get("role") or "智能场景服务机器人"
+  org = sc.get("organization") or "Custom Service Venue"
+  role = sc.get("role") or "Embodied Service Concierge Robot"
   persona_text = cp if cp else (sc.get("persona_prompt") or "").strip()
   wps = sc.get("waypoints") or []
   wp_line = (
-      f"- 当前场景专属导航路点（`get_waypoints` / `navigate`）：{', '.join(f'`{w}`' for w in wps)}。"
+      f"- Scenario navigation waypoints (`get_waypoints` / `navigate`): {', '.join(f'`{w}`' for w in wps)}."
       if sid != DEFAULT_SCENARIO_ID and wps
       else ""
   )
   parts = [
-      f"## 当前激活业务场景与角色人设：{org} — {role}",
+      f"## Active Industry Scenario & Role Persona: {org} — {role}",
   ]
   if persona_text:
     parts.append(persona_text)
   elif has_custom_kb:
     parts.append(
-        "当访客询问任何场馆规定、办理流程或业务信息时，必须先调用"
-        " `search_knowledge_base` 检索知识库，并严格基于检索结果作答。"
+        "Whenever a visitor asks about venue policies, service workflows, floor"
+        " locations, or operating hours, call `search_knowledge_base` first and"
+        " answer strictly based on the retrieved knowledge entries in the"
+        " visitor's own language."
     )
   if wp_line:
     parts.append(wp_line)
   parts.append(
-      "- 回答 `search_knowledge_base` 知识问答时无需调用 `update_plan`"
-      "（`update_plan` 仅用于机械臂物理抓取/放置等多步操作任务）；"
-      "收到 `[HEARTBEAT]` 心跳时严禁调用 `search_knowledge_base`。"
+      "- Do NOT call `update_plan` for `search_knowledge_base` Q&A"
+      " (`update_plan` is strictly reserved for physical multi-step arm"
+      " pick/place manipulation); NEVER call `search_knowledge_base` on"
+      " `[HEARTBEAT]` prompts."
   )
   return "\n".join(parts)
 
@@ -267,46 +282,68 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
   """Gemini FunctionDeclaration for `search_knowledge_base` (strictly isolated per scenario)."""
   sid = normalize_scenario_id(scenario_id)
   sc = _load_scenarios_map().get(sid, {})
-  org = sc.get("organization") or "当前激活业务场馆"
+  org = sc.get("organization") or "the active venue"
 
   if sid == "cymbal_hospital":
     desc = (
-        f"检索 {org} 官方门诊导诊 RAG 知识库，获取准确的门诊缴费与医保结算窗口、"
-        "抽血采血地点与空腹要求、全院楼层科室分布、常见症状挂号分诊、门诊取药与中药代煎、"
-        "CT/核磁共振（MRI）/胃肠镜检查预约与禁忌、专家排班、出入院办理、健康体检、"
-        "24小时急诊及院内导航路点。回答任何医院流程、科室位置或就诊规定问题前必须先调用此工具。"
+        f"Search the official {org} outpatient triage & concierge RAG knowledge"
+        " base for grounded hospital workflows: outpatient billing & health"
+        " insurance settlement windows, blood draw (phlebotomy) locations &"
+        " fasting rules, floor-by-floor department directory, symptom-based"
+        " clinic triage, pharmacy prescription pickup & herbal delivery,"
+        " CT/MRI/endoscopy preparation & safety rules, specialist clinic"
+        " schedules, inpatient admission/discharge, health checkup packages,"
+        " 24/7 emergency & animal-bite care, and hospital navigation waypoints."
+        " Always call this tool before answering any hospital policy, location,"
+        " or preparation question."
     )
     query_desc = (
-        "患者或家属的咨询问题或关键词，例如：'去哪里缴费支持刷医保吗'、"
-        "'去哪里抽血需要空腹几个小时'、'头晕胸闷应该挂什么科'、'核磁共振检查在哪里有什么禁忌'。"
+        "The patient or visitor's question or keywords, e.g. 'where to pay my"
+        " outpatient bill and settle insurance', 'where to get a blood draw and"
+        " how long to fast', 'which clinic to register for dizziness', or 'MRI"
+        " scan location and metal safety rules'."
     )
     cat_desc = (
-        "可选医院导诊分类提示（如 '挂号与缴费'、'检验与抽血'、'楼层与科室导航'、"
-        "'智能分诊'、'取药与药事服务'、'检查预约与准备'、'健康体检与入职体检'、'急诊与犬伤门诊'）。"
+        "Optional hospital category filter hint (e.g. 'Registration & Billing',"
+        " 'Lab & Phlebotomy', 'Floor & Department Directory', 'Symptom Triage',"
+        " 'Pharmacy & Prescriptions', 'Imaging & Endoscopy Prep', 'Health"
+        " Checkup Center', '24/7 Emergency Care')."
     )
   elif sid == "cymbal_bank":
     desc = (
-        f"检索 {org} 旗舰支行官方业务 RAG 知识库，获取准确的稳健理财产品与业绩比较基准、"
-        "定期存款与大额存单利率、水电燃气与社保生活缴费、个人储蓄卡开户与改密提额、"
-        "大额取现预约规定、跨境电汇（SWIFT）与留学购汇、房贷按揭与提前还款、"
-        "银行流水/存款证明/征信自助打印、企业对公金融、VIP贵宾权益及网点导航路点。"
-        "回答任何银行业务、利率门槛或窗口分流问题前必须先调用此工具。"
+        f"Search the official {org} retail & wealth lobby RAG knowledge base"
+        " for grounded banking policies: low-volatility wealth products &"
+        " annualized benchmarks, term deposit & CD interest rates, municipal"
+        " utility & social-security bill payment, personal debit card opening &"
+        " PIN/limit services, large cash withdrawal booking thresholds,"
+        " cross-border SWIFT wire transfers & currency exchange, residential"
+        " mortgages & SME loans, bank statements & solvency certificates,"
+        " corporate banking, VIP wealth lounge tiers, and branch navigation"
+        " waypoints. Always call this tool before answering any banking"
+        " product, rate, fee, or counter routing question."
     )
     query_desc = (
-        "客户的咨询问题或业务关键词，例如：'有哪些稳健型理财产品收益率多少'、"
-        "'大额存单和定期存款利率'、'水电燃气费去哪里缴'、'取十万现金需要预约吗'、'跨境汇款SWIFT代码'。"
+        "The client's banking question or keywords, e.g. 'low-risk wealth"
+        " management products and yield', '3-year CD and term deposit rates',"
+        " 'where to pay utility bills', 'do I need an appointment to withdraw"
+        " 100k cash', or 'overseas tuition SWIFT wire code'."
     )
     cat_desc = (
-        "可选银行业务分类提示（如 '理财与资产配置'、'便民生活与政务缴费'、'现金与外汇服务'、"
-        "'房贷与个人信贷'、'账户与银行卡业务'、'证明打印与征信查询'、'企业对公金融'）。"
+        "Optional banking category filter hint (e.g. 'Wealth Management',"
+        " 'Deposits, CDs & Bonds', 'Utility & Municipal Bill Pay', 'Cash &"
+        " Foreign Exchange', 'Mortgages & Loans', 'Cards & Account Services',"
+        " 'Statements & Certificates', 'Corporate Banking')."
     )
   else:
     desc = (
-        f"检索 {org} 的专属 RAG 知识库，查询场馆服务指南、办理流程、窗口楼层位置、"
-        "收费与政策标准以及关联导航路点。回答场馆服务或业务流程问题前请先调用此工具，确保回答真实准确。"
+        f"Search the dedicated RAG knowledge base for {org} to retrieve"
+        " grounded venue service guides, workflows, floor/counter locations,"
+        " fee schedules, policy rules, and associated navigation waypoints."
+        " Always call this tool before answering venue-specific policy or"
+        " workflow questions."
     )
-    query_desc = "访客咨询的完整问题或核心检索关键词。"
-    cat_desc = "可选的知识分类提示。"
+    query_desc = "The visitor's full question or key search terms."
+    cat_desc = "Optional knowledge category filter hint."
 
   return {
       "name": SCENARIO_RAG_TOOL_NAME,
@@ -335,7 +372,7 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
 
 
 def _tokenize(text: str) -> list[str]:
-  """Extract lowercase ASCII words plus CJK unigrams & bigrams."""
+  """Extract lowercase ASCII words (excluding stop words) plus CJK unigrams & bigrams."""
   tokens: list[str] = []
   for raw in _TOKEN_RE.findall((text or "").lower()):
     if _CJK_RUN_RE.match(raw):
@@ -345,24 +382,35 @@ def _tokenize(text: str) -> list[str]:
         tokens.append(raw[i : i + 2])
       for i in range(len(raw) - 2):
         tokens.append(raw[i : i + 3])
-    else:
+    elif raw not in _STOP_WORDS:
       tokens.append(raw)
   return tokens
 
 
+def _term_matches_query(term: str, q_low: str, token_set: set[str]) -> bool:
+  """Check if a synonym term appears in query (whole-token for ASCII, substring for CJK)."""
+  if _CJK_RUN_RE.search(term):
+    return term in q_low
+  if "_" in term:
+    phrase = term.replace("_", " ")
+    return phrase in q_low
+  return term in token_set
+
+
 def _expand_query_tokens(query: str, base_tokens: list[str]) -> dict[str, float]:
-  """Return weighted query terms (original terms = 1.0, synonym expansions = 0.48)."""
+  """Return weighted query terms (original terms = 1.0, synonym expansions = 0.45)."""
   weights: dict[str, float] = {}
   for tok in base_tokens:
     weights[tok] = weights.get(tok, 0.0) + 1.0
 
   q_low = (query or "").lower()
+  token_set = set(base_tokens)
   for group in _SYNONYM_GROUPS:
-    if any(term in q_low for term in group):
+    if any(_term_matches_query(term, q_low, token_set) for term in group):
       for syn in group:
-        for st in _tokenize(syn):
+        for st in _tokenize(syn.replace("_", " ")):
           if st not in weights:
-            weights[st] = 0.48
+            weights[st] = 0.45
   return weights
 
 
@@ -425,12 +473,21 @@ def _bm25_scores(
       denom = f + k1 * (1.0 - b + b * (dl / avg_dl))
       score += qw * idf * ((f * (k1 + 1.0)) / denom)
 
-    # Exact keyword / substring hit bonus for crisp precision on key terms
+    # Exact keyword / phrase hit bonus (whole-word for ASCII, substring for CJK)
+    base_tok_set = set(base_q_tokens)
     for kw in d.get("keywords") or []:
-      kw_l = str(kw).lower()
-      if len(kw_l) >= 2 and kw_l in q_low:
+      kw_l = str(kw).lower().strip()
+      if len(kw_l) < 2:
+        continue
+      if _CJK_RUN_RE.search(kw_l):
+        hit = kw_l in q_low
+      elif " " in kw_l or "-" in kw_l:
+        hit = bool(re.search(rf"\b{re.escape(kw_l)}\b", q_low))
+      else:
+        hit = kw_l in base_tok_set
+      if hit:
         score += 3.5
-    if q_low and len(q_low) >= 2 and q_low in str(d.get("title", "")).lower():
+    if q_low and len(q_low) >= 3 and q_low in str(d.get("title", "")).lower():
       score += 4.0
     if d.get("is_custom") and score > 0:
       score *= 1.18
