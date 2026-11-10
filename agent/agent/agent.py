@@ -79,7 +79,11 @@ class Agent:
         name="spot",
         system_instruction=embodiment_system_instruction(),
         developer_instruction=_build_di(*files),
-        tools=tools_lib.spot_tools(),
+        tools=(
+            tools_lib.spot_sim_tools()
+            if spot_simulated()
+            else tools_lib.spot_tools()
+        ),
     )
 
   @classmethod

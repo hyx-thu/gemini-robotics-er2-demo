@@ -92,6 +92,13 @@ function pendingThinkingLevel(model) {
 // Level the *current* live session was started with (null when offline).
 let activeThinkingLevel = null;
 
+// Business Scenario, Role Persona & RAG Knowledge Base state
+let selectedScenarioId = localStorage.getItem('er2_scenario_id') || 'default';
+let activeSessionScenarioId = null;
+let scenarioCatalog = [];
+let scenarioCustomPersonaMap = {};
+let scenarioCustomKbMap = {};
+
 function syncThinkingLevelForModel(model) {
   const sel = document.getElementById('config-thinking-level');
   if (sel) {
@@ -901,6 +908,10 @@ let geminiClient = new GeminiClient({
     setTimeout(() => updateRecordBtn(), 0);
     console.log('WS Closed:', e);
     activeThinkingLevel = null;
+    activeSessionScenarioId = null;
+    if (typeof updateScenarioReconnectBanner === 'function') {
+      updateScenarioReconnectBanner();
+    }
     renderThinkingStatus();
     statusLabel.className = 'status-label disconnected';
     statusLabel.textContent = 'Disconnected';
@@ -1017,6 +1028,12 @@ function formatAutoToolStep(entry) {
     return zh
       ? `🗺️ google_maps_search(${q}) — 搜索地图与周边地点`
       : `🗺️ google_maps_search(${q}) — Search Google Maps`;
+  }
+  if (name === 'search_knowledge_base') {
+    const q = qStr(a.query);
+    return zh
+      ? `📖 search_knowledge_base(${q}) — 检索业务场景知识库`
+      : `📖 search_knowledge_base(${q}) — Query scenario RAG`;
   }
   if (name === 'get_place_photos') {
     const q = qStr(a.place_name || a.place_id);
@@ -2774,6 +2791,10 @@ function drawToolTelemetryOverlay(ctx, rect, labelBoxes) {
   } else if (name === 'draw_points') {
     const pts = Array.isArray(a.points) ? a.points : [];
     badgeText = `📍 draw_points(${pts.length} pts${a.connect ? ', connect=true' : ''})`;
+  } else if (name === 'search_knowledge_base') {
+    const org = r.organization || a.category || 'Scenario';
+    const hits = Array.isArray(r.matches) ? r.matches.length : 0;
+    badgeText = `📖 ${org} · RAG("${a.query || ''}") → ${hits} ${hits === 1 ? 'hit' : 'hits'}`;
   } else {
     badgeText = `🔧 ${name}(${JSON.stringify(a)})`;
   }
@@ -2946,6 +2967,22 @@ function describeToolCall(msg) {
       summary: `${icon} ${name}(${q(a.query || '')}) → ${srcs.length} source${srcs.length === 1 ? '' : 's'}${lat}`,
       open: true,
       argsText: `${r.answer || ''}${srcText ? '\n\nSources:\n' + srcText : ''}`.trim(),
+    };
+  }
+  if (name === 'search_knowledge_base') {
+    if (r.error) {
+      return { summary: `📖 search_knowledge_base(${q(a.query || '')}) ✗ ${r.error}`, open: true, argsText: '' };
+    }
+    const matches = Array.isArray(r.matches) ? r.matches : [];
+    const org = r.badge || r.organization || '';
+    const lat = Number.isFinite(Number(r.latency_ms)) ? ` · ${r.latency_ms}ms` : '';
+    const bodyLines = matches.map((m, i) =>
+      `${i + 1}. [${m.category || 'KB'}] ${m.title || ''}${m.location ? ' — 📍 ' + m.location : ''}\n   ${m.summary || ''}`
+    ).join('\n');
+    return {
+      summary: `📖 search_knowledge_base(${q(a.query || '')}) → ${matches.length} match${matches.length === 1 ? '' : 'es'}${org ? ' · ' + org : ''}${lat}`,
+      open: false,
+      argsText: bodyLines,
     };
   }
 
@@ -3176,8 +3213,13 @@ connectBtn.onclick = async () => {
         use_tts: sessionCfg.use_tts,
         endpoint_type: sessionCfg.endpoint_type,
         thinking_level: pendingThinkingLevel(sessionCfg.model),
+        scenario: selectedScenarioId,
       };
       activeThinkingLevel = connParams.thinking_level;
+      activeSessionScenarioId = selectedScenarioId;
+      if (typeof updateScenarioReconnectBanner === 'function') {
+        updateScenarioReconnectBanner();
+      }
       renderThinkingStatus();
       geminiClient.connect(connParams);
     } catch (error) {
@@ -3311,13 +3353,18 @@ modalTabs.forEach(tab => {
       .forEach(p => p.classList.add('hidden'));
     document.getElementById(`modal-panel-${tabName}`)
       .classList.remove('hidden');
+    if (tabName === 'scenario' && typeof loadScenariosCatalog === 'function') {
+      loadScenariosCatalog();
+    } else if (tabName === 'config') {
+      loadAgentConfig(selectedAgentName, selectedModel);
+    }
   };
 });
 
 // Fetch and display agent config
 async function loadAgentConfig(name, model) {
   try {
-    let url = `/api/agent_config/${encodeURIComponent(name)}?endpoint_type=${encodeURIComponent(selectedEndpointType)}`;
+    let url = `/api/agent_config/${encodeURIComponent(name)}?endpoint_type=${encodeURIComponent(selectedEndpointType)}&scenario=${encodeURIComponent(selectedScenarioId || 'default')}`;
     if (model) {
       url += `&model=${encodeURIComponent(model)}`;
     }
@@ -3871,6 +3918,44 @@ function appendPhotoCard(r) {
   _appendCard(card);
 }
 
+function appendKnowledgeCard(r) {
+  const sid = r.scenario || '';
+  const themeCls = sid === 'cymbal_hospital' ? ' kb-hospital'
+    : sid === 'cymbal_bank' ? ' kb-bank' : '';
+  const card = _el('div', 'rich-card kb-card' + themeCls);
+  const head = _el('div', 'rich-head');
+  const icon = sid === 'cymbal_hospital' ? '🏥' : sid === 'cymbal_bank' ? '🏦' : '📖';
+  head.appendChild(_el('span', 'rich-icon', icon));
+  const orgTitle = (r.organization ? `${r.organization} · RAG` : 'Scenario RAG Knowledge');
+  head.appendChild(_el('span', 'rich-title', orgTitle));
+  const matches = Array.isArray(r.matches) ? r.matches : [];
+  const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? 'Hybrid' : 'RAG';
+  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · ${matches.length} ${matches.length === 1 ? 'hit' : 'hits'}`));
+  card.appendChild(head);
+  if (r.query) {
+    card.appendChild(_el('div', 'rich-sub', `🔎 “${r.query}”`));
+  }
+  const itemsWrap = _el('div', 'kb-card-items');
+  matches.slice(0, 3).forEach((m) => {
+    const item = _el('div', 'kb-card-item');
+    const itemHead = _el('div', 'kb-item-head');
+    if (m.category) itemHead.appendChild(_el('span', 'kb-item-cat', m.category));
+    itemHead.appendChild(_el('span', 'kb-item-title', m.title || ' Entry'));
+    item.appendChild(itemHead);
+    if (m.location || m.waypoint) {
+      const meta = _el('div', 'kb-item-meta');
+      if (m.location) meta.appendChild(_el('span', 'kb-meta-pill', `📍 ${m.location}`));
+      if (m.waypoint) meta.appendChild(_el('span', 'kb-meta-pill', `🧭 ${m.waypoint}`));
+      item.appendChild(meta);
+    }
+    const text = m.summary || (m.content ? String(m.content).slice(0, 180) : '');
+    if (text) item.appendChild(_el('div', 'kb-item-summary', text));
+    itemsWrap.appendChild(item);
+  });
+  card.appendChild(itemsWrap);
+  _appendCard(card);
+}
+
 function renderRichToolCard(msg) {
   const r = (msg && msg.result && typeof msg.result === 'object') ? msg.result : null;
   if (!r || r.error) return;
@@ -3882,10 +3967,398 @@ function renderRichToolCard(msg) {
       appendMapCard('📍 You are here', [{ q, name: r.place_description ? r.place_description.split(/[。.,，]/)[0] : q, zoom: 16, uri: r.google_maps_url }], q);
     } else if (msg.name === 'get_place_photos' && Array.isArray(r.photos) && r.photos.length) {
       appendPhotoCard(r);
+    } else if (msg.name === 'search_knowledge_base' && Array.isArray(r.matches) && r.matches.length) {
+      appendKnowledgeCard(r);
     }
   } catch (e) {
     console.warn('rich card failed', e);
   }
+}
+
+// --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
+function _parseCustomKbPreview(rawText) {
+  const raw = String(rawText || '').trim();
+  if (!raw) return [];
+  const blocks = /^#{1,3}\s+\S+/m.test(raw)
+    ? raw.split(/(?=^#{1,3}\s+\S+)/m)
+    : raw.split(/\n\s*\n+/);
+  const out = [];
+  blocks.forEach((blk, idx) => {
+    const lines = blk.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const first = lines[0].replace(/^#{1,3}\s*/, '').trim();
+    const title = lines.length > 1 ? first.slice(0, 72) : first.slice(0, 42);
+    const body = lines.length > 1 ? lines.slice(1).join('\n') : first;
+    out.push({
+      id: `custom_${idx + 1}`,
+      category: 'Custom RAG',
+      title,
+      location: '',
+      waypoint: '',
+      summary: body.replace(/\s+/g, ' ').slice(0, 180),
+      content: body,
+      is_custom: true,
+    });
+  });
+  return out;
+}
+
+function updateScenarioHeaderBadge() {
+  const btn = document.getElementById('scenarioBadgeBtn');
+  const txt = document.getElementById('scenarioBadgeText');
+  if (!btn || !txt) return;
+  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
+  const hasCustom = !!String(scenarioCustomKbMap[selectedScenarioId] || '').trim();
+  btn.classList.remove('scenario-active', 'scenario-hospital', 'scenario-bank');
+  if (selectedScenarioId === 'cymbal_hospital') {
+    btn.classList.add('scenario-active', 'scenario-hospital');
+    txt.textContent = '🏥 Cymbal Hospital · RAG';
+  } else if (selectedScenarioId === 'cymbal_bank') {
+    btn.classList.add('scenario-active', 'scenario-bank');
+    txt.textContent = '🏦 Cymbal Bank · RAG';
+  } else if (hasCustom) {
+    btn.classList.add('scenario-active');
+    txt.textContent = '📖 Custom RAG';
+  } else {
+    txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 Scenario';
+  }
+}
+
+function updateScenarioReconnectBanner() {
+  const banner = document.getElementById('scenario-reconnect-banner');
+  if (!banner) return;
+  const needsReconnect = geminiClient.isConnected() &&
+    activeSessionScenarioId !== null &&
+    activeSessionScenarioId !== selectedScenarioId;
+  banner.classList.toggle('hidden', !needsReconnect);
+}
+
+function openScenarioSettingsTab() {
+  if (!settingsModal) return;
+  settingsModal.classList.remove('hidden');
+  modalTabs.forEach(t => t.classList.remove('active'));
+  const scTab = document.getElementById('modal-tab-scenario');
+  if (scTab) scTab.classList.add('active');
+  document.querySelectorAll('.modal-panel').forEach(p => p.classList.add('hidden'));
+  const scPanel = document.getElementById('modal-panel-scenario');
+  if (scPanel) scPanel.classList.remove('hidden');
+  loadScenariosCatalog();
+}
+
+function _sampleQuestionForDoc(doc, scenarioId) {
+  const t = String(doc.title || '');
+  if (t.includes('缴费')) return scenarioId === 'cymbal_bank' ? '请问水电燃气费和社保去哪里缴费？' : '请问去哪里缴费？支持刷医保码吗？';
+  if (t.includes('抽血')) return '请问去哪里抽血化验？需要空腹几个小时？';
+  if (t.includes('尿检')) return '尿常规检验去哪里留样？';
+  if (t.includes('理财')) return '请问现在有哪些稳健型的理财产品？收益率和风险等级怎么样？';
+  if (t.includes('存款') || t.includes('大额存单')) return '现在定期存款和大额存单利率是多少？';
+  if (t.includes('取现') || t.includes('现金')) return '我要取10万现金需要提前预约吗？';
+  if (t.includes('外汇') || t.includes('SWIFT')) return '给国外大学汇学费需要什么材料？SWIFT代码是多少？';
+  if (t.includes('流水') || t.includes('证明')) return '买房打银行流水和办签证存款证明去哪里办？';
+  if (t.includes('贷款') || t.includes('房贷')) return '首套房贷利率和提前还款怎么办理？';
+  if (t.includes('核磁') || t.includes('MRI')) return '做核磁共振检查在哪里？需要注意什么禁忌？';
+  if (t.includes('分诊') || t.includes('症状')) return '我最近有点头晕胸闷，应该挂什么科？';
+  if (t.includes('取药')) return '交完费去哪里取药？中药可以代煎寄回家吗？';
+  if (t.includes('体检')) return '入职体检在几楼？几点前截止采血？';
+  if (t.includes('急诊')) return '被猫抓伤了可以打狂犬疫苗吗？在哪里打？';
+  return `请问关于「${t.split('（')[0]}」怎么办理？在哪里？`;
+}
+
+function renderScenarioKbList() {
+  const listEl = document.getElementById('scenario-kb-list');
+  const kbSec = document.getElementById('scenario-kb-section');
+  const filterEl = document.getElementById('scenario-kb-filter');
+  const countPill = document.getElementById('scenario-doc-count-pill');
+  if (!listEl || !kbSec) return;
+
+  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId) || { documents: [] };
+  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '');
+  const allDocs = customDocs.concat(sc.documents || []);
+  if (countPill) {
+    countPill.textContent = allDocs.length
+      ? `${allDocs.length} RAG docs${customDocs.length ? ` (+${customDocs.length} custom)` : ''}`
+      : 'No RAG overhead';
+  }
+  if (!allDocs.length) {
+    kbSec.classList.add('hidden');
+    listEl.innerHTML = '';
+    return;
+  }
+  kbSec.classList.remove('hidden');
+  const kw = String((filterEl && filterEl.value) || '').trim().toLowerCase();
+  const filtered = kw
+    ? allDocs.filter(d =>
+        `${d.category || ''} ${d.title || ''} ${d.location || ''} ${d.summary || ''}`
+          .toLowerCase().includes(kw))
+    : allDocs;
+
+  listEl.innerHTML = '';
+  if (!filtered.length) {
+    listEl.appendChild(_el('div', 'config-help-text', 'No matching knowledge entries found.'));
+    return;
+  }
+  filtered.forEach((doc) => {
+    const det = _el('details', 'scenario-kb-item');
+    const sum = document.createElement('summary');
+    if (doc.category) {
+      const shortCat = String(doc.category).split(/\s*[（(]/)[0].trim();
+      const catEl = _el('span', 'scenario-kb-cat', shortCat || doc.category);
+      catEl.title = doc.category;
+      sum.appendChild(catEl);
+    }
+    sum.appendChild(_el('span', 'scenario-kb-title', doc.title || 'Entry'));
+    if (doc.location) {
+      const locEl = _el('span', 'scenario-kb-loc', `📍 ${doc.location}`);
+      locEl.title = doc.location;
+      sum.appendChild(locEl);
+    }
+    det.appendChild(sum);
+
+    const body = _el('div', 'scenario-kb-body');
+    body.appendChild(_el('div', '', doc.summary || doc.content || ''));
+    const actions = _el('div', 'scenario-kb-actions');
+    const wpInfo = doc.waypoint ? `🧭 Linked waypoint: ${doc.waypoint}` : '';
+    actions.appendChild(_el('span', 'config-help-text', wpInfo));
+    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 Fill test question');
+    askBtn.type = 'button';
+    askBtn.onclick = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const qText = _sampleQuestionForDoc(doc, selectedScenarioId);
+      if (textInput) {
+        if (chatSidebar && chatSidebar.classList.contains('collapsed')) {
+          chatSidebar.classList.remove('collapsed');
+        }
+        textInput.value = qText;
+        if (settingsModal) settingsModal.classList.add('hidden');
+        textInput.focus();
+      }
+    };
+    actions.appendChild(askBtn);
+    body.appendChild(actions);
+    det.appendChild(body);
+    listEl.appendChild(det);
+  });
+}
+
+function renderScenarioPanel() {
+  const grid = document.getElementById('scenario-cards');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const fallbackList = scenarioCatalog.length ? scenarioCatalog : [
+    { id: 'default', name: 'Default (General Robot)', label_zh: '默认（通用具身机器人）', badge: '🤖 Default', organization: '', role: 'General Embodied Assistant', persona_prompt: '', waypoints: [], documents: [] },
+  ];
+
+  fallbackList.forEach((sc) => {
+    const card = _el('button', 'scenario-card' + (sc.id === selectedScenarioId ? ' active' : ''));
+    card.type = 'button';
+    card.dataset.scenarioId = sc.id;
+    const top = _el('div', 'scenario-card-top');
+    top.appendChild(_el('span', 'scenario-card-title', sc.badge || sc.name));
+    const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '').length;
+    const totalCnt = (sc.documents ? sc.documents.length : (sc.doc_count || 0)) + customCnt;
+    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} RAG` : 'Standard'));
+    card.appendChild(top);
+    card.appendChild(_el('div', 'scenario-card-sub', sc.label_zh || sc.role || sc.name));
+    card.onclick = () => selectScenario(sc.id);
+    grid.appendChild(card);
+  });
+
+  const active = fallbackList.find(s => s.id === selectedScenarioId) || fallbackList[0];
+  const orgEl = document.getElementById('scenario-org-title');
+  const roleEl = document.getElementById('scenario-role-subtitle');
+  const personaEl = document.getElementById('scenario-persona-preview');
+  const wpWrap = document.getElementById('scenario-waypoints-wrap');
+  const wpChips = document.getElementById('scenario-waypoints-chips');
+  const cpInput = document.getElementById('scenario-custom-persona');
+  const kbInput = document.getElementById('scenario-custom-kb');
+
+  if (orgEl) {
+    orgEl.textContent = active.organization || active.name || 'Default Mode';
+  }
+  if (roleEl) {
+    roleEl.textContent = active.role || 'Standard robot capabilities without venue-specific RAG overhead.';
+  }
+  if (personaEl) {
+    const cleanMd = (s) => String(s || '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+    const customP = String(scenarioCustomPersonaMap[selectedScenarioId] || '').trim();
+    if (customP) {
+      personaEl.textContent = `✨ Custom Persona Active:\n${cleanMd(customP)}`;
+    } else if (active.persona_prompt) {
+      personaEl.textContent = cleanMd(active.persona_prompt);
+    } else {
+      personaEl.textContent = 'No industry role override active. Select Cymbal Hospital or Cymbal Bank above (or add custom RAG entries below) to enable domain role & search_knowledge_base.';
+    }
+  }
+  if (wpWrap && wpChips) {
+    const wps = Array.isArray(active.waypoints) ? active.waypoints : [];
+    wpChips.innerHTML = '';
+    if (wps.length) {
+      wpWrap.classList.remove('hidden');
+      wps.forEach(w => wpChips.appendChild(_el('span', 'scenario-wp-chip', w)));
+    } else {
+      wpWrap.classList.add('hidden');
+    }
+  }
+  if (cpInput) cpInput.value = scenarioCustomPersonaMap[selectedScenarioId] || '';
+  if (kbInput) kbInput.value = scenarioCustomKbMap[selectedScenarioId] || '';
+
+  updateScenarioReconnectBanner();
+  renderScenarioKbList();
+}
+
+function _flashScenarioStatus(msg) {
+  const el = document.getElementById('scenario-save-status');
+  if (!el) return;
+  el.textContent = msg;
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.textContent = ''; }, 2600);
+}
+
+async function selectScenario(scenarioId) {
+  selectedScenarioId = scenarioId || 'default';
+  localStorage.setItem('er2_scenario_id', selectedScenarioId);
+  updateScenarioHeaderBadge();
+  renderScenarioPanel();
+  try {
+    const resp = await fetch('/api/scenarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_id: selectedScenarioId }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      scenarioCustomPersonaMap = data.custom_persona || scenarioCustomPersonaMap;
+      scenarioCustomKbMap = data.custom_kb || scenarioCustomKbMap;
+      _flashScenarioStatus(data.requires_reconnect ? 'Saved · Reconnect to apply ⚡' : 'Scenario active ✅');
+      updateScenarioReconnectBanner();
+    }
+  } catch (e) {
+    console.warn('Failed to persist scenario:', e);
+  }
+}
+
+async function loadScenariosCatalog(syncSavedChoice = false) {
+  try {
+    const resp = await fetch('/api/scenarios');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    scenarioCatalog = Array.isArray(data.scenarios) ? data.scenarios : [];
+    scenarioCustomPersonaMap = data.custom_persona || {};
+    scenarioCustomKbMap = data.custom_kb || {};
+
+    const saved = localStorage.getItem('er2_scenario_id');
+    const validIds = new Set(scenarioCatalog.map(s => s.id));
+    if (saved && validIds.has(saved)) {
+      selectedScenarioId = saved;
+      if (syncSavedChoice && data.active_scenario !== saved) {
+        fetch('/api/scenarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario_id: saved }),
+        }).catch(() => {});
+      }
+    } else if (data.active_scenario && validIds.has(data.active_scenario)) {
+      selectedScenarioId = data.active_scenario;
+      localStorage.setItem('er2_scenario_id', selectedScenarioId);
+    } else {
+      selectedScenarioId = 'default';
+    }
+    updateScenarioHeaderBadge();
+    renderScenarioPanel();
+  } catch (e) {
+    console.warn('Failed to load scenarios catalog:', e);
+  }
+}
+
+{
+  const badgeBtn = document.getElementById('scenarioBadgeBtn');
+  if (badgeBtn) badgeBtn.onclick = openScenarioSettingsTab;
+
+  const filterEl = document.getElementById('scenario-kb-filter');
+  if (filterEl) filterEl.addEventListener('input', renderScenarioKbList);
+
+  const saveBtn = document.getElementById('save-scenario-btn');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const cp = (document.getElementById('scenario-custom-persona') || {}).value || '';
+      const kb = (document.getElementById('scenario-custom-kb') || {}).value || '';
+      saveBtn.disabled = true;
+      try {
+        const resp = await fetch('/api/scenarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenario_id: selectedScenarioId,
+            target_scenario_id: selectedScenarioId,
+            custom_persona: cp,
+            custom_kb: kb,
+          }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          scenarioCustomPersonaMap = data.custom_persona || {};
+          scenarioCustomKbMap = data.custom_kb || {};
+          updateScenarioHeaderBadge();
+          renderScenarioPanel();
+          _flashScenarioStatus('Customizations saved ✅');
+        }
+      } catch (e) {
+        console.error('Save scenario customizations failed:', e);
+        _flashScenarioStatus('Save failed ❌');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+  }
+
+  const resetBtn = document.getElementById('reset-scenario-btn');
+  if (resetBtn) {
+    resetBtn.onclick = async () => {
+      const cpEl = document.getElementById('scenario-custom-persona');
+      const kbEl = document.getElementById('scenario-custom-kb');
+      if (cpEl) cpEl.value = '';
+      if (kbEl) kbEl.value = '';
+      try {
+        const resp = await fetch('/api/scenarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenario_id: selectedScenarioId,
+            target_scenario_id: selectedScenarioId,
+            custom_persona: '',
+            custom_kb: '',
+          }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          scenarioCustomPersonaMap = data.custom_persona || {};
+          scenarioCustomKbMap = data.custom_kb || {};
+          updateScenarioHeaderBadge();
+          renderScenarioPanel();
+          _flashScenarioStatus('Cleared ✅');
+        }
+      } catch (e) {
+        console.error('Reset scenario customizations failed:', e);
+      }
+    };
+  }
+
+  const reconnBtn = document.getElementById('scenario-reconnect-btn');
+  if (reconnBtn) {
+    reconnBtn.onclick = () => {
+      if (settingsModal) settingsModal.classList.add('hidden');
+      if (geminiClient.isConnected()) {
+        geminiClient.disconnect();
+        setTimeout(() => { if (connectBtn && !geminiClient.isConnected()) connectBtn.click(); }, 320);
+      } else if (connectBtn) {
+        connectBtn.click();
+      }
+    };
+  }
+
+  loadScenariosCatalog(true);
 }
 
 // --- Tools map: hover tips for each tool name ------------------------------

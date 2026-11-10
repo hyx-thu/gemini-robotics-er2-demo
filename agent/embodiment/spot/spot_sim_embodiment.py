@@ -121,16 +121,17 @@ class SimulatedSpotEmbodiment(base.Embodiment):
   # Spot-specific idle/active heartbeat prompt (replaces the generic one).
   heartbeat_text = _HEARTBEAT_TEXT
 
-  def __init__(self) -> None:
+  def __init__(self, waypoints: list[str] | None = None) -> None:
     self.audio_queue: asyncio.Queue = asyncio.Queue(maxsize=50)
     self.video_queue: asyncio.Queue = asyncio.Queue(maxsize=5)
     self.text_queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+    self._waypoints: list[str] = list(waypoints) if waypoints else list(_WAYPOINTS)
     self._state: dict[str, Any] = {
         "standing": True,
         "arm": "stowed",
         "gripper_open_fraction": 1.0,
         "holding": None,
-        "waypoint": _WAYPOINTS[0],
+        "waypoint": self._waypoints[0],
         "last_detect": None,
         # Targets of the in-flight pick/place, kept until confirmed so a
         # watchdog retry can re-use them.
@@ -493,7 +494,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
 
     if action_name == "get_waypoints":
       return {
-          "waypoints": [{"id": f"wp_{i}", "name": n} for i, n in enumerate(_WAYPOINTS)],
+          "waypoints": [{"id": f"wp_{i}", "name": n} for i, n in enumerate(self._waypoints)],
           "navigation_ready": True,
           "localized": True,
           "current_waypoint": s["waypoint"],
@@ -501,7 +502,7 @@ class SimulatedSpotEmbodiment(base.Embodiment):
 
     if action_name == "navigate":
       dest = kwargs.get("waypoint") or kwargs.get("name") or ""
-      if dest not in _WAYPOINTS:
+      if dest not in self._waypoints:
         return {"error": f"Unknown waypoint '{dest}'. Call get_waypoints first."}
       prev = s["waypoint"]
       s["waypoint"] = dest

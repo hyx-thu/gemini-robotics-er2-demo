@@ -54,6 +54,7 @@ from embodiment.tinybot import tinybot_embodiment as tinybot_embodiment_lib
 from model import live_api_client
 from model import tts_client as tts_client_lib
 from model import vertex_rest
+from tool import scenario_rag
 from tool import tools as tools_lib
 
 
@@ -91,6 +92,11 @@ class ServerConfig:
   custom_heartbeat_text: dict[str, str] = dataclasses.field(
       default_factory=dict
   )
+  scenario_id: str = "default"
+  custom_scenario_persona: dict[str, str] = dataclasses.field(
+      default_factory=dict
+  )
+  custom_scenario_kb: dict[str, str] = dataclasses.field(default_factory=dict)
   port: int = 8000
 
 
@@ -131,7 +137,7 @@ _LIVE_FRONTEND_ADDENDUM = """### ROBOT TASKS ARE DELEGATED (LIVE + ER2 MODE) ###
 - If the user changes or cancels the task, call `robot_task` with the new request
   (it replaces the running one) or `stop`.
 - Keep using your other tools (look, navigate, stand, sit, gestures,
-  talk_motion, search, maps, location) directly as usual."""
+  talk_motion, search_knowledge_base, search, maps, location) directly as usual."""
 _GENERIC_POST_SPEECH_GRACE_S = 2.5
 
 # DI lines written for the text-only ER + TTS path that contradict native
@@ -323,6 +329,7 @@ async def api_server_defaults(request: fastapi.Request):
       "recording_available": bool(os.environ.get("RECORDING_BUCKET")),
       # Agent pre-selected in the UI on page load (env DEFAULT_AGENT).
       "default_agent": os.environ.get("DEFAULT_AGENT", "spot").strip() or "spot",
+      "default_scenario": config.scenario_id,
       # Which video source the UI should use per agent.
       "video_sources": {
           "human": "computer",
@@ -425,12 +432,115 @@ async def reset_instructions(request: fastapi.Request, agent_name: str):
   }
 
 
+def _inject_rag_tool(
+    agent_tools: list[dict],
+    scenario_id: str,
+    custom_kb: str = "",
+) -> list[dict]:
+  """Return a copy of agent_tools with search_knowledge_base appended when RAG is active."""
+  if not scenario_rag.is_rag_active(scenario_id, custom_kb):
+    return agent_tools
+  rag_decl = scenario_rag.search_knowledge_base_tool(scenario_id)
+  out = []
+  injected = False
+  for group in agent_tools:
+    if "functionDeclarations" in group and not injected:
+      existing = [
+          d
+          for d in group["functionDeclarations"]
+          if d.get("name") != scenario_rag.SCENARIO_RAG_TOOL_NAME
+      ]
+      out.append({**group, "functionDeclarations": existing + [rag_decl]})
+      injected = True
+    else:
+      out.append(group)
+  if not injected:
+    out.append({"functionDeclarations": [rag_decl]})
+  return out
+
+
+@router.get("/api/scenarios")
+async def api_get_scenarios(request: fastapi.Request):
+  """Return available business scenarios, RAG document catalogs, and custom overrides."""
+  config = request.app.state.config
+  return {
+      "active_scenario": config.scenario_id,
+      "scenarios": scenario_rag.list_scenarios(),
+      "custom_persona": dict(config.custom_scenario_persona),
+      "custom_kb": dict(config.custom_scenario_kb),
+  }
+
+
+@router.post("/api/scenarios")
+async def api_update_scenarios(request: fastapi.Request):
+  """Update active scenario and optional per-scenario custom persona / RAG entries."""
+  body = await request.json()
+  config = request.app.state.config
+  raw_sid = body.get("scenario_id")
+  if raw_sid is not None:
+    if not isinstance(raw_sid, str) or not scenario_rag.is_valid_scenario(raw_sid):
+      raise fastapi.HTTPException(
+          status_code=400, detail=f"Unknown scenario_id: {raw_sid!r}"
+      )
+    config.scenario_id = scenario_rag.normalize_scenario_id(raw_sid)
+
+  target_sid = config.scenario_id
+  if "target_scenario_id" in body and isinstance(body["target_scenario_id"], str):
+    if scenario_rag.is_valid_scenario(body["target_scenario_id"]):
+      target_sid = scenario_rag.normalize_scenario_id(body["target_scenario_id"])
+
+  if "custom_persona" in body:
+    val = body["custom_persona"]
+    if val is None or (isinstance(val, str) and not val.strip()):
+      config.custom_scenario_persona.pop(target_sid, None)
+    elif isinstance(val, str):
+      config.custom_scenario_persona[target_sid] = val.strip()
+    else:
+      raise fastapi.HTTPException(
+          status_code=400, detail="custom_persona must be a string"
+      )
+
+  if "custom_kb" in body:
+    val = body["custom_kb"]
+    if val is None or (isinstance(val, str) and not val.strip()):
+      config.custom_scenario_kb.pop(target_sid, None)
+    elif isinstance(val, str):
+      config.custom_scenario_kb[target_sid] = val.strip()
+    else:
+      raise fastapi.HTTPException(
+          status_code=400, detail="custom_kb must be a string"
+      )
+
+  active_sess = request.app.state.active_session
+  if (
+      active_sess is not None
+      and getattr(active_sess, "scenario_id", None) == config.scenario_id
+  ):
+    active_sess.scenario_custom_kb = config.custom_scenario_kb.get(
+        config.scenario_id, ""
+    )
+
+  return {
+      "success": True,
+      "active_scenario": config.scenario_id,
+      "custom_persona": dict(config.custom_scenario_persona),
+      "custom_kb": dict(config.custom_scenario_kb),
+      "custom_doc_count": len(
+          scenario_rag.parse_custom_kb(
+              config.custom_scenario_kb.get(target_sid, ""), target_sid
+          )
+      ),
+      "requires_reconnect": active_sess is not None,
+  }
+
+
 @router.get("/api/agent_config/{name}")
 async def api_agent_config(
     request: fastapi.Request,
     name: str,
     endpoint_type: str = "gemini_live_api",
     model: str | None = None,
+    scenario: str | None = None,
 ):
   """Return the resolved agent configuration."""
   config = request.app.state.config
@@ -451,7 +561,14 @@ async def api_agent_config(
         status_code=400, detail=f"Unknown agent name: {name}"
     )
 
-  resolved_tools = agent.tools
+  active_scenario = scenario_rag.normalize_scenario_id(
+      scenario if scenario is not None else config.scenario_id
+  )
+  resolved_tools = _inject_rag_tool(
+      agent.tools,
+      active_scenario,
+      config.custom_scenario_kb.get(active_scenario, ""),
+  )
 
 
   decls = []
@@ -511,6 +628,7 @@ async def api_agent_config(
       "heartbeat_min_delay_seconds": config.heartbeat_min_delay_seconds,
       "use_event_driven_heartbeat": config.use_event_driven_heartbeat,
       "thinking_level": resolve_thinking_level(model or config.model),
+      "active_scenario": active_scenario,
   }
 
 
@@ -528,6 +646,7 @@ async def websocket_endpoint(
     use_tts: bool | None = None,
     thinking_level: str | None = None,
     endpoint_type: str = "gemini_live_api",
+    scenario: str | None = None,
 ):
   """WebSocket: Proactive Agent session with Gemini Live API."""
   app = websocket.app
@@ -546,9 +665,19 @@ async def websocket_endpoint(
       )
       return
 
+    active_scenario = scenario_rag.normalize_scenario_id(
+        scenario if scenario is not None else config.scenario_id
+    )
+    active_custom_persona = config.custom_scenario_persona.get(
+        active_scenario, ""
+    )
+    active_custom_kb = config.custom_scenario_kb.get(active_scenario, "")
+
     if agent_name == "spot" and agent_lib.spot_simulated():
       # Webcam-in-the-loop: browser camera/mic, simulated actuation.
-      current_embodiment = spot_sim_embodiment_lib.SimulatedSpotEmbodiment()
+      current_embodiment = spot_sim_embodiment_lib.SimulatedSpotEmbodiment(
+          waypoints=scenario_rag.get_scenario_waypoints(active_scenario)
+      )
       app.state.active_poller_ref = None
     elif agent_name == "spot":
       current_embodiment = spot_embodiment_lib.SpotEmbodiment(
@@ -575,6 +704,7 @@ async def websocket_endpoint(
         use_tts=use_tts,
         thinking_level=thinking_level,
         endpoint_type=endpoint_type,
+        scenario=active_scenario,
     )
     logger.info("[SERVER] Resolved session config: %s", session_cfg)
 
@@ -610,9 +740,19 @@ async def websocket_endpoint(
         resolved_model, session_cfg.response_modality or config.response_modality
     )
     # The text-only DI (send_message + TTS) is what the non-streaming ER
-    # orchestrator needs in the composite mode; keep it before the AUDIO edit.
+    # orchestrator needs in the composite mode; keep it before the AUDIO edit
+    # and before scenario persona injection (which belongs on the front-end).
     er_developer_instruction = agent.developer_instruction
     orchestrator_model = live_api_client.orchestrator_model(resolved_model)
+    persona_block = scenario_rag.build_scenario_persona_block(
+        active_scenario,
+        custom_persona=active_custom_persona,
+        custom_kb=active_custom_kb,
+    )
+    if persona_block:
+      agent.developer_instruction = (
+          agent.developer_instruction.rstrip() + "\n\n" + persona_block
+      )
     if modality == "AUDIO":
       agent.developer_instruction = _strip_text_only_comms_rules(
           agent.developer_instruction
@@ -639,6 +779,9 @@ async def websocket_endpoint(
         current_embodiment.get_tools()
         if agent_name in ("spot", "tinybot")
         else agent.tools
+    )
+    agent_tools = _inject_rag_tool(
+        agent_tools, active_scenario, active_custom_kb
     )
     if session_cfg.enabled_tools:
       enabled = set(session_cfg.enabled_tools)
@@ -727,7 +870,12 @@ async def websocket_endpoint(
         er_orchestrator_config=er_orchestrator_config,
     )
     app.state.session_agent_name = session_cfg.agent_name
-    app.state.active_session.recording_meta = {"agent": session_cfg.agent_name}
+    app.state.active_session.scenario_id = active_scenario
+    app.state.active_session.scenario_custom_kb = active_custom_kb
+    app.state.active_session.recording_meta = {
+        "agent": session_cfg.agent_name,
+        "scenario": active_scenario,
+    }
 
   try:
 

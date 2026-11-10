@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, ".")
 from tool import grounding_tools as _g  # pylint: disable=g-import-not-at-top
+from tool import scenario_rag as _r  # pylint: disable=g-import-not-at-top
 from tool import tools as _t  # pylint: disable=g-import-not-at-top
 
 INDEX = sys.argv[1]
@@ -26,7 +27,9 @@ def _first_sentences(text, n=2, limit=260):
 
 def _decls():
   out = {}
-  groups = _t.spot_sim_tools() + [{"functionDeclarations": _g.grounding_tool_declarations()}]
+  groups = _t.spot_sim_tools() + [
+      {"functionDeclarations": _g.grounding_tool_declarations() + [_r.search_knowledge_base_tool()]}
+  ]
   for grp in groups:
     for d in grp.get("functionDeclarations", [grp]):
       params = (d.get("parameters") or {})
@@ -55,10 +58,10 @@ CATS = [
     ('👁️ Perception', 'see & locate', 'look · detect', 'c-see'),
     ('🦾 Manipulation', 'arm & gripper', 'pick · place · stow · wait_for_pick_up', 'c-arm'),
     ('💬 Communication', 'talk to people', 'send_message · ack', 'c-talk'),
-    ('🌐 World knowledge', 'grounded lookup', 'get_current_location · google_search · google_maps_search', 'c-web'),
+    ('🌐 World & domain knowledge', 'grounded lookup · scenario RAG', 'get_current_location · google_search · google_maps_search · search_knowledge_base', 'c-web'),
 ]
 
-W = 1250
+W = 1340
 o = []
 A = o.append
 
@@ -78,7 +81,7 @@ def line(pts, cls='fc-line', arrow=True):
 
 
 # Tools column defines the vertical extent.
-sx, sw, sh, sy0, sgap = 660, 500, 56, 80, 70
+sx, sw, sh, sy0, sgap = 660, 610, 56, 80, 70
 cy = [sy0 + i * sgap + sh / 2 for i in range(len(CATS))]
 mid = (cy[0] + cy[-1]) / 2
 

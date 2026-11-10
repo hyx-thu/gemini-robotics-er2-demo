@@ -2664,6 +2664,420 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 .author-credit:hover { opacity: .9; }
 .author-credit a:hover { text-decoration: underline; }
 
+/* ---- Business Scenario, Role Persona & RAG Knowledge Base ---- */
+.header-actions .btn.scenario-header-btn,
+.scenario-header-btn {
+  width: auto;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+.header-actions .btn.scenario-header-btn.scenario-active,
+.scenario-header-btn.scenario-active {
+  background: rgba(26, 115, 232, 0.12);
+  color: #1967d2;
+  border-color: rgba(26, 115, 232, 0.42);
+}
+.header-actions .btn.scenario-header-btn.scenario-active.scenario-hospital,
+.scenario-header-btn.scenario-active.scenario-hospital {
+  background: rgba(19, 115, 51, 0.12);
+  color: #137333;
+  border-color: rgba(19, 115, 51, 0.38);
+}
+.header-actions .btn.scenario-header-btn.scenario-active.scenario-bank,
+.scenario-header-btn.scenario-active.scenario-bank {
+  background: rgba(26, 115, 232, 0.13);
+  color: #185abc;
+  border-color: rgba(26, 115, 232, 0.42);
+}
+.dark-theme .header-actions .btn.scenario-header-btn.scenario-active,
+.dark-theme .scenario-header-btn.scenario-active {
+  background: rgba(138, 180, 248, 0.16);
+  color: #8ab4f8;
+  border-color: rgba(138, 180, 248, 0.4);
+}
+.dark-theme .header-actions .btn.scenario-header-btn.scenario-active.scenario-hospital,
+.dark-theme .scenario-header-btn.scenario-active.scenario-hospital {
+  background: rgba(129, 201, 149, 0.16);
+  color: #81c995;
+  border-color: rgba(129, 201, 149, 0.38);
+}
+.dark-theme .header-actions .btn.scenario-header-btn.scenario-active.scenario-bank,
+.dark-theme .scenario-header-btn.scenario-active.scenario-bank {
+  background: rgba(138, 180, 248, 0.18);
+  color: #8ab4f8;
+  border-color: rgba(138, 180, 248, 0.42);
+}
+
+.scenario-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.scenario-save-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #137333;
+  white-space: nowrap;
+}
+.dark-theme .scenario-save-status { color: #81c995; }
+
+.scenario-reconnect-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  background: rgba(249, 171, 0, 0.12);
+  border: 1px solid rgba(249, 171, 0, 0.4);
+  color: #b06000;
+}
+.dark-theme .scenario-reconnect-banner {
+  color: #fdd663;
+  background: rgba(253, 214, 99, 0.12);
+  border-color: rgba(253, 214, 99, 0.35);
+}
+.scenario-reconnect-banner.hidden { display: none; }
+.btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 8px; white-space: nowrap; }
+
+.scenario-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+@media (max-width: 760px) {
+  .scenario-cards-grid { grid-template-columns: 1fr; }
+}
+.scenario-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.scenario-card:hover {
+  border-color: #1a73e8;
+  background: var(--accent-bg);
+}
+.scenario-card.active {
+  border-color: #1a73e8;
+  background: rgba(26, 115, 232, 0.09);
+  box-shadow: 0 0 0 1px rgba(26, 115, 232, 0.22);
+}
+.dark-theme .scenario-card.active {
+  border-color: #8ab4f8;
+  background: rgba(138, 180, 248, 0.14);
+}
+.scenario-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+.scenario-card-title { font-size: 13.5px; font-weight: 700; }
+.scenario-card-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-secondary);
+}
+.scenario-card.active .scenario-card-badge {
+  background: #1a73e8;
+  color: #fff;
+}
+.dark-theme .scenario-card.active .scenario-card-badge {
+  background: #8ab4f8;
+  color: #0b0f14;
+}
+.scenario-card-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.scenario-detail-box {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  margin-bottom: 14px;
+}
+.scenario-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.scenario-org-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.scenario-role-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.scenario-count-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(26, 115, 232, 0.12);
+  color: #1967d2;
+  white-space: nowrap;
+}
+.dark-theme .scenario-count-pill {
+  background: rgba(138, 180, 248, 0.16);
+  color: #8ab4f8;
+}
+.scenario-persona-preview {
+  font-size: 11.8px;
+  line-height: 1.48;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  margin-top: 4px;
+  max-height: 68px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.scenario-waypoints-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+.scenario-waypoints-wrap.hidden { display: none; }
+.scenario-wp-label { font-size: 11.5px; font-weight: 600; color: var(--text-secondary); }
+.scenario-waypoints-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.scenario-wp-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.scenario-kb-section { margin-bottom: 14px; }
+.scenario-kb-section.hidden { display: none; }
+.scenario-kb-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.scenario-kb-filter {
+  flex: 1;
+  min-width: 220px;
+  max-width: 340px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.scenario-kb-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+.scenario-kb-item {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  padding: 7px 10px;
+}
+.scenario-kb-item summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  list-style: none;
+}
+.scenario-kb-item summary::-webkit-details-marker { display: none; }
+.scenario-kb-cat {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.scenario-kb-title { flex: 1; min-width: 0; }
+.scenario-kb-loc {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  max-width: 150px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scenario-kb-body {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.scenario-kb-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.scenario-kb-ask-btn {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 115, 232, 0.4);
+  background: rgba(26, 115, 232, 0.08);
+  color: #1967d2;
+  cursor: pointer;
+}
+.scenario-kb-ask-btn:hover { background: rgba(26, 115, 232, 0.16); }
+.dark-theme .scenario-kb-ask-btn {
+  color: #8ab4f8;
+  border-color: rgba(138, 180, 248, 0.4);
+  background: rgba(138, 180, 248, 0.12);
+}
+
+.scenario-custom-details {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  margin-bottom: 14px;
+}
+.scenario-custom-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.scenario-custom-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Rich RAG Knowledge Citation Card in #chat-log */
+.rich-card.kb-card {
+  border-left: 3.5px solid #1a73e8;
+  gap: 7px;
+}
+.rich-card.kb-card.kb-hospital { border-left-color: #137333; }
+.rich-card.kb-card.kb-bank { border-left-color: #1a73e8; }
+.kb-card-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-secondary);
+}
+.kb-card-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kb-card-item {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kb-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.kb-item-cat {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(26, 115, 232, 0.12);
+  color: #1967d2;
+}
+.kb-hospital .kb-item-cat {
+  background: rgba(19, 115, 51, 0.12);
+  color: #137333;
+}
+.dark-theme .kb-item-cat {
+  background: rgba(138, 180, 248, 0.16);
+  color: #8ab4f8;
+}
+.dark-theme .kb-hospital .kb-item-cat {
+  background: rgba(129, 201, 149, 0.16);
+  color: #81c995;
+}
+.kb-item-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.kb-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.kb-meta-pill {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.kb-item-summary {
+  font-size: 11.8px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 /* =====================================================================
    [INTERNAL-TEST-ONLY: Real2Sim] Expanded 3D Twin Robot Model Selector
    Stays ONLY in dev/test; skip when merging to main/stable.

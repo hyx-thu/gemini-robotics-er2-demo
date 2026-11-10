@@ -22,6 +22,7 @@ import httpx
 from core import action_watchdog
 from core import event_bus
 from tool import grounding_tools
+from tool import scenario_rag
 
 
 _PICK_CAMERA_STABLE_SECONDS = 3.0
@@ -459,7 +460,10 @@ class ToolCallHandler:
       # A blocking FunctionResponse resumes model generation. Send the latest
       # visual context first instead of creating a competing heartbeat turn.
       post_action_frame_sent = False
-      if is_blocking and sink is None and func_name != "talk_motion":
+      if is_blocking and sink is None and func_name not in (
+          "talk_motion",
+          scenario_rag.SCENARIO_RAG_TOOL_NAME,
+      ):
         send_frame = getattr(
             self._session_manager, "send_latest_video_frame", None
         )
@@ -760,6 +764,14 @@ class ToolCallHandler:
 
   async def _invoke_tool(self, func_name: str, args: dict[str, Any]) -> Any:
     try:
+      if func_name == scenario_rag.SCENARIO_RAG_TOOL_NAME:
+        sm = self._session_manager
+        return await asyncio.to_thread(
+            scenario_rag.run_rag_tool,
+            args,
+            getattr(sm, "scenario_id", None),
+            getattr(sm, "scenario_custom_kb", ""),
+        )
       if func_name in grounding_tools.GROUNDING_TOOL_NAMES:
         sm = self._session_manager
         return await asyncio.to_thread(

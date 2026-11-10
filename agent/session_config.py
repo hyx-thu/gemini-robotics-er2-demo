@@ -160,3 +160,6 @@ class SessionConfig:
 
   # Endpoint type (gemini_live_api)
   endpoint_type: str = "gemini_live_api"
+
+  # Active business scenario & RAG knowledge base ("default", "cymbal_hospital", "cymbal_bank")
+  scenario: str = "default"
