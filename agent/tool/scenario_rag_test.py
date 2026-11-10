@@ -45,6 +45,19 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(scenario_rag.build_scenario_persona_block("default"), "")
     self.assertIsNone(scenario_rag.get_scenario_waypoints("default"))
 
+  def test_strict_scenario_isolation_no_cross_domain_terms(self):
+    hosp_tool = str(scenario_rag.search_knowledge_base_tool("cymbal_hospital"))
+    hosp_persona = scenario_rag.build_scenario_persona_block("cymbal_hospital")
+    for bank_term in ("理财", "大额存单", "取现", "SWIFT", "房贷"):
+      self.assertNotIn(bank_term, hosp_tool)
+      self.assertNotIn(bank_term, hosp_persona)
+
+    bank_tool = str(scenario_rag.search_knowledge_base_tool("cymbal_bank"))
+    bank_persona = scenario_rag.build_scenario_persona_block("cymbal_bank")
+    for hosp_term in ("抽血", "义诊", "核磁", "胃镜", "门诊"):
+      self.assertNotIn(hosp_term, bank_tool)
+      self.assertNotIn(hosp_term, bank_persona)
+
   def test_hospital_rag_queries(self):
     cases = [
         ("请问去哪里缴费？支持刷医保码吗？", "hosp_billing"),

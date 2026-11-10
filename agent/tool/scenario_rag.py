@@ -150,7 +150,7 @@ def parse_custom_kb(custom_kb: str, scenario_id: str = "") -> list[dict[str, Any
       summary = summary[:179].rstrip() + "…"
     chunks.append({
         "id": f"custom_{scenario_id or 'kb'}_{idx + 1}",
-        "category": "自定义补充知识 (Custom Knowledge)",
+        "category": "自定义补充知识",
         "title": title,
         "location": "",
         "waypoint": "",
@@ -234,70 +234,93 @@ def build_scenario_persona_block(
     return ""
 
   sc = _load_scenarios_map().get(sid, {})
-  org = sc.get("organization") or "Custom Venue"
-  role = sc.get("role") or "Service Concierge Robot"
+  org = sc.get("organization") or "自定义业务场景"
+  role = sc.get("role") or "智能场景服务机器人"
   persona_text = cp if cp else (sc.get("persona_prompt") or "").strip()
   wps = sc.get("waypoints") or []
   wp_line = (
-      f"- Venue navigation waypoints (`get_waypoints` / `navigate`): {', '.join(f'`{w}`' for w in wps)}."
+      f"- 当前场景专属导航路点（`get_waypoints` / `navigate`）：{', '.join(f'`{w}`' for w in wps)}。"
       if sid != DEFAULT_SCENARIO_ID and wps
       else ""
   )
   parts = [
-      f"## Active Business Scenario & Role Persona: {org} — {role}",
+      f"## 当前激活业务场景与角色人设：{org} — {role}",
   ]
   if persona_text:
     parts.append(persona_text)
   elif has_custom_kb:
     parts.append(
-        "Whenever the visitor asks domain, venue, or service policy questions,"
-        " call `search_knowledge_base` first and ground your answer in the"
-        " retrieved entries while you answer."
+        "当访客询问任何场馆规定、办理流程或业务信息时，必须先调用"
+        " `search_knowledge_base` 检索知识库，并严格基于检索结果作答。"
     )
   if wp_line:
     parts.append(wp_line)
   parts.append(
-      "- Do NOT create an `update_plan` just for `search_knowledge_base` Q&A;"
-      " reserve `update_plan` for physical multi-step manipulation tasks."
-      " Never call `search_knowledge_base` on `[HEARTBEAT]` ticks."
+      "- 回答 `search_knowledge_base` 知识问答时无需调用 `update_plan`"
+      "（`update_plan` 仅用于机械臂物理抓取/放置等多步操作任务）；"
+      "收到 `[HEARTBEAT]` 心跳时严禁调用 `search_knowledge_base`。"
   )
   return "\n".join(parts)
 
 
 def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]:
-  """Gemini FunctionDeclaration for `search_knowledge_base`."""
+  """Gemini FunctionDeclaration for `search_knowledge_base` (strictly isolated per scenario)."""
   sid = normalize_scenario_id(scenario_id)
   sc = _load_scenarios_map().get(sid, {})
-  org = sc.get("organization") or "the active venue (e.g. Cymbal Hospital / Cymbal Bank)"
+  org = sc.get("organization") or "当前激活业务场馆"
+
+  if sid == "cymbal_hospital":
+    desc = (
+        f"检索 {org} 官方门诊导诊 RAG 知识库，获取准确的门诊缴费与医保结算窗口、"
+        "抽血采血地点与空腹要求、全院楼层科室分布、常见症状挂号分诊、门诊取药与中药代煎、"
+        "CT/核磁共振（MRI）/胃肠镜检查预约与禁忌、专家排班、出入院办理、健康体检、"
+        "24小时急诊及院内导航路点。回答任何医院流程、科室位置或就诊规定问题前必须先调用此工具。"
+    )
+    query_desc = (
+        "患者或家属的咨询问题或关键词，例如：'去哪里缴费支持刷医保吗'、"
+        "'去哪里抽血需要空腹几个小时'、'头晕胸闷应该挂什么科'、'核磁共振检查在哪里有什么禁忌'。"
+    )
+    cat_desc = (
+        "可选医院导诊分类提示（如 '挂号与缴费'、'检验与抽血'、'楼层与科室导航'、"
+        "'智能分诊'、'取药与药事服务'、'检查预约与准备'、'健康体检与入职体检'、'急诊与犬伤门诊'）。"
+    )
+  elif sid == "cymbal_bank":
+    desc = (
+        f"检索 {org} 旗舰支行官方业务 RAG 知识库，获取准确的稳健理财产品与业绩比较基准、"
+        "定期存款与大额存单利率、水电燃气与社保生活缴费、个人储蓄卡开户与改密提额、"
+        "大额取现预约规定、跨境电汇（SWIFT）与留学购汇、房贷按揭与提前还款、"
+        "银行流水/存款证明/征信自助打印、企业对公金融、VIP贵宾权益及网点导航路点。"
+        "回答任何银行业务、利率门槛或窗口分流问题前必须先调用此工具。"
+    )
+    query_desc = (
+        "客户的咨询问题或业务关键词，例如：'有哪些稳健型理财产品收益率多少'、"
+        "'大额存单和定期存款利率'、'水电燃气费去哪里缴'、'取十万现金需要预约吗'、'跨境汇款SWIFT代码'。"
+    )
+    cat_desc = (
+        "可选银行业务分类提示（如 '理财与资产配置'、'便民生活与政务缴费'、'现金与外汇服务'、"
+        "'房贷与个人信贷'、'账户与银行卡业务'、'证明打印与征信查询'、'企业对公金融'）。"
+    )
+  else:
+    desc = (
+        f"检索 {org} 的专属 RAG 知识库，查询场馆服务指南、办理流程、窗口楼层位置、"
+        "收费与政策标准以及关联导航路点。回答场馆服务或业务流程问题前请先调用此工具，确保回答真实准确。"
+    )
+    query_desc = "访客咨询的完整问题或核心检索关键词。"
+    cat_desc = "可选的知识分类提示。"
+
   return {
       "name": SCENARIO_RAG_TOOL_NAME,
-      "description": (
-          f"Search the official RAG knowledge base of {org} for accurate"
-          " policies, floor & counter locations, where to pay bills (缴费),"
-          " lab/blood-draw rules (抽血/化验/空腹), wealth management products &"
-          " deposit/loan rates (理财/存款/贷款), cash/FX thresholds, specialist"
-          " schedules, required documents, opening hours, and linked navigation"
-          " waypoints. ALWAYS call this tool BEFORE answering any venue,"
-          " service, department, product, or procedural question so your reply"
-          " is grounded in verified facts rather than guesswork."
-      ),
+      "description": desc,
       "parameters": {
           "type": "OBJECT",
           "properties": {
               "query": {
                   "type": "STRING",
-                  "description": (
-                      "Visitor's question or key topic keywords in their"
-                      " language, e.g. '去哪里缴费支持医保吗', '去哪里抽血要空腹吗',"
-                      " '稳健理财产品收益率', '大额取现预约规定'."
-                  ),
+                  "description": query_desc,
               },
               "category": {
                   "type": "STRING",
-                  "description": (
-                      "Optional category hint (e.g. 'billing', 'lab', 'wealth',"
-                      " 'cash', 'loans', 'triage', 'floor', 'pharmacy')."
-                  ),
+                  "description": cat_desc,
               },
           },
           "required": ["query"],

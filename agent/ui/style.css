@@ -2803,6 +2803,8 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   border-radius: 999px;
   background: var(--accent-bg);
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .scenario-card.active .scenario-card-badge {
   background: #1a73e8;

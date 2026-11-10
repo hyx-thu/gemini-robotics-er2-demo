@@ -3362,7 +3362,8 @@ modalTabs.forEach(tab => {
 });
 
 // Fetch and display agent config
-async function loadAgentConfig(name, model) {
+async function loadAgentConfig(name = selectedAgentName, model = selectedModel) {
+  if (!name) return;
   try {
     let url = `/api/agent_config/${encodeURIComponent(name)}?endpoint_type=${encodeURIComponent(selectedEndpointType)}&scenario=${encodeURIComponent(selectedScenarioId || 'default')}`;
     if (model) {
@@ -3926,11 +3927,11 @@ function appendKnowledgeCard(r) {
   const head = _el('div', 'rich-head');
   const icon = sid === 'cymbal_hospital' ? '🏥' : sid === 'cymbal_bank' ? '🏦' : '📖';
   head.appendChild(_el('span', 'rich-icon', icon));
-  const orgTitle = (r.organization ? `${r.organization} · RAG` : 'Scenario RAG Knowledge');
+  const orgTitle = (r.organization ? `${r.organization} · 知识检索` : '场景 RAG 知识检索');
   head.appendChild(_el('span', 'rich-title', orgTitle));
   const matches = Array.isArray(r.matches) ? r.matches : [];
-  const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? 'Hybrid' : 'RAG';
-  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · ${matches.length} ${matches.length === 1 ? 'hit' : 'hits'}`));
+  const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? '混合检索' : 'RAG 检索';
+  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · 命中 ${matches.length} 条`));
   card.appendChild(head);
   if (r.query) {
     card.appendChild(_el('div', 'rich-sub', `🔎 “${r.query}”`));
@@ -3940,7 +3941,7 @@ function appendKnowledgeCard(r) {
     const item = _el('div', 'kb-card-item');
     const itemHead = _el('div', 'kb-item-head');
     if (m.category) itemHead.appendChild(_el('span', 'kb-item-cat', m.category));
-    itemHead.appendChild(_el('span', 'kb-item-title', m.title || ' Entry'));
+    itemHead.appendChild(_el('span', 'kb-item-title', m.title || '知识条目'));
     item.appendChild(itemHead);
     if (m.location || m.waypoint) {
       const meta = _el('div', 'kb-item-meta');
@@ -3976,6 +3977,24 @@ function renderRichToolCard(msg) {
 }
 
 // --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
+const SCENARIO_UI_PLACEHOLDERS = {
+  cymbal_hospital: {
+    filter: '🔍 搜索医院导诊知识（如：缴费、抽血、空腹、挂号、取药、核磁共振、体检、急诊）...',
+    persona: '例如：你是 Cymbal Hospital 5楼国际医疗部的双语陪诊专员机器人，语气亲切温和，主动提醒患者诊前准备事项……',
+    kb: '### 今日专科义诊通知\n本周五上午 09:00–11:30 在门诊 1 楼中庭举办心血管内科与内分泌科主任免费健康咨询及血压血糖筛查。\n\n### 地铁院区接驳车\n地铁 2 号线馨博站 A 口每 15 分钟一班免费无障碍接驳巴士直达门诊 1 楼正门。',
+  },
+  cymbal_bank: {
+    filter: '🔍 搜索银行业务知识（如：理财、存款、大额存单、水电缴费、大额取现、SWIFT、房贷）...',
+    persona: '例如：你是 Cymbal Bank 旗舰支行 VIP 财富管理中心的专属迎宾顾问，接待贵宾客户时专业稳重，主动引导至南侧贵宾室……',
+    kb: '### 新客稳健理财专享礼遇\n首次在本行完成风险测评并签约「馨稳季季添利 90 天」的新客户，可至南侧 VIP 财富室享一对一资产配置服务。\n\n### 周末贵宾财富沙龙\n本周六下午 14:30 在大堂南侧贵宾厅举办家庭稳健配置与黄金定投专题分享会。',
+  },
+  default: {
+    filter: '🔍 搜索自定义知识条目...',
+    persona: '例如：你是企业展厅智能接待机器人，负责向来宾热情介绍展区亮点并协助桌面物品递送……',
+    kb: '### 展厅开放时间\n展厅每周一至周五 09:30–18:00 开放参观，前台可扫码领取访客通行证。',
+  },
+};
+
 function _parseCustomKbPreview(rawText) {
   const raw = String(rawText || '').trim();
   if (!raw) return [];
@@ -3991,7 +4010,7 @@ function _parseCustomKbPreview(rawText) {
     const body = lines.length > 1 ? lines.slice(1).join('\n') : first;
     out.push({
       id: `custom_${idx + 1}`,
-      category: 'Custom RAG',
+      category: '自定义补充知识',
       title,
       location: '',
       waypoint: '',
@@ -4012,15 +4031,15 @@ function updateScenarioHeaderBadge() {
   btn.classList.remove('scenario-active', 'scenario-hospital', 'scenario-bank');
   if (selectedScenarioId === 'cymbal_hospital') {
     btn.classList.add('scenario-active', 'scenario-hospital');
-    txt.textContent = '🏥 Cymbal Hospital · RAG';
+    txt.textContent = '🏥 Cymbal Hospital · 导诊';
   } else if (selectedScenarioId === 'cymbal_bank') {
     btn.classList.add('scenario-active', 'scenario-bank');
-    txt.textContent = '🏦 Cymbal Bank · RAG';
+    txt.textContent = '🏦 Cymbal Bank · 大堂';
   } else if (hasCustom) {
     btn.classList.add('scenario-active');
-    txt.textContent = '📖 Custom RAG';
+    txt.textContent = '📖 自定义知识库';
   } else {
-    txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 Scenario';
+    txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 场景角色';
   }
 }
 
@@ -4049,7 +4068,7 @@ function _sampleQuestionForDoc(doc, scenarioId) {
   const t = String(doc.title || '');
   if (t.includes('缴费')) return scenarioId === 'cymbal_bank' ? '请问水电燃气费和社保去哪里缴费？' : '请问去哪里缴费？支持刷医保码吗？';
   if (t.includes('抽血')) return '请问去哪里抽血化验？需要空腹几个小时？';
-  if (t.includes('尿检')) return '尿常规检验去哪里留样？';
+  if (t.includes('尿常规') || t.includes('尿检')) return '尿常规检验去哪里留样送检？';
   if (t.includes('理财')) return '请问现在有哪些稳健型的理财产品？收益率和风险等级怎么样？';
   if (t.includes('存款') || t.includes('大额存单')) return '现在定期存款和大额存单利率是多少？';
   if (t.includes('取现') || t.includes('现金')) return '我要取10万现金需要提前预约吗？';
@@ -4076,8 +4095,8 @@ function renderScenarioKbList() {
   const allDocs = customDocs.concat(sc.documents || []);
   if (countPill) {
     countPill.textContent = allDocs.length
-      ? `${allDocs.length} RAG docs${customDocs.length ? ` (+${customDocs.length} custom)` : ''}`
-      : 'No RAG overhead';
+      ? `共 ${allDocs.length} 篇知识${customDocs.length ? `（含 ${customDocs.length} 篇自定义）` : ''}`
+      : '无行业预设开销';
   }
   if (!allDocs.length) {
     kbSec.classList.add('hidden');
@@ -4094,7 +4113,7 @@ function renderScenarioKbList() {
 
   listEl.innerHTML = '';
   if (!filtered.length) {
-    listEl.appendChild(_el('div', 'config-help-text', 'No matching knowledge entries found.'));
+    listEl.appendChild(_el('div', 'config-help-text', '未找到匹配的知识条目，请尝试更换搜索关键词。'));
     return;
   }
   filtered.forEach((doc) => {
@@ -4106,7 +4125,7 @@ function renderScenarioKbList() {
       catEl.title = doc.category;
       sum.appendChild(catEl);
     }
-    sum.appendChild(_el('span', 'scenario-kb-title', doc.title || 'Entry'));
+    sum.appendChild(_el('span', 'scenario-kb-title', doc.title || '知识条目'));
     if (doc.location) {
       const locEl = _el('span', 'scenario-kb-loc', `📍 ${doc.location}`);
       locEl.title = doc.location;
@@ -4117,9 +4136,9 @@ function renderScenarioKbList() {
     const body = _el('div', 'scenario-kb-body');
     body.appendChild(_el('div', '', doc.summary || doc.content || ''));
     const actions = _el('div', 'scenario-kb-actions');
-    const wpInfo = doc.waypoint ? `🧭 Linked waypoint: ${doc.waypoint}` : '';
+    const wpInfo = doc.waypoint ? `🧭 关联导航点：${doc.waypoint}` : '';
     actions.appendChild(_el('span', 'config-help-text', wpInfo));
-    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 Fill test question');
+    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 填入测试问题');
     askBtn.type = 'button';
     askBtn.onclick = (ev) => {
       ev.preventDefault();
@@ -4147,7 +4166,7 @@ function renderScenarioPanel() {
   grid.innerHTML = '';
 
   const fallbackList = scenarioCatalog.length ? scenarioCatalog : [
-    { id: 'default', name: 'Default (General Robot)', label_zh: '默认（通用具身机器人）', badge: '🤖 Default', organization: '', role: 'General Embodied Assistant', persona_prompt: '', waypoints: [], documents: [] },
+    { id: 'default', name: '默认通用模式', label_zh: '通用具身操作与语音交互（无行业预设）', badge: '🤖 默认通用', organization: '', role: '通用具身操作与语音助手', persona_prompt: '', waypoints: [], documents: [] },
   ];
 
   fallbackList.forEach((sc) => {
@@ -4158,7 +4177,7 @@ function renderScenarioPanel() {
     top.appendChild(_el('span', 'scenario-card-title', sc.badge || sc.name));
     const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '').length;
     const totalCnt = (sc.documents ? sc.documents.length : (sc.doc_count || 0)) + customCnt;
-    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} RAG` : 'Standard'));
+    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} 篇知识` : '通用模式'));
     card.appendChild(top);
     card.appendChild(_el('div', 'scenario-card-sub', sc.label_zh || sc.role || sc.name));
     card.onclick = () => selectScenario(sc.id);
@@ -4171,30 +4190,36 @@ function renderScenarioPanel() {
   const personaEl = document.getElementById('scenario-persona-preview');
   const wpWrap = document.getElementById('scenario-waypoints-wrap');
   const wpChips = document.getElementById('scenario-waypoints-chips');
+  const filterInput = document.getElementById('scenario-kb-filter');
   const cpInput = document.getElementById('scenario-custom-persona');
   const kbInput = document.getElementById('scenario-custom-kb');
+  const uiHints = SCENARIO_UI_PLACEHOLDERS[selectedScenarioId] || SCENARIO_UI_PLACEHOLDERS.default;
+
+  if (filterInput) filterInput.placeholder = uiHints.filter;
+  if (cpInput) cpInput.placeholder = uiHints.persona;
+  if (kbInput) kbInput.placeholder = uiHints.kb;
 
   if (orgEl) {
-    orgEl.textContent = active.organization || active.name || 'Default Mode';
+    orgEl.textContent = active.organization || active.name || '默认通用模式';
   }
   if (roleEl) {
-    roleEl.textContent = active.role || 'Standard robot capabilities without venue-specific RAG overhead.';
+    roleEl.textContent = active.role || '通用具身操作与语音助手（不启用特定行业角色与知识库）';
   }
   if (personaEl) {
     const cleanMd = (s) => String(s || '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
     const customP = String(scenarioCustomPersonaMap[selectedScenarioId] || '').trim();
     if (customP) {
-      personaEl.textContent = `✨ Custom Persona Active:\n${cleanMd(customP)}`;
+      personaEl.textContent = `✨ 已启用自定义角色指令：\n${cleanMd(customP)}`;
     } else if (active.persona_prompt) {
       personaEl.textContent = cleanMd(active.persona_prompt);
     } else {
-      personaEl.textContent = 'No industry role override active. Select Cymbal Hospital or Cymbal Bank above (or add custom RAG entries below) to enable domain role & search_knowledge_base.';
+      personaEl.textContent = '当前未启用行业角色预设。请在上方选择「Cymbal Hospital」或「Cymbal Bank」（或在下方补充自定义角色与知识条目），即可开启行业专属角色人设与 search_knowledge_base 知识库检索能力。';
     }
   }
   if (wpWrap && wpChips) {
     const wps = Array.isArray(active.waypoints) ? active.waypoints : [];
     wpChips.innerHTML = '';
-    if (wps.length) {
+    if (wps.length && selectedScenarioId !== 'default') {
       wpWrap.classList.remove('hidden');
       wps.forEach(w => wpChips.appendChild(_el('span', 'scenario-wp-chip', w)));
     } else {
@@ -4217,8 +4242,13 @@ function _flashScenarioStatus(msg) {
 }
 
 async function selectScenario(scenarioId) {
+  const prevScenario = selectedScenarioId;
   selectedScenarioId = scenarioId || 'default';
   localStorage.setItem('er2_scenario_id', selectedScenarioId);
+  if (prevScenario !== selectedScenarioId) {
+    const filterEl = document.getElementById('scenario-kb-filter');
+    if (filterEl) filterEl.value = '';
+  }
   updateScenarioHeaderBadge();
   renderScenarioPanel();
   try {
@@ -4231,8 +4261,9 @@ async function selectScenario(scenarioId) {
       const data = await resp.json();
       scenarioCustomPersonaMap = data.custom_persona || scenarioCustomPersonaMap;
       scenarioCustomKbMap = data.custom_kb || scenarioCustomKbMap;
-      _flashScenarioStatus(data.requires_reconnect ? 'Saved · Reconnect to apply ⚡' : 'Scenario active ✅');
+      _flashScenarioStatus(data.requires_reconnect ? '已保存 · 重连会话后生效 ⚡' : '场景已切换 ✅');
       updateScenarioReconnectBanner();
+      if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
     }
   } catch (e) {
     console.warn('Failed to persist scenario:', e);
@@ -4302,11 +4333,12 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
           scenarioCustomKbMap = data.custom_kb || {};
           updateScenarioHeaderBadge();
           renderScenarioPanel();
-          _flashScenarioStatus('Customizations saved ✅');
+          _flashScenarioStatus('自定义配置已保存 ✅');
+          if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
         }
       } catch (e) {
         console.error('Save scenario customizations failed:', e);
-        _flashScenarioStatus('Save failed ❌');
+        _flashScenarioStatus('保存失败 ❌');
       } finally {
         saveBtn.disabled = false;
       }
@@ -4337,7 +4369,8 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
           scenarioCustomKbMap = data.custom_kb || {};
           updateScenarioHeaderBadge();
           renderScenarioPanel();
-          _flashScenarioStatus('Cleared ✅');
+          _flashScenarioStatus('已清空自定义内容 ✅');
+          if (typeof loadAgentConfig === 'function') loadAgentConfig(selectedAgentName, selectedModel);
         }
       } catch (e) {
         console.error('Reset scenario customizations failed:', e);

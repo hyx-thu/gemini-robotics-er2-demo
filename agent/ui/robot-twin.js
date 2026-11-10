@@ -186,29 +186,29 @@ function buildDog() {
       const tst = (talk && talk.style) || 'explain';
       let talkBodyPitch = 0, talkBodyRoll = 0, hYaw = 0, hPitch = 0, hRoll = 0;
       if (tb > 0) {
-        const nodWave = Math.sin(t * 7.4) * 0.5 + 0.5;
+        const nodWave = Math.sin(t * 3.0) * 0.5 + 0.5;
         if (tst === 'affirm') {
-          hPitch = (-0.18 * te - 0.10 * nodWave) * tb;
-          hYaw = Math.sin(t * 1.6) * 0.08 * tb;
-          talkBodyPitch = (0.04 - 0.035 * te) * tb;
+          hPitch = (-0.18 * te - 0.09 * nodWave) * tb;
+          hYaw = Math.sin(t * 1.2) * 0.08 * tb;
+          talkBodyPitch = (0.04 - 0.03 * te) * tb;
         } else if (tst === 'think') {
-          hRoll = (0.26 + Math.sin(t * 1.9) * 0.06) * tb;
-          hPitch = (0.09 - 0.06 * te) * tb;
-          hYaw = (0.14 + Math.sin(t * 1.5) * 0.08) * tb;
+          hRoll = (0.26 + Math.sin(t * 1.1) * 0.05) * tb;
+          hPitch = (0.09 - 0.05 * te) * tb;
+          hYaw = (0.14 + Math.sin(t * 1.0) * 0.07) * tb;
           talkBodyRoll = 0.025 * tb;
         } else if (tst === 'emphasize') {
           hPitch = (-0.16 * te - 0.06 * nodWave) * tb;
-          hYaw = Math.sin(t * 2.8) * 0.14 * tb;
-          talkBodyPitch = (0.05 - 0.045 * te) * tb;
+          hYaw = Math.sin(t * 1.9) * 0.14 * tb;
+          talkBodyPitch = (0.05 - 0.04 * te) * tb;
         } else if (tst === 'empathy') {
           hRoll = -0.18 * tb;
           hPitch = (-0.08 * te - 0.04) * tb;
-          hYaw = Math.sin(t * 1.4) * 0.07 * tb;
+          hYaw = Math.sin(t * 1.0) * 0.07 * tb;
           talkBodyPitch = 0.025 * tb;
         } else {
-          hPitch = (-0.12 * te - 0.04 * nodWave) * tb;
-          hYaw = Math.sin(t * 2.0) * 0.12 * tb;
-          hRoll = Math.sin(t * 1.5) * 0.07 * tb;
+          hPitch = (-0.11 * te - 0.04 * nodWave) * tb;
+          hYaw = Math.sin(t * 1.35) * 0.12 * tb;
+          hRoll = Math.sin(t * 1.05) * 0.07 * tb;
           talkBodyPitch = (0.03 - 0.025 * te) * tb;
         }
       }
@@ -285,7 +285,7 @@ function buildHumanoid() {
   }
   const cone = makeCone(headG, { x: 0.12, y: 0.12, z: 0 }, 1.1, 0.36);
 
-  // Arms. Right arm (z>0) is the manipulator; left arm mirrors a relaxed pose.
+  // Arms. Both hands use matching parallel-jaw grippers; right arm (z>0) manipulates table items.
   const A1 = 0.4, A2 = 0.36, GRIP_LEN = 0.17, SH_Y = TORSO_H - 0.03, SH_Z = 0.25;
   function makeArm(side) {
     const yawG = new THREE.Group(); yawG.position.set(0, SH_Y, side * SH_Z); torsoG.add(yawG);
@@ -296,12 +296,12 @@ function buildHumanoid() {
     el.add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 10), mat(C_JOINT)));
     const fo = new THREE.Mesh(capsule(0.036, A2, true), mat(C_DARK)); fo.position.x = A2 / 2; fo.castShadow = true; el.add(fo);
     const wr = new THREE.Group(); wr.position.x = A2; el.add(wr);
+    wr.add(new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), mat(C_JOINT)));
     return { yawG, sh, el, wr };
   }
   const R = makeArm(1), Lm = makeArm(-1);
   const { fingers, gripPoint } = makeGripper(R.wr, GRIP_LEN);
-  const lhand = new THREE.Mesh(roundedBox(0.1, 0.06, 0.07, 0.015), mat(C_DARK));
-  lhand.position.x = 0.05; Lm.wr.add(lhand);
+  const { fingers: lfingers } = makeGripper(Lm.wr, GRIP_LEN);
 
   // Legs: hip -> thigh -> knee -> shin -> foot (knee forward).
   const L1 = 0.42, L2 = 0.42, HIP_Z = 0.1;
@@ -333,12 +333,12 @@ function buildHumanoid() {
     carry: () => ik(0.42, STAND_H + 0.62, 0.22, -0.2),
     table: { x: 0.72, top: 0.78, half: { x: 0.26, z: 0.42 } },
     homeCam: new THREE.Vector3(3.15, 1.9, -2.3), homeTarget: new THREE.Vector3(0.3, 0.85, 0),
-    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, rear: 0, hy: 0, hp: 0, ls: -1.5, le: -0.15, paw: 0, pawAmp: 0 },
+    defaults: { h: STAND_H, pitch: 0, roll: 0, yaw: STOW.yaw, s: STOW.s, e: STOW.e, w: STOW.w, grip: 0, lgrip: 0, rear: 0, hy: 0, hp: 0, lyaw: 0, ls: -1.5, le: -0.15, paw: 0, pawAmp: 0 },
     // Stand = upright, chest out, arms at the sides. Sit = squat.
-    standEnter: (tgt) => { tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 1; tgt.ls = -1.5; tgt.le = -0.15; },
+    standEnter: (tgt) => { tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 1; tgt.lyaw = 0; tgt.ls = -1.5; tgt.le = -0.15; },
     isUp: () => false,                       // nothing to undo before other actions
     downEnter: (tgt) => { tgt.h = STAND_H; tgt.pitch = 0; tgt.rear = 0; },
-    sitEnter: (tgt) => { tgt.h = SIT_H; tgt.pitch = 0.25; tgt.rear = 0; tgt.ls = -0.9; tgt.le = -1.2; },
+    sitEnter: (tgt) => { tgt.h = SIT_H; tgt.pitch = 0.25; tgt.rear = 0; tgt.lyaw = 0; tgt.ls = -0.9; tgt.le = -1.2; },
     look: (tgt, dir, ang) => {
       if (dir === 'left') tgt.hy += ang; else if (dir === 'right') tgt.hy -= ang;
       else if (dir === 'up') tgt.hp += ang; else if (dir === 'down') tgt.hp -= ang;
@@ -364,9 +364,9 @@ function buildHumanoid() {
         [0.7, () => { ctx.restoreArm(); tgt.grip = 0; tgt.pitch = 0; tgt.hp = 0; }],
       ],
       heart: (tgt, setArm, ctx) => [
-        [0.7, () => { setArm({ yaw: -0.5, s: 0.85, e: 1.35, w: -0.4 }); tgt.ls = 0.85; tgt.le = 1.35; tgt.hp = 0.08; }],
+        [0.7, () => { setArm({ yaw: -0.5, s: 0.85, e: 1.35, w: -0.4 }); tgt.lyaw = 0.5; tgt.ls = 0.85; tgt.le = 1.35; tgt.grip = 0.75; tgt.lgrip = 0.75; tgt.hp = 0.08; }],
         [1.8, () => { tgt.hp = -0.06; }],
-        [0.7, () => { ctx.restoreArm(); tgt.ls = -1.5; tgt.le = -0.15; tgt.hp = 0; }],
+        [0.7, () => { ctx.restoreArm(); tgt.lyaw = 0; tgt.ls = -1.5; tgt.le = -0.15; tgt.grip = 0; tgt.lgrip = 0; tgt.hp = 0; }],
       ],
     },
     update(c) {
@@ -376,51 +376,95 @@ function buildHumanoid() {
       const te = tb ? talk.env : 0;
       const ta = tb * ((talk && talk.armScale) ?? 1);
       const tst = (talk && talk.style) || 'explain';
-      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
-      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
-      let hRoll = 0, hYawOff = 0, hPitchOff = 0, torsoLean = 0, abduct = 0;
-      let tRyaw = -0.12, tRs = -1.16, tRe = 1.04, tRw = -0.04;
-      let tLyaw = 0.12, tLs = -1.18, tLe = 0.98, tLw = -0.04;
+      // Phrase-level 3D conversational gesture model:
+      // Upper arms remain naturally relaxed near vertical beside the ribs (s ≈ -1.50..-1.28),
+      // while the active hand flexes smoothly from the elbow (e ≈ 0.16 -> 1.50) along a
+      // diagonal forward-outward arc with forearm supination & waist/gaze coupling, and the
+      // non-leading hand rests low at the side (eliminating any horizontal tray-holding bob).
+      let hRoll = 0, hYawOff = 0, hPitchOff = 0, torsoLean = 0, torsoYaw = 0;
+      let rAbd = 0, lAbd = 0, rWrX = 0, lWrX = 0, gR = 0, gL = 0;
+      let tRyaw = -0.04, tRs = -1.50, tRe = 0.16, tRw = 0.04;
+      let tLyaw =  0.04, tLs = -1.50, tLe = 0.16, tLw = 0.04;
       if (tb > 0) {
+        const amp = clamp((0.30 + 0.70 * te) * (0.90 + 0.10 * Math.sin(t * 2.6)), 0, 1);
+        const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.6);
         if (tst === 'affirm') {
-          hPitchOff = (-0.18 * te - 0.08 * (0.5 + 0.5 * Math.sin(t * 6.8))) * tb;
-          hYawOff = Math.sin(t * 1.5) * 0.07 * tb;
-          torsoLean = 0.035 * tb;
-          tRyaw = -0.18; tRs = -1.14 + 0.10 * beatR; tRe = 1.08 + 0.24 * beatR; tRw = -0.05;
-          tLyaw = 0.18;  tLs = -1.14 + 0.10 * beatL; tLe = 1.08 + 0.24 * beatL; tLw = -0.05;
+          const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
+          const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
+          gR = clamp(wR * amp, 0, 1);
+          gL = clamp(wL * amp, 0, 1);
+          hPitchOff = (-0.16 * te - 0.08 * nodSoft) * tb;
+          hYawOff = Math.sin(t * 1.1) * 0.06 * tb;
+          torsoLean = (0.025 + 0.02 * nodSoft) * tb;
+          torsoYaw = -0.045 * (gR - gL) * tb;
+          tRyaw = -0.04 - 0.22 * gR; tRs = -1.50 + 0.18 * gR; tRe = 0.16 + 1.24 * gR; tRw = 0.04 - 0.16 * gR;
+          tLyaw =  0.04 + 0.22 * gL; tLs = -1.50 + 0.18 * gL; tLe = 0.16 + 1.24 * gL; tLw = 0.04 - 0.16 * gL;
+          rWrX = -0.46 * gR; lWrX = 0.46 * gL;
+          rAbd = 0.06 * gR;  lAbd = 0.06 * gL;
         } else if (tst === 'think') {
-          hRoll = 0.16 * tb;
-          hYawOff = (0.15 + Math.sin(t * 1.4) * 0.06) * tb;
-          hPitchOff = (0.08 - 0.06 * te) * tb;
-          tRyaw = 0.28;  tRs = -0.94; tRe = 1.62 + 0.12 * beatR; tRw = -0.18;
-          tLyaw = -0.22; tLs = -1.26; tLe = 0.92 + 0.10 * beatL; tLw = 0;
+          const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
+          gR = 0.85 + 0.15 * slowDrift;
+          gL = 0.05 * slowDrift;
+          hRoll = 0.15 * tb;
+          hYawOff = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
+          hPitchOff = (0.09 - 0.04 * te) * tb;
+          torsoYaw = 0.05 * tb;
+          // Right hand thoughtfully near chin; left arm relaxed naturally down at side
+          tRyaw = 0.28; tRs = -0.92 + 0.04 * slowDrift; tRe = 1.62 + 0.05 * slowDrift; tRw = -0.18;
+          tLyaw = 0.04; tLs = -1.50 + 0.02 * slowDrift; tLe = 0.16 + 0.04 * slowDrift; tLw = 0.04;
+          rWrX = -0.34; lWrX = 0;
+          rAbd = 0.06;  lAbd = 0.02;
         } else if (tst === 'emphasize') {
-          hPitchOff = -0.15 * te * tb;
-          hYawOff = Math.sin(t * 2.6) * 0.12 * tb;
-          torsoLean = 0.05 * te * tb;
-          abduct = 0.14 * ta;
-          tRyaw = -0.34; tRs = -1.02 + 0.18 * beatR; tRe = 1.16 + 0.32 * beatR; tRw = 0.06;
-          tLyaw = 0.34;  tLs = -1.02 + 0.18 * beatL; tLe = 1.16 + 0.32 * beatL; tLw = 0.06;
+          const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
+          const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
+          gR = clamp(wR * amp, 0, 1);
+          gL = clamp(wL * amp, 0, 1);
+          hPitchOff = (-0.14 * te - 0.05 * nodSoft) * tb;
+          hYawOff = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
+          torsoLean = (0.02 + 0.04 * te) * tb;
+          torsoYaw = -0.075 * (gR - gL) * tb;
+          tRyaw = -0.04 - 0.30 * gR; tRs = -1.50 + 0.24 * gR; tRe = 0.16 + 1.46 * gR; tRw = 0.04 - 0.18 * gR;
+          tLyaw =  0.04 + 0.30 * gL; tLs = -1.50 + 0.24 * gL; tLe = 0.16 + 1.46 * gL; tLw = 0.04 - 0.18 * gL;
+          rWrX = -0.54 * gR; lWrX = 0.54 * gL;
+          rAbd = 0.09 * gR;  lAbd = 0.09 * gL;
         } else if (tst === 'empathy') {
-          hRoll = -0.14 * tb;
-          hPitchOff = (-0.09 * te - 0.04) * tb;
-          hYawOff = Math.sin(t * 1.3) * 0.07 * tb;
-          torsoLean = 0.03 * tb;
-          tRyaw = 0.16;  tRs = -1.24; tRe = 0.92 + 0.15 * beatR; tRw = -0.06;
-          tLyaw = -0.16; tLs = -1.24; tLe = 0.92 + 0.15 * beatL; tLw = -0.06;
+          const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
+          gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
+          gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
+          hRoll = -0.13 * tb;
+          hPitchOff = (-0.08 * te - 0.04) * tb;
+          hYawOff = Math.sin(t * 0.95) * 0.06 * tb;
+          torsoLean = 0.035 * tb;
+          torsoYaw = 0.035 * tb;
+          // Right hand gently inward toward chest; left hand softly open/low
+          tRyaw = -0.04 + 0.30 * gR; tRs = -1.48 + 0.24 * gR; tRe = 0.16 + 1.42 * gR; tRw = 0.04 - 0.14 * gR;
+          tLyaw =  0.04 + 0.20 * gL; tLs = -1.50 + 0.14 * gL; tLe = 0.16 + 0.96 * gL; tLw = 0.04 - 0.10 * gL;
+          rWrX = -0.38 * gR; lWrX = 0.34 * gL;
+          rAbd = 0.05 * gR;  lAbd = 0.06 * gL;
         } else {
-          hPitchOff = (-0.11 * te - 0.03 * Math.sin(t * 5.4)) * tb;
-          hYawOff = Math.sin(t * 1.8) * 0.11 * tb;
-          hRoll = Math.sin(t * 1.3) * 0.05 * tb;
-          torsoLean = 0.02 * tb;
-          tRyaw = -0.12 + 0.08 * Math.sin(t * 2.4); tRs = -1.16 + 0.12 * beatR; tRe = 1.04 + 0.28 * beatR; tRw = -0.04;
-          tLyaw = 0.12 - 0.08 * Math.sin(t * 2.4 + 1.4); tLs = -1.18 + 0.10 * beatL; tLe = 0.98 + 0.25 * beatL; tLw = -0.04;
+          // 'explain': natural alternating single-hand bent-elbow arcs + occasional open two-hand phrase
+          const ph = t * 1.65;
+          const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
+          const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
+          const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
+          gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
+          gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
+          torsoYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
+          torsoLean = (0.014 + 0.024 * Math.max(gR, gL)) * tb;
+          hYawOff = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
+          hPitchOff = (-0.09 * te - 0.035 * nodSoft) * tb;
+          hRoll = (0.045 * (gR - gL) + 0.03 * Math.sin(t * 0.95)) * tb;
+          tRyaw = -0.04 - 0.26 * gR; tRs = -1.50 + 0.22 * gR; tRe = 0.16 + 1.36 * gR; tRw = 0.04 - 0.16 * gR;
+          tLyaw =  0.04 + 0.26 * gL; tLs = -1.50 + 0.22 * gL; tLe = 0.16 + 1.36 * gL; tLw = 0.04 - 0.16 * gL;
+          rWrX = -0.46 * gR; lWrX = 0.46 * gL;
+          rAbd = 0.07 * gR;  lAbd = 0.07 * gL;
         }
       }
       body.position.y = cur.h + breathe + Math.abs(Math.sin(gaitPhase)) * 0.02 * walkAmt;
       body.rotation.set(cur.roll, 0, 0);
       torsoG.rotation.z = cur.pitch + (gait ? 0.08 : 0) - 0.05 * cur.rear + torsoLean;
-      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt + Math.sin(t * 1.6) * 0.02 * tb;
+      torsoG.rotation.x = Math.sin(gaitPhase) * 0.03 * walkAmt + Math.sin(t * 1.05) * 0.016 * tb;
+      torsoG.rotation.y = torsoYaw;
       headG.rotation.set(hRoll, cur.hy + hYawOff, cur.hp + hPitchOff);
       // Legs: feet planted below the hips, stride + lift when walking.
       body.updateMatrixWorld(true);
@@ -435,21 +479,27 @@ function buildHumanoid() {
         L.hip.rotation.z = j.hip; L.knee.rotation.z = j.knee;
         L.ankle.rotation.z = -(j.hip + j.knee);     // keep the foot level
       }
-      // Right (manipulator) arm from the shared pose; left arm relaxed / swinging.
+      // Symmetrical dual-gripper arms: right manipulates items; both express 3D conversational arcs.
       const mix = (a, b, w) => a + (b - a) * w;
       R.yawG.rotation.y = mix(cur.yaw, tRyaw, ta);
       R.sh.rotation.z = mix(cur.s, tRs, ta);
       R.el.rotation.z = mix(cur.e, tRe, ta);
       R.wr.rotation.z = mix(cur.w, tRw, ta);
-      const gripEff = mix(cur.grip, 0.72, ta);
-      for (const f of fingers) f.g.rotation.y = -f.s * (0.05 + gripEff * 0.45);
+      R.wr.rotation.x = mix(0, rWrX, ta);
+      const rGripEff = mix(cur.grip, 0.20 + 0.55 * gR, ta);
+      for (const f of fingers) f.g.rotation.y = -f.s * (0.05 + rGripEff * 0.45);
+
       const swing = Math.sin(gaitPhase) * 0.5 * walkAmt;
-      Lm.yawG.rotation.y = mix(0, tLyaw, ta);
+      Lm.yawG.rotation.y = mix(cur.lyaw || 0, tLyaw, ta);
       Lm.sh.rotation.z = mix(cur.ls + swing, tLs, ta);
       Lm.el.rotation.z = mix(cur.le, tLe, ta);
       Lm.wr.rotation.z = mix(0, tLw, ta);
-      Lm.sh.rotation.x = 0.08 + abduct;   // elbows slightly out
-      R.sh.rotation.x = -0.08 - abduct;
+      Lm.wr.rotation.x = mix(0, lWrX, ta);
+      const lGripEff = mix(cur.lgrip || 0, 0.20 + 0.55 * gL, ta);
+      for (const f of lfingers) f.g.rotation.y = -f.s * (0.05 + lGripEff * 0.45);
+
+      Lm.sh.rotation.x = 0.08 + lAbd * ta;
+      R.sh.rotation.x = -0.08 - rAbd * ta;
     },
   };
 }
@@ -696,13 +746,13 @@ function init() {
       const st = String((a && a.style) || 'explain').toLowerCase();
       talkState.style = TALK_STYLES.has(st) ? st : 'explain';
       talkState.explicitUntil = now() + 20.0;
-      talkState.synthUntil = now() + 3.2;
+      talkState.synthUntil = now() + 5.2;
       talkState.audioSeen = false;
       talkState.audioEndGraceUntil = 0;
       if (!step && queue.length === 0 && !gait && !sitting && !(R.isUp && R.isUp(tgt))) {
         setActionLabel('talk_motion', { style: talkState.style });
         talkState.showingHud = true;
-        idleAt = now() + 3.4;
+        idleAt = now() + 5.4;
       }
     },
     stop: () => { clearQueue(); clearTalkState(); gait = null; Object.assign(tgt, { ...cur }); flashColor(0xea4335, 0.8); },
@@ -959,27 +1009,27 @@ function init() {
         intensity = 1.0;
       } else {
         talkState.style = 'explain';
-        intensity = 0.58;
+        intensity = 0.72;
       }
       rawEnv = clamp(0.18 + speech.level * 0.85, 0, 1);
       if (talkState.showingHud) idleAt = Math.max(idleAt, t + 0.6);
     } else if (talkState.audioSeen && t < talkState.audioEndGraceUntil) {
       wantTalk = true;
-      intensity = t < talkState.explicitUntil ? 1.0 : 0.58;
+      intensity = t < talkState.explicitUntil ? 1.0 : 0.72;
       rawEnv = talkState.env * 0.85;
     } else if (!talkState.audioSeen && t < talkState.synthUntil) {
       wantTalk = true;
       intensity = 1.0;
-      rawEnv = clamp(0.42 + 0.30 * Math.sin(t * 7.2) + 0.18 * Math.sin(t * 11.9), 0.12, 0.95);
+      rawEnv = clamp(0.48 + 0.34 * Math.sin(t * 2.1) + 0.15 * Math.sin(t * 3.7 + 0.8), 0.14, 0.96);
     } else if (talkState.showingHud) {
       talkState.showingHud = false;
       idleAt = Math.min(idleAt, t + 0.2);
     }
-    const blendRate = isBusy ? 14 : (wantTalk ? 7.5 : 5.5);
+    const blendRate = isBusy ? 14 : (wantTalk ? 5.0 : 3.8);
     const targetBlend = wantTalk ? intensity : 0;
     talkState.blend += (targetBlend - talkState.blend) * (1 - Math.exp(-dt * blendRate));
     if (talkState.blend < 0.0005) talkState.blend = 0;
-    const envRate = rawEnv > talkState.env ? 18 : 9;
+    const envRate = rawEnv > talkState.env ? 10 : 4.5;
     talkState.env += (rawEnv - talkState.env) * (1 - Math.exp(-dt * envRate));
     const talk = {
       style: talkState.style,
