@@ -645,7 +645,7 @@ function buildUnitreeR1Rig(THREE) {
     };
   }
 
-  function update({ cur, t, walkAmt, gaitPhase, gait }) {
+  function update({ cur, t, walkAmt, gaitPhase, gait, talk }) {
     latestCur = cur;
     if (!loaded || !robotRoot) {
       ensureLoaded();
@@ -674,6 +674,65 @@ function buildUnitreeR1Rig(THREE) {
     frameJoints.head_yaw_joint = cur.hy ?? 0;
     frameJoints.head_pitch_joint = -(cur.hp ?? 0) * 0.65;
 
+    // Co-speech head & bimanual gesture overlay
+    const tb = (talk && talk.blend > 0.001 && (walkAmt || 0) < 0.05) ? talk.blend : 0;
+    const te = tb ? talk.env : 0;
+    const ta = tb * ((talk && talk.armScale) ?? 1);
+    const tst = (talk && talk.style) || 'explain';
+    if (tb > 0) {
+      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
+      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
+      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
+      let hYaw = 0, hPitch = 0, wYaw = Math.sin(t * 1.6) * 0.05 * tb, wRoll = 0;
+      let lSp = -0.48, lSr = 0.24, lSy = -0.28, lEl = -0.12, lWr = 0;
+      let rSp = -0.48, rSr = -0.24, rSy = 0.28, rEl = -0.12, rWr = 0;
+      if (tst === 'affirm') {
+        hPitch = (0.18 * te + 0.08 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
+        lSp = -0.52 - 0.12 * beatL; lSr = 0.26; lSy = -0.32; lEl = -0.18 - 0.14 * beatL;
+        rSp = -0.52 - 0.12 * beatR; rSr = -0.26; rSy = 0.32; rEl = -0.18 - 0.14 * beatR;
+      } else if (tst === 'think') {
+        wRoll = 0.05 * tb;
+        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
+        hPitch = (-0.08 + 0.05 * te) * tb;
+        rSp = -0.82; rSr = -0.20; rSy = 0.48; rEl = -0.58 - 0.08 * beatR; rWr = 0.18;
+        lSp = -0.22; lSr = 0.22; lSy = -0.20; lEl = 0.42 - 0.08 * beatL;
+      } else if (tst === 'emphasize') {
+        hPitch = 0.15 * te * tb;
+        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
+        lSp = -0.62 - 0.18 * beatL; lSr = 0.34; lSy = -0.24; lEl = -0.28 - 0.18 * beatL; lWr = -0.20 * beatL;
+        rSp = -0.62 - 0.18 * beatR; rSr = -0.34; rSy = 0.24; rEl = -0.28 - 0.18 * beatR; rWr = 0.20 * beatR;
+      } else if (tst === 'empathy') {
+        wRoll = -0.04 * tb;
+        hPitch = (0.09 * te + 0.04) * tb;
+        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
+        lSp = -0.36 - 0.09 * beatL; lSr = 0.20; lSy = -0.34; lEl = 0.10 - 0.12 * beatL;
+        rSp = -0.36 - 0.09 * beatR; rSr = -0.20; rSy = 0.34; rEl = 0.10 - 0.12 * beatR;
+      } else {
+        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
+        wRoll = Math.sin(t * 1.3) * 0.03 * tb;
+        lSp = -0.46 - 0.14 * beatL; lSr = 0.24; lSy = -0.28; lEl = -0.10 - 0.16 * beatL; lWr = -0.18 * Math.sin(t * 3.4 + 1.2);
+        rSp = -0.48 - 0.14 * beatR; rSr = -0.24; rSy = 0.28; rEl = -0.12 - 0.16 * beatR; rWr = 0.18 * Math.sin(t * 3.4);
+      }
+      frameJoints.head_yaw_joint += hYaw;
+      frameJoints.head_pitch_joint += hPitch;
+      frameJoints.waist_yaw_joint = (frameJoints.waist_yaw_joint ?? 0) + wYaw;
+      frameJoints.waist_roll_joint = (frameJoints.waist_roll_joint ?? 0) + wRoll;
+      if (ta > 0) {
+        frameJoints.left_shoulder_pitch_joint = lerp(frameJoints.left_shoulder_pitch_joint, lSp, ta);
+        frameJoints.left_shoulder_roll_joint = lerp(frameJoints.left_shoulder_roll_joint ?? 0.22, lSr, ta);
+        frameJoints.left_shoulder_yaw_joint = lerp(frameJoints.left_shoulder_yaw_joint ?? -0.12, lSy, ta);
+        frameJoints.left_elbow_joint = lerp(frameJoints.left_elbow_joint ?? 0.82, lEl, ta);
+        frameJoints.left_wrist_roll_joint = lerp(frameJoints.left_wrist_roll_joint ?? 0, lWr, ta);
+        frameJoints.right_shoulder_pitch_joint = lerp(frameJoints.right_shoulder_pitch_joint, rSp, ta);
+        frameJoints.right_shoulder_roll_joint = lerp(frameJoints.right_shoulder_roll_joint ?? -0.22, rSr, ta);
+        frameJoints.right_shoulder_yaw_joint = lerp(frameJoints.right_shoulder_yaw_joint ?? 0.12, rSy, ta);
+        frameJoints.right_elbow_joint = lerp(frameJoints.right_elbow_joint ?? 0.82, rEl, ta);
+        frameJoints.right_wrist_roll_joint = lerp(frameJoints.right_wrist_roll_joint ?? 0, rWr, ta);
+      }
+    }
+
     applyJointMapToHierarchy(THREE, jointNodes, frameJoints);
 
     const bounce = Math.abs(Math.sin(gaitPhase)) * 0.022 * walkAmt;
@@ -686,8 +745,9 @@ function buildUnitreeR1Rig(THREE) {
     );
 
     // Update Dual 5-Finger Dexterous Hands (`cur.grip`: 1 = open, 0.25 = closed grasp)
-    const closeAmt = clamp(1 - (cur.grip ?? 0.25), 0, 1);
-    const mode = cur.handMode === 2 ? 'heart' : cur.handMode === 1 ? 'open' : 'normal';
+    const rawClose = clamp(1 - (cur.grip ?? 0.25), 0, 1);
+    const closeAmt = ta > 0 ? lerp(rawClose, 0.22, ta) : rawClose;
+    const mode = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || ta > 0.25) ? 'open' : 'normal';
     if (hands.left) hands.left.setCloseAmount(closeAmt, mode);
     if (hands.right) hands.right.setCloseAmount(closeAmt, mode);
   }
@@ -1101,7 +1161,7 @@ function buildRby1Rig(THREE) {
     };
   }
 
-  function update({ cur, t, dt, gait }) {
+  function update({ cur, t, dt, gait, talk }) {
     latestCur = cur;
     if (!loaded || !robotRoot) {
       ensureLoaded();
@@ -1115,7 +1175,12 @@ function buildRby1Rig(THREE) {
     }
 
     const breathe = Math.sin(t * 1.8) * 0.012;
-    const fingerVal = lerp(-0.004, -0.045, clamp(cur.grip ?? 0.25, 0, 1));
+    const tb = (talk && talk.blend > 0.001 && !gait) ? talk.blend : 0;
+    const te = tb ? talk.env : 0;
+    const ta = tb * ((talk && talk.armScale) ?? 1);
+    const tst = (talk && talk.style) || 'explain';
+    const gripEff = ta > 0 ? lerp(cur.grip ?? 0.25, 0.78, ta) : (cur.grip ?? 0.25);
+    const fingerVal = lerp(-0.004, -0.045, clamp(gripEff, 0, 1));
     const frameJoints = {
       ...cur,
       right_wheel: wheelAngleR,
@@ -1128,6 +1193,60 @@ function buildRby1Rig(THREE) {
       gripper_finger_l1: fingerVal,
       gripper_finger_l2: fingerVal,
     };
+
+    if (tb > 0) {
+      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
+      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
+      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
+      let hYaw = 0, hPitch = 0, tLean = 0.02 * tb;
+      let r0 = -0.54, r1 = -0.22, r2 = 0.18, r3 = -1.02, r5 = -0.18;
+      let l0 = -0.54, l1 = 0.22, l2 = -0.18, l3 = -1.02, l5 = -0.18;
+      if (tst === 'affirm') {
+        hPitch = (0.18 * te + 0.07 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
+        tLean = 0.04 * tb;
+        r0 = -0.58 - 0.12 * beatR; r1 = -0.24; r2 = 0.22; r3 = -1.06 - 0.16 * beatR; r5 = -0.12 + 0.10 * beatR;
+        l0 = -0.58 - 0.12 * beatL; l1 = 0.24;  l2 = -0.22; l3 = -1.06 - 0.16 * beatL; l5 = -0.12 + 0.10 * beatL;
+      } else if (tst === 'think') {
+        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
+        hPitch = (-0.08 + 0.05 * te) * tb;
+        r0 = -0.92; r1 = -0.18; r2 = 0.52; r3 = -1.46 - 0.08 * beatR; r5 = -0.06;
+        l0 = -0.42; l1 = 0.20;  l2 = -0.16; l3 = -0.88 - 0.06 * beatL; l5 = -0.22;
+      } else if (tst === 'emphasize') {
+        hPitch = 0.15 * te * tb;
+        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
+        tLean = 0.05 * te * tb;
+        r0 = -0.68 - 0.18 * beatR; r1 = -0.34; r2 = 0.14; r3 = -1.16 - 0.22 * beatR; r5 = -0.10 + 0.18 * beatR;
+        l0 = -0.68 - 0.18 * beatL; l1 = 0.34;  l2 = -0.14; l3 = -1.16 - 0.22 * beatL; l5 = -0.10 + 0.18 * beatL;
+      } else if (tst === 'empathy') {
+        hPitch = (0.10 * te + 0.04) * tb;
+        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
+        tLean = 0.03 * tb;
+        r0 = -0.46 - 0.08 * beatR; r1 = -0.18; r2 = 0.26; r3 = -0.94 - 0.10 * beatR; r5 = -0.20;
+        l0 = -0.46 - 0.08 * beatL; l1 = 0.18;  l2 = -0.26; l3 = -0.94 - 0.10 * beatL; l5 = -0.20;
+      } else {
+        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
+        r0 = -0.54 - 0.12 * beatR; r1 = -0.22; r2 = 0.18; r3 = -1.02 - 0.18 * beatR; r5 = -0.18 + 0.14 * beatR;
+        l0 = -0.52 - 0.12 * beatL; l1 = 0.22;  l2 = -0.18; l3 = -1.00 - 0.16 * beatL; l5 = -0.18 + 0.14 * beatL;
+      }
+      frameJoints.head_0 += hYaw;
+      frameJoints.head_1 += hPitch;
+      frameJoints.torso_3 += tLean;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + Math.sin(t * 1.6) * 0.05 * tb;
+      if (ta > 0) {
+        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.36, r0, ta);
+        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.18, r1, ta);
+        frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
+        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.78, r3, ta);
+        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.25, r5, ta);
+        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.36, l0, ta);
+        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.18, l1, ta);
+        frameJoints.left_arm_2 = lerp(frameJoints.left_arm_2 ?? 0, l2, ta);
+        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.78, l3, ta);
+        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.25, l5, ta);
+      }
+    }
 
     applyJointMapToHierarchy(THREE, jointNodes, frameJoints);
   }
@@ -1672,7 +1791,7 @@ function buildLgCloidRig(THREE) {
     };
   }
 
-  function update({ cur, t, dt, gait }) {
+  function update({ cur, t, dt, gait, talk }) {
     latestCur = cur;
     if (!loaded || !robotRoot) {
       ensureLoaded();
@@ -1686,12 +1805,18 @@ function buildLgCloidRig(THREE) {
     }
 
     const breathe = Math.sin(t * 1.8) * 0.012;
-    const closeAmt = clamp(1 - (cur.grip ?? 0.25), 0, 1);
+    const tb = (talk && talk.blend > 0.001 && !gait) ? talk.blend : 0;
+    const te = tb ? talk.env : 0;
+    const ta = tb * ((talk && talk.armScale) ?? 1);
+    const tst = (talk && talk.style) || 'explain';
+    const rawClose = clamp(1 - (cur.grip ?? 0.25), 0, 1);
+    const closeAmt = ta > 0 ? lerp(rawClose, 0.15, ta) : rawClose;
     const thumbVal = lerp(-0.12, 0.72, closeAmt);
     const fingerVal = lerp(-0.10, 0.82, closeAmt);
 
-    const headYaw = cur.hy ?? 0;
-    const headPitch = -(cur.hp ?? -0.08);
+    let headYaw = cur.hy ?? 0;
+    let headPitch = -(cur.hp ?? -0.08);
+    let expr = Math.round(cur.exprCode ?? 0);
 
     const frameJoints = {
       ...cur,
@@ -1712,7 +1837,66 @@ function buildLgCloidRig(THREE) {
       l_pinky: fingerVal,
     };
 
-    renderOledFace(t, Math.round(cur.exprCode ?? 0), headYaw, headPitch);
+    if (tb > 0) {
+      const beatR = te * (0.65 + 0.35 * Math.sin(t * 6.8));
+      const beatL = te * (0.65 + 0.35 * Math.sin(t * 6.8 + 2.1));
+      const nodWave = 0.5 + 0.5 * Math.sin(t * 6.8);
+      let hYaw = 0, hPitch = 0, tLean = 0.02 * tb;
+      let r0 = -0.52, r1 = -0.20, r2 = 0.18, r3 = -0.98, r5 = -0.16;
+      let l0 = -0.52, l1 = 0.20, l2 = -0.18, l3 = -0.98, l5 = -0.16;
+      if (tst === 'affirm') {
+        hPitch = (0.18 * te + 0.07 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.5) * 0.07 * tb;
+        tLean = 0.04 * tb;
+        if (expr === 0 && tb > 0.25) expr = 1;
+        r0 = -0.56 - 0.12 * beatR; r1 = -0.22; r2 = 0.22; r3 = -1.04 - 0.16 * beatR; r5 = -0.12 + 0.10 * beatR;
+        l0 = -0.56 - 0.12 * beatL; l1 = 0.22;  l2 = -0.22; l3 = -1.04 - 0.16 * beatL; l5 = -0.12 + 0.10 * beatL;
+      } else if (tst === 'think') {
+        hYaw = (0.16 + Math.sin(t * 1.4) * 0.06) * tb;
+        hPitch = (-0.08 + 0.05 * te) * tb;
+        if (expr === 0 && tb > 0.25) expr = 3;
+        r0 = -0.88; r1 = -0.16; r2 = 0.50; r3 = -1.42 - 0.08 * beatR; r5 = -0.06;
+        l0 = -0.40; l1 = 0.18;  l2 = -0.16; l3 = -0.84 - 0.06 * beatL; l5 = -0.20;
+      } else if (tst === 'emphasize') {
+        hPitch = 0.15 * te * tb;
+        hYaw = Math.sin(t * 2.5) * 0.12 * tb;
+        tLean = 0.05 * te * tb;
+        if (expr === 0 && tb > 0.25) expr = 1;
+        r0 = -0.66 - 0.18 * beatR; r1 = -0.32; r2 = 0.14; r3 = -1.14 - 0.22 * beatR; r5 = -0.10 + 0.18 * beatR;
+        l0 = -0.66 - 0.18 * beatL; l1 = 0.32;  l2 = -0.14; l3 = -1.14 - 0.22 * beatL; l5 = -0.10 + 0.18 * beatL;
+      } else if (tst === 'empathy') {
+        hPitch = (0.10 * te + 0.04) * tb;
+        hYaw = Math.sin(t * 1.3) * 0.07 * tb;
+        tLean = 0.03 * tb;
+        r0 = -0.44 - 0.08 * beatR; r1 = -0.18; r2 = 0.24; r3 = -0.90 - 0.10 * beatR; r5 = -0.18;
+        l0 = -0.44 - 0.08 * beatL; l1 = 0.18;  l2 = -0.24; l3 = -0.90 - 0.10 * beatL; l5 = -0.18;
+      } else {
+        hPitch = (0.11 * te + 0.03 * nodWave) * tb;
+        hYaw = Math.sin(t * 1.8) * 0.11 * tb;
+        r0 = -0.52 - 0.12 * beatR; r1 = -0.20; r2 = 0.18; r3 = -0.98 - 0.18 * beatR; r5 = -0.16 + 0.14 * beatR;
+        l0 = -0.50 - 0.12 * beatL; l1 = 0.20;  l2 = -0.18; l3 = -0.96 - 0.16 * beatL; l5 = -0.16 + 0.14 * beatL;
+      }
+      headYaw += hYaw;
+      headPitch += hPitch;
+      frameJoints.head_0 = headYaw;
+      frameJoints.head_1 = headPitch;
+      frameJoints.torso_3 += tLean;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + Math.sin(t * 1.6) * 0.05 * tb;
+      if (ta > 0) {
+        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.34, r0, ta);
+        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.16, r1, ta);
+        frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
+        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.72, r3, ta);
+        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.22, r5, ta);
+        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.34, l0, ta);
+        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.16, l1, ta);
+        frameJoints.left_arm_2 = lerp(frameJoints.left_arm_2 ?? 0, l2, ta);
+        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.72, l3, ta);
+        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.22, l5, ta);
+      }
+    }
+
+    renderOledFace(t, expr, headYaw, headPitch);
     applyJointMapToHierarchy(THREE, jointNodes, frameJoints);
   }
 

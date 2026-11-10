@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 // [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD)
-import { buildReal2SimRigs } from './real2sim-rigs.js?v=2';
+import { buildReal2SimRigs } from './real2sim-rigs.js?v=3';
 
 const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
@@ -876,6 +876,8 @@ function init() {
       window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'place', args: { x: 420, y: 460 }, result: {} } }));
     } else if (demo === 'drive') {
       window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'drive', args: { v_x: 0.45, v_y: 0, v_rot: 0.12, duration: 2.4 }, result: {} } }));
+    } else if (demo === 'talk') {
+      window.dispatchEvent(new CustomEvent('robot-twin:tool', { detail: { name: 'talk_motion', args: { style: 'explain' }, result: { status: 'active' } } }));
     }
   }
   const demoSelect = document.getElementById('twin-real2sim-demo-select');
