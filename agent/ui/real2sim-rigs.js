@@ -678,83 +678,39 @@ function buildUnitreeR1Rig(THREE) {
     const tb = (talk && talk.blend > 0.001 && (walkAmt || 0) < 0.05) ? talk.blend : 0;
     const te = tb ? talk.env : 0;
     const ta = tb * ((talk && talk.armScale) ?? 1);
-    const tst = (talk && talk.style) || 'explain';
-    let gR = 0, gL = 0;
-    if (tb > 0) {
-      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
-      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
-      let hYaw = 0, hPitch = 0, wYaw = 0, wRoll = 0;
-      // Relaxed low baseline (arms comfortably down at sides, never horizontal tray)
-      let lSp = 0.06, lSr = 0.22, lSy = -0.12, lEl = 0.76, lWr = 0;
-      let rSp = 0.06, rSr = -0.22, rSy = 0.12, rEl = 0.76, rWr = 0;
-      if (tst === 'affirm') {
-        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.35), 1.3);
-        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.35 - 0.55), 1.3);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.17 * te + 0.08 * nodSoft) * tb;
-        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
-        wYaw = -0.05 * (gR - gL) * tb;
-        lSp = 0.06 - 0.54 * gL; lSr = 0.22 + 0.14 * gL; lSy = -0.12 + 0.28 * gL; lEl = 0.76 - 0.88 * gL; lWr = -0.30 * gL;
-        rSp = 0.06 - 0.54 * gR; rSr = -0.22 - 0.14 * gR; rSy = 0.12 - 0.28 * gR; rEl = 0.76 - 0.88 * gR; rWr =  0.30 * gR;
-      } else if (tst === 'think') {
-        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
-        gR = 0.85 + 0.15 * slowDrift;
-        gL = 0.05 * slowDrift;
-        wRoll = 0.04 * tb;
-        wYaw = 0.05 * tb;
-        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
-        hPitch = (-0.08 + 0.04 * te) * tb;
-        // Right hand thoughtfully near chin; left arm relaxed down at side
-        rSp = -0.82 - 0.03 * slowDrift; rSr = -0.18; rSy = 0.48; rEl = -0.60 - 0.04 * slowDrift; rWr = 0.20;
-        lSp = 0.08; lSr = 0.22; lSy = -0.12; lEl = 0.78; lWr = 0;
-      } else if (tst === 'emphasize') {
-        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.55), 0, 1), 1.2);
-        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.55 - 0.85), 0, 1), 1.2);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
-        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
-        wYaw = -0.08 * (gR - gL) * tb;
-        lSp = 0.04 - 0.68 * gL; lSr = 0.22 + 0.20 * gL; lSy = -0.12 + 0.34 * gL; lEl = 0.76 - 1.02 * gL; lWr = -0.36 * gL;
-        rSp = 0.04 - 0.68 * gR; rSr = -0.22 - 0.20 * gR; rSy = 0.12 - 0.34 * gR; rEl = 0.76 - 1.02 * gR; rWr =  0.36 * gR;
-      } else if (tst === 'empathy') {
-        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.05);
-        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
-        gL = clamp((0.22 + 0.35 * (1 - wCalm)) * amp, 0, 1);
-        wRoll = -0.04 * tb;
-        wYaw = 0.04 * tb;
-        hPitch = (0.09 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
-        rSp = 0.04 - 0.50 * gR; rSr = -0.18; rSy = 0.12 + 0.30 * gR; rEl = 0.76 - 0.92 * gR; rWr = 0.24 * gR;
-        lSp = 0.06 - 0.36 * gL; lSr = 0.22 + 0.10 * gL; lSy = -0.12 + 0.18 * gL; lEl = 0.76 - 0.64 * gL; lWr = -0.20 * gL;
-      } else {
-        const ph = t * 1.65;
-        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
-        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
-        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
-        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
-        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
-        wYaw = (-0.07 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
-        wRoll = (0.03 * (gR - gL) + 0.02 * Math.sin(t * 0.95)) * tb;
-        lSp = 0.06 - 0.56 * gL; lSr = 0.22 + 0.15 * gL; lSy = -0.12 + 0.28 * gL; lEl = 0.76 - 0.90 * gL; lWr = -0.32 * gL;
-        rSp = 0.06 - 0.56 * gR; rSr = -0.22 - 0.15 * gR; rSy = 0.12 - 0.28 * gR; rEl = 0.76 - 0.90 * gR; rWr =  0.32 * gR;
-      }
-      frameJoints.head_yaw_joint += hYaw;
-      frameJoints.head_pitch_joint += hPitch;
-      frameJoints.waist_yaw_joint = (frameJoints.waist_yaw_joint ?? 0) + wYaw;
-      frameJoints.waist_roll_joint = (frameJoints.waist_roll_joint ?? 0) + wRoll;
+    let rOpen = 0.12, lOpen = 0.12;
+    if (tb > 0 && talk.R && talk.L) {
+      const gR = talk.R, gL = talk.L;
+      rOpen = gR.open;
+      lOpen = gL.open;
+      // Unitree R1 MJCF convention:
+      // +head_pitch_joint nods DOWN (-talk.headPitch); waist_yaw_joint Z-axis, waist_roll_joint X-axis;
+      // right_shoulder_yaw_joint > 0 and left_shoulder_yaw_joint < 0 bring forearms INWARD to Center-Center!
+      frameJoints.head_yaw_joint += talk.headYaw;
+      frameJoints.head_pitch_joint += -talk.headPitch;
+      frameJoints.waist_yaw_joint = (frameJoints.waist_yaw_joint ?? 0) + talk.torsoYaw;
+      frameJoints.waist_roll_joint = (frameJoints.waist_roll_joint ?? 0) + talk.torsoRoll;
       if (ta > 0) {
+        const lSp = 0.06 - 0.92 * gL.lift;
+        const lSr = 0.20 + 0.55 * gL.abd;
+        const lSy = -0.08 - 0.56 * gL.inward;
+        const lEl = 0.78 - 1.38 * gL.flex;
+        const lWr = -0.48 * gL.supinate;
+
+        const rSp = 0.06 - 0.92 * gR.lift;
+        const rSr = -0.20 - 0.55 * gR.abd;
+        const rSy = 0.08 + 0.56 * gR.inward;
+        const rEl = 0.78 - 1.38 * gR.flex;
+        const rWr = 0.48 * gR.supinate;
+
         frameJoints.left_shoulder_pitch_joint = lerp(frameJoints.left_shoulder_pitch_joint, lSp, ta);
         frameJoints.left_shoulder_roll_joint = lerp(frameJoints.left_shoulder_roll_joint ?? 0.22, lSr, ta);
-        frameJoints.left_shoulder_yaw_joint = lerp(frameJoints.left_shoulder_yaw_joint ?? -0.12, lSy, ta);
+        frameJoints.left_shoulder_yaw_joint = lerp(frameJoints.left_shoulder_yaw_joint ?? -0.10, lSy, ta);
         frameJoints.left_elbow_joint = lerp(frameJoints.left_elbow_joint ?? 0.82, lEl, ta);
         frameJoints.left_wrist_roll_joint = lerp(frameJoints.left_wrist_roll_joint ?? 0, lWr, ta);
         frameJoints.right_shoulder_pitch_joint = lerp(frameJoints.right_shoulder_pitch_joint, rSp, ta);
         frameJoints.right_shoulder_roll_joint = lerp(frameJoints.right_shoulder_roll_joint ?? -0.22, rSr, ta);
-        frameJoints.right_shoulder_yaw_joint = lerp(frameJoints.right_shoulder_yaw_joint ?? 0.12, rSy, ta);
+        frameJoints.right_shoulder_yaw_joint = lerp(frameJoints.right_shoulder_yaw_joint ?? 0.10, rSy, ta);
         frameJoints.right_elbow_joint = lerp(frameJoints.right_elbow_joint ?? 0.82, rEl, ta);
         frameJoints.right_wrist_roll_joint = lerp(frameJoints.right_wrist_roll_joint ?? 0, rWr, ta);
       }
@@ -767,16 +723,16 @@ function buildUnitreeR1Rig(THREE) {
     robotRoot.position.set(0, sway, (cur.h ?? STAND_H) + bounce);
     robotRoot.rotation.set(
       (cur.roll ?? 0) + Math.cos(gaitPhase) * 0.03 * walkAmt,
-      (cur.pitch ?? 0) + (gait ? clamp(gait.vx * 0.08, -0.08, 0.10) : 0),
+      (cur.pitch ?? 0) + (tb > 0 ? talk.torsoLean * 0.65 : 0) + (gait ? clamp(gait.vx * 0.08, -0.08, 0.10) : 0),
       0
     );
 
     // Update Dual 5-Finger Dexterous Hands (`cur.grip`: 1 = open, 0.25 = closed grasp)
     const rawClose = clamp(1 - (cur.grip ?? 0.25), 0, 1);
-    const closeL = ta > 0 ? lerp(rawClose, clamp(0.55 - 0.38 * gL, 0.14, 0.65), ta) : rawClose;
-    const closeR = ta > 0 ? lerp(rawClose, clamp(0.55 - 0.38 * gR, 0.14, 0.65), ta) : rawClose;
-    const modeL = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && gL > 0.25)) ? 'open' : 'normal';
-    const modeR = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && gR > 0.25)) ? 'open' : 'normal';
+    const closeL = ta > 0 ? lerp(rawClose, clamp(0.62 - 0.50 * lOpen, 0.10, 0.65), ta) : rawClose;
+    const closeR = ta > 0 ? lerp(rawClose, clamp(0.62 - 0.50 * rOpen, 0.10, 0.65), ta) : rawClose;
+    const modeL = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && lOpen > 0.42)) ? 'open' : 'normal';
+    const modeR = cur.handMode === 2 ? 'heart' : (cur.handMode === 1 || (ta > 0.25 && rOpen > 0.42)) ? 'open' : 'normal';
     if (hands.left) hands.left.setCloseAmount(closeL, modeL);
     if (hands.right) hands.right.setCloseAmount(closeR, modeR);
   }
@@ -1205,11 +1161,11 @@ function buildRby1Rig(THREE) {
 
     const breathe = Math.sin(t * 1.8) * 0.012;
     const tb = (talk && talk.blend > 0.001 && !gait) ? talk.blend : 0;
-    const te = tb ? talk.env : 0;
     const ta = tb * ((talk && talk.armScale) ?? 1);
-    const tst = (talk && talk.style) || 'explain';
-    const gripEff = ta > 0 ? lerp(cur.grip ?? 0.25, 0.78, ta) : (cur.grip ?? 0.25);
-    const fingerVal = lerp(-0.004, -0.045, clamp(gripEff, 0, 1));
+    const gripR = (ta > 0 && talk.R) ? lerp(cur.grip ?? 0.25, 0.20 + 0.68 * talk.R.open, ta) : (cur.grip ?? 0.25);
+    const gripL = (ta > 0 && talk.L) ? lerp(cur.grip ?? 0.25, 0.20 + 0.68 * talk.L.open, ta) : (cur.grip ?? 0.25);
+    const fingerValR = lerp(-0.004, -0.045, clamp(gripR, 0, 1));
+    const fingerValL = lerp(-0.004, -0.045, clamp(gripL, 0, 1));
     const frameJoints = {
       ...cur,
       right_wheel: wheelAngleR,
@@ -1217,78 +1173,37 @@ function buildRby1Rig(THREE) {
       torso_3: (cur.torso_3 ?? 0) + breathe + (gait ? clamp(gait.vx * 0.12, -0.1, 0.14) : 0),
       head_0: cur.hy ?? 0,
       head_1: -(cur.hp ?? -0.12),
-      gripper_finger_r1: fingerVal,
-      gripper_finger_r2: fingerVal,
-      gripper_finger_l1: fingerVal,
-      gripper_finger_l2: fingerVal,
+      gripper_finger_r1: fingerValR,
+      gripper_finger_r2: fingerValR,
+      gripper_finger_l1: fingerValL,
+      gripper_finger_l2: fingerValL,
     };
 
-    if (tb > 0) {
-      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
-      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
-      let hYaw = 0, hPitch = 0, tLean = 0, tYaw = 0, gR = 0, gL = 0;
-      let r0 = -0.18, r1 = -0.14, r2 = 0.0, r3 = -0.46, r4 = 0.0, r5 = -0.16;
-      let l0 = -0.18, l1 =  0.14, l2 = 0.0, l3 = -0.46, l4 = 0.0, l5 = -0.16;
-      if (tst === 'affirm') {
-        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
-        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.17 * te + 0.07 * nodSoft) * tb;
-        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
-        tLean = (0.025 + 0.02 * nodSoft) * tb;
-        tYaw = -0.04 * (gR - gL) * tb;
-        r0 = -0.18 - 0.22 * gR; r1 = -0.14 - 0.12 * gR; r2 = -0.22 * gR; r3 = -0.46 - 0.88 * gR; r4 =  0.42 * gR; r5 = -0.16 + 0.12 * gR;
-        l0 = -0.18 - 0.22 * gL; l1 =  0.14 + 0.12 * gL; l2 =  0.22 * gL; l3 = -0.46 - 0.88 * gL; l4 = -0.42 * gL; l5 = -0.16 + 0.12 * gL;
-      } else if (tst === 'think') {
-        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
-        gR = 0.85 + 0.15 * slowDrift;
-        gL = 0.05 * slowDrift;
-        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
-        hPitch = (-0.08 + 0.04 * te) * tb;
-        tYaw = 0.05 * tb;
-        r0 = -0.90 - 0.03 * slowDrift; r1 = -0.18; r2 = 0.52; r3 = -1.46 - 0.04 * slowDrift; r4 = 0.24; r5 = -0.06;
-        l0 = -0.18; l1 = 0.14; l2 = 0.0; l3 = -0.46; l4 = 0.0; l5 = -0.16;
-      } else if (tst === 'emphasize') {
-        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
-        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
-        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
-        tLean = (0.02 + 0.04 * te) * tb;
-        tYaw = -0.07 * (gR - gL) * tb;
-        r0 = -0.18 - 0.30 * gR; r1 = -0.14 - 0.18 * gR; r2 = -0.30 * gR; r3 = -0.46 - 1.04 * gR; r4 =  0.50 * gR; r5 = -0.16 + 0.16 * gR;
-        l0 = -0.18 - 0.30 * gL; l1 =  0.14 + 0.18 * gL; l2 =  0.30 * gL; l3 = -0.46 - 1.04 * gL; l4 = -0.50 * gL; l5 = -0.16 + 0.16 * gL;
-      } else if (tst === 'empathy') {
-        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
-        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
-        gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
-        hPitch = (0.09 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
-        tLean = 0.03 * tb;
-        tYaw = 0.04 * tb;
-        r0 = -0.18 - 0.24 * gR; r1 = -0.14; r2 = 0.34 * gR; r3 = -0.46 - 0.96 * gR; r4 = 0.34 * gR; r5 = -0.15;
-        l0 = -0.18 - 0.16 * gL; l1 =  0.14 + 0.10 * gL; l2 = 0.16 * gL; l3 = -0.46 - 0.68 * gL; l4 = -0.28 * gL; l5 = -0.16;
-      } else {
-        const ph = t * 1.65;
-        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
-        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
-        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
-        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
-        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
-        tLean = (0.015 + 0.022 * Math.max(gR, gL)) * tb;
-        tYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
-        r0 = -0.18 - 0.24 * gR; r1 = -0.14 - 0.14 * gR; r2 = -0.24 * gR; r3 = -0.46 - 0.92 * gR; r4 =  0.46 * gR; r5 = -0.16 + 0.12 * gR;
-        l0 = -0.18 - 0.24 * gL; l1 =  0.14 + 0.14 * gL; l2 =  0.24 * gL; l3 = -0.46 - 0.92 * gL; l4 = -0.46 * gL; l5 = -0.16 + 0.12 * gL;
-      }
-      frameJoints.head_0 += hYaw;
-      frameJoints.head_1 += hPitch;
-      frameJoints.torso_3 += tLean;
-      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + tYaw;
+    if (tb > 0 && talk.R && talk.L) {
+      const gR = talk.R, gL = talk.L;
+      // RB-Y1 MJCF convention:
+      // torso_3 = Y-lean, torso_4 = X-roll, torso_5 = Z-yaw;
+      // right_arm_2 > 0 and left_arm_2 < 0 bring bent forearms INWARD into Center-Center!
+      frameJoints.head_0 += talk.headYaw;
+      frameJoints.head_1 += -talk.headPitch;
+      frameJoints.torso_3 += talk.torsoLean;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + talk.torsoRoll;
+      frameJoints.torso_5 = (frameJoints.torso_5 ?? 0) + talk.torsoYaw;
       if (ta > 0) {
+        const r0 = -0.16 - 0.74 * gR.lift;
+        const r1 = -0.14 - 0.52 * gR.abd;
+        const r2 =  0.62 * gR.inward;
+        const r3 = -0.44 - 1.12 * gR.flex;
+        const r4 =  0.56 * gR.supinate;
+        const r5 = -0.16 + 0.28 * gR.wristPitch;
+
+        const l0 = -0.16 - 0.74 * gL.lift;
+        const l1 =  0.14 + 0.52 * gL.abd;
+        const l2 = -0.62 * gL.inward;
+        const l3 = -0.44 - 1.12 * gL.flex;
+        const l4 = -0.56 * gL.supinate;
+        const l5 = -0.16 + 0.28 * gL.wristPitch;
+
         frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.24, r0, ta);
         frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.15, r1, ta);
         frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
@@ -1893,77 +1808,38 @@ function buildLgCloidRig(THREE) {
       l_pinky: fingerVal,
     };
 
-    if (tb > 0) {
-      const amp = clamp((0.28 + 0.72 * te) * (0.90 + 0.10 * Math.sin(t * 2.8)), 0, 1);
-      const nodSoft = 0.5 + 0.5 * Math.sin(t * 2.7);
-      let hYaw = 0, hPitch = 0, tLean = 0, tYaw = 0, gR = 0, gL = 0;
-      let r0 = -0.16, r1 = -0.13, r2 = 0.0, r3 = -0.44, r4 = 0.0, r5 = -0.16;
-      let l0 = -0.16, l1 =  0.13, l2 = 0.0, l3 = -0.44, l4 = 0.0, l5 = -0.16;
-      if (tst === 'affirm') {
-        const wR = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55), 1.35);
-        const wL = Math.pow(0.5 + 0.5 * Math.sin(t * 1.55 - 0.70), 1.35);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.17 * te + 0.07 * nodSoft) * tb;
-        hYaw = Math.sin(t * 1.1) * 0.06 * tb;
-        tLean = (0.025 + 0.02 * nodSoft) * tb;
-        tYaw = -0.04 * (gR - gL) * tb;
-        if (expr === 0 && tb > 0.25) expr = 1;
-        r0 = -0.16 - 0.22 * gR; r1 = -0.13 - 0.12 * gR; r2 = -0.22 * gR; r3 = -0.44 - 0.88 * gR; r4 =  0.44 * gR; r5 = -0.16 + 0.12 * gR;
-        l0 = -0.16 - 0.22 * gL; l1 =  0.13 + 0.12 * gL; l2 =  0.22 * gL; l3 = -0.44 - 0.88 * gL; l4 = -0.44 * gL; l5 = -0.16 + 0.12 * gL;
-      } else if (tst === 'think') {
-        const slowDrift = 0.5 + 0.5 * Math.sin(t * 1.15);
-        gR = 0.85 + 0.15 * slowDrift;
-        gL = 0.05 * slowDrift;
-        hYaw = (0.16 + Math.sin(t * 0.9) * 0.05) * tb;
-        hPitch = (-0.08 + 0.04 * te) * tb;
-        tYaw = 0.05 * tb;
-        if (expr === 0 && tb > 0.25) expr = 3;
-        r0 = -0.86 - 0.03 * slowDrift; r1 = -0.16; r2 = 0.50; r3 = -1.42 - 0.04 * slowDrift; r4 = 0.22; r5 = -0.06;
-        l0 = -0.16; l1 = 0.13; l2 = 0.0; l3 = -0.44; l4 = 0.0; l5 = -0.16;
-      } else if (tst === 'emphasize') {
-        const wR = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75), 0, 1), 1.25);
-        const wL = Math.pow(clamp(0.45 + 0.65 * Math.sin(t * 1.75 - 1.10), 0, 1), 1.25);
-        gR = clamp(wR * amp, 0, 1);
-        gL = clamp(wL * amp, 0, 1);
-        hPitch = (0.15 * te + 0.05 * nodSoft) * tb;
-        hYaw = (-0.09 * (gR - gL) + Math.sin(t * 1.4) * 0.08) * tb;
-        tLean = (0.02 + 0.04 * te) * tb;
-        tYaw = -0.07 * (gR - gL) * tb;
-        if (expr === 0 && tb > 0.25) expr = 1;
-        r0 = -0.16 - 0.30 * gR; r1 = -0.13 - 0.18 * gR; r2 = -0.30 * gR; r3 = -0.44 - 1.04 * gR; r4 =  0.52 * gR; r5 = -0.16 + 0.16 * gR;
-        l0 = -0.16 - 0.30 * gL; l1 =  0.13 + 0.18 * gL; l2 =  0.30 * gL; l3 = -0.44 - 1.04 * gL; l4 = -0.52 * gL; l5 = -0.16 + 0.16 * gL;
-      } else if (tst === 'empathy') {
-        const wCalm = 0.5 + 0.5 * Math.sin(t * 1.10);
-        gR = clamp((0.55 + 0.45 * wCalm) * (0.45 + 0.55 * te), 0, 1);
-        gL = clamp((0.18 + 0.32 * (1 - wCalm)) * amp, 0, 1);
-        hPitch = (0.09 * te + 0.04) * tb;
-        hYaw = Math.sin(t * 0.95) * 0.06 * tb;
-        tLean = 0.03 * tb;
-        tYaw = 0.04 * tb;
-        r0 = -0.16 - 0.24 * gR; r1 = -0.13; r2 = 0.34 * gR; r3 = -0.44 - 0.96 * gR; r4 = 0.34 * gR; r5 = -0.15;
-        l0 = -0.16 - 0.16 * gL; l1 =  0.13 + 0.10 * gL; l2 = 0.16 * gL; l3 = -0.44 - 0.68 * gL; l4 = -0.28 * gL; l5 = -0.16;
-      } else {
-        const ph = t * 1.65;
-        const leadR = Math.pow(clamp(0.45 + 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const leadL = Math.pow(clamp(0.45 - 0.68 * Math.sin(ph), 0, 1), 1.45);
-        const openBoth = Math.pow(clamp(Math.sin(t * 0.85 + 1.6) - 0.45, 0, 1) / 0.55, 1.35);
-        gR = clamp(Math.max(leadR, 0.78 * openBoth) * amp, 0, 1);
-        gL = clamp(Math.max(leadL * 0.92, 0.78 * openBoth) * amp, 0, 1);
-        hPitch = (0.10 * te + 0.035 * nodSoft) * tb;
-        hYaw = (-0.11 * (gR - gL) + 0.05 * Math.sin(t * 1.15 + 0.4)) * tb;
-        tLean = (0.015 + 0.022 * Math.max(gR, gL)) * tb;
-        tYaw = (-0.065 * (gR - gL) + 0.02 * Math.sin(t * 0.9)) * tb;
-        r0 = -0.16 - 0.24 * gR; r1 = -0.13 - 0.14 * gR; r2 = -0.24 * gR; r3 = -0.44 - 0.94 * gR; r4 =  0.48 * gR; r5 = -0.16 + 0.12 * gR;
-        l0 = -0.16 - 0.24 * gL; l1 =  0.13 + 0.14 * gL; l2 =  0.24 * gL; l3 = -0.44 - 0.94 * gL; l4 = -0.48 * gL; l5 = -0.16 + 0.12 * gL;
+    if (tb > 0 && talk.R && talk.L) {
+      const gR = talk.R, gL = talk.L;
+      const tst = talk.style || 'explain';
+      if (expr === 0 && tb > 0.25) {
+        if (tst === 'affirm' || tst === 'emphasize') expr = 1;
+        else if (tst === 'think') expr = 3;
       }
-      headYaw += hYaw;
-      headPitch += hPitch;
+      // LG CLOiD MJCF convention:
+      // torso_3 = Y-lean, torso_4 = X-roll, torso_5 = Z-yaw;
+      // right_arm_2 > 0 and left_arm_2 < 0 bring bent forearms INWARD into Center-Center!
+      headYaw += talk.headYaw;
+      headPitch += -talk.headPitch;
       frameJoints.head_0 = headYaw;
       frameJoints.head_1 = headPitch;
-      frameJoints.torso_3 += tLean;
-      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + tYaw;
+      frameJoints.torso_3 += talk.torsoLean;
+      frameJoints.torso_4 = (frameJoints.torso_4 ?? 0) + talk.torsoRoll;
+      frameJoints.torso_5 = (frameJoints.torso_5 ?? 0) + talk.torsoYaw;
       if (ta > 0) {
+        const r0 = -0.15 - 0.72 * gR.lift;
+        const r1 = -0.13 - 0.50 * gR.abd;
+        const r2 =  0.60 * gR.inward;
+        const r3 = -0.44 - 1.10 * gR.flex;
+        const r4 =  0.56 * gR.supinate;
+        const r5 = -0.16 + 0.28 * gR.wristPitch;
+
+        const l0 = -0.15 - 0.72 * gL.lift;
+        const l1 =  0.13 + 0.50 * gL.abd;
+        const l2 = -0.60 * gL.inward;
+        const l3 = -0.44 - 1.10 * gL.flex;
+        const l4 = -0.56 * gL.supinate;
+        const l5 = -0.16 + 0.28 * gL.wristPitch;
+
         frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.20, r0, ta);
         frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.14, r1, ta);
         frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0, r2, ta);
@@ -1977,8 +1853,8 @@ function buildLgCloidRig(THREE) {
         frameJoints.left_arm_4 = lerp(frameJoints.left_arm_4 ?? 0, l4, ta);
         frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.18, l5, ta);
         // Expressively open the active gesturing 5-finger hand while keeping the resting hand softly relaxed
-        const rCurl = lerp(0.32, 0.08, gR);
-        const lCurl = lerp(0.32, 0.08, gL);
+        const rCurl = lerp(0.36, 0.06, clamp(gR.open, 0, 1));
+        const lCurl = lerp(0.36, 0.06, clamp(gL.open, 0, 1));
         frameJoints.r_thumb = lerp(frameJoints.r_thumb, rCurl * 0.7, ta);
         frameJoints.r_index = lerp(frameJoints.r_index, rCurl * 0.85, ta);
         frameJoints.r_middle = lerp(frameJoints.r_middle, rCurl, ta);
