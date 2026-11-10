@@ -39,36 +39,70 @@ _KNOWLEDGE_FILE = os.path.join(
 
 # Colloquial bilingual synonym clusters so natural visitor phrasing (in either
 # English or Chinese) hits exact English policy chunks even before vector RRF.
+# Kept fine-grained per sub-topic so 120-doc per-scenario catalogs distinguish
+# sibling policies cleanly.
 _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
-    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "收费", "结算", "发票", "收据", "pay", "payment", "billing", "cashier", "invoice", "receipt"),
-    ("刷医保", "医保", "报销", "异地医保", "商保", "insurance", "medicare", "reimbursement", "copay"),
-    ("水费", "电费", "燃气", "煤气", "暖气", "宽带", "话费", "社保缴费", "交社保", "罚款", "非税", "utility", "utilities", "electricity", "water", "gas", "heating", "social_security", "municipal"),
-    ("抽血", "采血", "验血", "查血", "化验", "血常规", "空腹", "肝功", "肾功", "血糖", "血脂", "blood", "phlebotomy", "venipuncture", "fasting", "cbc", "lab"),
-    ("尿检", "验尿", "尿常规", "大便", "便常规", "留样", "标本", "痰", "urine", "urinalysis", "stool", "sputum", "specimen", "sample"),
-    ("理财", "买理财", "收益", "收益率", "年化", "活钱", "稳健", "固收", "基金", "风险测评", "风险评估", "天天盈", "闲钱", "打理", "wealth", "investment", "yield", "return", "annualized", "fund", "savings", "idle"),
-    ("存款", "存钱", "定期", "定存", "利息", "利率", "大额存单", "国债", "保本", "养老金", "黄金", "积存金", "deposit", "deposits", "interest", "cd", "cds", "treasury", "bond", "bonds", "pension", "gold", "bullion"),
-    ("取钱", "取现", "取款", "拿现金", "大额取现", "预约取款", "十万", "五万", "零钱", "零钱包", "新钞", "残币", "atm", "cash", "withdrawal", "withdraw", "change", "banknotes"),
-    ("办卡", "开卡", "开户", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡激活", "debit", "account", "payroll"),
-    ("密码", "忘密码", "忘记密码", "锁住", "挂失", "补卡", "换卡", "手机号", "限额", "提额", "password", "pin", "locked", "lost", "limit"),
-    ("外汇", "换汇", "购汇", "结汇", "美元", "日元", "欧元", "港币", "跨境", "电汇", "汇款", "打钱", "留学", "学费", "swift", "forex", "fx", "wire", "remittance", "currency", "usd", "overseas", "tuition"),
-    ("贷款", "借钱", "房贷", "按揭", "提前还款", "提前还贷", "消费贷", "经营贷", "抵押", "mortgage", "mortgages", "loan", "loans", "prepayment", "repayment", "refinance", "lpr", "sme", "apr"),
-    ("流水", "打流水", "交易明细", "存款证明", "资信证明", "资产证明", "征信", "信用报告", "签证", "statement", "statements", "solvency", "certificate", "certificates", "credit_report", "visa", "embassy"),
-    ("对公", "公司开户", "企业开户", "基本户", "营业执照", "公章", "回单", "u盾", "corporate", "ukey", "voucher", "vouchers"),
-    ("贵宾", "金卡", "金葵馨", "私人银行", "优先叫号", "vip", "private_banking", "aum"),
-    ("冻结", "止付", "非柜面", "解冻", "解控", "不能转账", "诈骗", "反诈", "安全账户", "frozen", "blocked", "suspended", "scam", "fraud", "unfreeze"),
-    ("老人", "长者", "卧床", "不能本人来", "上门", "已故", "去世", "遗产", "elderly", "senior", "bedridden", "homebound", "doorstep", "mobility", "bereavement", "estate", "deceased"),
-    ("挂号", "预约挂号", "加号", "放号", "退号", "签到", "报到", "过号", "初诊", "register", "registration", "appointment", "booking", "missed"),
-    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "floor", "directory", "department", "departments"),
-    ("挂什么科", "看什么科", "分诊", "头晕", "头痛", "胸闷", "心慌", "肚子疼", "胃痛", "咳嗽", "发烧", "发热", "腰痛", "扭伤", "皮疹", "triage", "symptom", "dizziness", "dizzy", "headache", "chest", "stomachache", "cough", "fever", "sprain", "rash"),
-    ("取药", "拿药", "药房", "中药", "代煎", "煎药", "寄回家", "快递", "处方", "用药", "pharmacy", "dispensary", "medication", "medicine", "prescription", "herbal", "decoction", "delivery"),
-    ("核磁", "核磁共振", "拍片", "胸片", "彩超", "b超", "超声", "心电图", "憋尿", "金属", "起搏器", "mri", "ct", "xray", "radiology", "imaging", "ultrasound", "ecg", "scan", "metal", "pacemaker"),
-    ("胃镜", "肠镜", "胃肠镜", "无痛", "内镜", "清肠", "麻醉", "endoscopy", "gastroscopy", "colonoscopy", "sedation", "sedated"),
-    ("专家", "主任", "排班", "出诊", "坐诊", "几点开门", "营业时间", "周末", "挂号费", "特需", "schedule", "specialist", "weekend"),
-    ("住院", "入院", "出院", "押金", "病房", "探视", "陪护", "inpatient", "admission", "discharge", "ward"),
-    ("体检", "入职体检", "驾照体检", "健康证", "早癌", "checkup", "physical", "onboarding", "employment", "screening"),
-    ("病历", "病假条", "请假条", "诊断证明", "盖章", "复印病历", "record", "records", "stamp", "seal", "chart"),
-    ("急诊", "急救", "狗咬", "猫抓", "狂犬", "破伤风", "24小时", "emergency", "urgent", "rabies", "tetanus", "scratch", "bite"),
-    ("轮椅", "平车", "停车", "停车费", "车库", "母婴室", "餐厅", "食堂", "咖啡", "充电宝", "wheelchair", "parking", "garage", "cafe", "cafeteria"),
+    # Hospital — Registration, Billing & Insurance
+    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "门诊缴费", "收费窗口", "pay", "payment", "billing", "cashier", "outpatient_bill", "kiosk"),
+    ("发票", "电子发票", "收据", "费用清单", "报销清单", "打发票", "invoice", "receipt", "itemized"),
+    ("异地医保", "跨省医保", "异地就医", "跨省结算", "cross_region", "filing", "medicare"),
+    ("刷医保", "医保", "医保卡", "医保码", "慢性病医保", "门特", "public_insurance", "medicare", "settlement"),
+    ("商保", "商业保险", "直付", "高端医疗", "commercial_insurance", "direct_billing", "bupa", "cigna", "allianz"),
+    ("挂号", "预约挂号", "加号", "放号", "几点放号", "初诊", "建卡", "register", "registration", "appointment", "booking", "specialist"),
+    ("签到", "报到", "过号", "迟到", "回诊", "看结果", "missed_turn", "check_in", "return_visit"),
+    ("退号", "取消预约", "退费", "退款", "refund", "cancel", "reschedule"),
+    # Hospital — Lab & Phlebotomy
+    ("抽血", "采血", "验血", "查血", "化验", "抽血窗口", "blood_draw", "phlebotomy", "venipuncture", "adult"),
+    ("空腹", "禁食", "喝水", "几个小时", "肝功", "肾功", "血脂", "fasting", "hours", "water", "lipid", "liver"),
+    ("儿童抽血", "小孩抽血", "指尖血", "末梢血", "血常规", "fingerstick", "pediatric_lab", "cbc"),
+    ("糖耐", "糖耐量", "喝糖水", "胰岛素释放", "ogtt", "glucose_tolerance"),
+    ("尿检", "验尿", "尿常规", "中段尿", "24小时尿", "urine", "urinalysis", "midstream"),
+    ("大便", "便常规", "潜血", "便潜血", "留样", "标本", "stool", "fecal", "occult", "specimen"),
+    ("痰培养", "咽拭子", "甲流", "支原体", "sputum", "throat_swab", "influenza"),
+    # Hospital — Triage, Imaging & Endoscopy
+    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "floor", "directory", "department"),
+    ("头晕", "眩晕", "天旋地转", "耳石症", "dizziness", "dizzy", "vertigo", "neurology"),
+    ("胸闷", "胸痛", "心慌", "肚子疼", "胃痛", "咳嗽", "发烧", "发热", "皮疹", "扭伤", "triage", "symptom", "chest", "stomachache", "cough", "fever", "rash", "sprain"),
+    ("核磁", "核磁共振", "金属", "种植牙核磁", "起搏器", "幽闭", "mri", "titanium", "pacemaker", "metal"),
+    ("增强ct", "造影剂", "拍片", "胸片", "辐射", "心电图", "动态心电", "ct", "contrast", "xray", "holter", "ecg"),
+    ("彩超", "b超", "超声", "憋尿", "空腹超声", "ultrasound", "bladder"),
+    ("胃镜", "肠镜", "胃肠镜", "无痛胃镜", "无痛肠镜", "内镜", "清肠", "呼气试验", "幽门螺杆菌", "endoscopy", "gastroscopy", "colonoscopy", "sedated", "urea_breath"),
+    # Hospital — Pharmacy, Maternity/Peds, Specialties, Inpatient, Checkup & Emergency
+    ("取药", "拿药", "药房", "西药房", "用药咨询", "pharmacy", "dispensary", "medication", "prescription"),
+    ("中药", "代煎", "煎药", "寄回家", "快递到家", "herbal", "decoction", "courier", "delivered"),
+    ("胰岛素", "冷链", "冰袋", "冷藏药", "慢病长处方", "长处方", "开三个月", "输液", "打点滴", "insulin", "ice_pack", "refill", "90_day", "infusion"),
+    ("产检", "建档", "孕妇", "怀孕", "四维", "大排畸", "无创", "胎心监护", "分娩", "待产", "prenatal", "maternity", "nt", "4d", "nipt", "labor"),
+    ("儿科", "小孩看病", "雾化", "生长发育", "骨龄", "哺乳室", "母婴室", "pediatrics", "nebulizer", "growth", "lactation"),
+    ("疫苗", "打疫苗", "预防接种", "九价", "宫颈癌疫苗", "带状疱疹", "流感疫苗", "vaccine", "vaccination", "hpv", "shingles", "flu"),
+    ("牙科", "口腔", "拔牙", "智齿", "阻生齿", "洗牙", "补牙", "根管", "种牙", "dental", "wisdom", "tooth", "extraction", "scaling"),
+    ("眼科", "散瞳", "眼底", "近视", "配镜", "白内障", "青光眼", "干眼", "ophthalmology", "dilated", "retinal", "myopia", "cataract"),
+    ("耳鼻喉", "耳鸣", "听力", "鼻炎", "鱼刺", "卡鱼刺", "打呼噜", "睡眠监测", "ent", "tinnitus", "audiometry", "rhinitis", "fishbone", "snoring", "apnea"),
+    ("康复", "理疗", "冲击波", "针灸", "拔罐", "推拿", "失眠", "睡眠门诊", "换药", "拆线", "picc", "rehab", "physiotherapy", "acupuncture", "insomnia", "suture", "wound"),
+    ("住院", "入院", "出院", "押金", "病房", "探视", "陪护", "护工", "日间手术", "inpatient", "admission", "discharge", "visiting", "caregiver", "day_surgery"),
+    ("体检", "入职体检", "驾照体检", "换证体检", "早癌筛查", "checkup", "physical", "onboarding", "driver_vision"),
+    ("病历", "病假条", "请假条", "诊断证明", "盖章", "复印病历", "病案", "sick_leave", "stamp", "seal", "medical_record", "photocopy"),
+    ("急诊", "急救", "狗咬", "猫抓", "狂犬", "狂犬疫苗", "破伤风", "24小时", "emergency", "rabies", "tetanus", "bite", "scratch"),
+    ("轮椅", "平车", "停车", "停车费", "食堂", "餐厅", "咖啡", "班车", "地铁", "失物招领", "wheelchair", "parking", "cafeteria", "coffee", "shuttle", "metro"),
+    # Bank — Lobby, Cards, Deposits & Wealth
+    ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
+    ("办卡", "开卡", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡", "外籍开户", "debit", "tier_i", "payroll", "expat"),
+    ("忘密码", "密码锁了", "重置密码", "挂失", "补卡", "同号换卡", "转账限额", "提额", "休眠户", "pin", "locked", "reset", "lost_card", "transfer_limit", "dormant"),
+    ("存款", "存钱", "定期", "定存", "大额存单", "存单转让", "国债", "个人养老金", "结构性存款", "deposit", "cd", "large_cd", "treasury", "sovereign_bond", "pension", "structured_deposit"),
+    ("理财", "买理财", "理财产品", "稳健", "稳健型", "固收", "收益率", "年化", "收益", "wealth", "steady", "fixed_income", "r2", "yield", "annualized", "benchmark"),
+    ("风险测评", "风险评估", "首次理财", "首次风险", "risk_assessment", "first_time_wealth", "questionnaire", "c1"),
+    ("活钱", "天天盈", "闲钱", "灵活赎回", "cash_management", "daily_plus", "liquid_wealth"),
+    ("基金", "定投", "指数基金", "黄金", "积存金", "金条", "回购", "mutual_fund", "sip", "gold", "bullion", "buyback"),
+    # Bank — Cash, FX, Loans, Statements, Utilities, Corporate & Security
+    ("大额取现", "预约取款", "提前预约", "十万", "五万", "二十万", "large_cash_withdrawal", "withdraw_100000", "withdraw_50000", "cash_appointment", "50000", "100000"),
+    ("取钱", "取现", "取款", "存现金", "扫码取款", "atm", "cash_deposit", "cardless"),
+    ("零钱", "零钱包", "新钞", "换零钱", "硬币", "存硬币", "残币", "破损币", "change_pack", "crisp", "coins", "coin_machine", "damaged_banknote"),
+    ("外汇", "换汇", "购汇", "结汇", "外币现钞", "美元", "日元", "欧元", "跨境汇款", "电汇", "留学学费", "swift", "forex", "fx_quota", "foreign_cash", "wire", "tuition"),
+    ("房贷", "按揭", "提前还款", "提前还贷", "重定价", "解押", "消费贷", "经营贷", "车贷", "信用卡", "白金卡", "盗刷", "mortgage", "prepayment", "lpr", "lien", "consumer_loan", "sme_loan", "credit_card", "chargeback"),
+    ("流水", "打流水", "交易明细", "存款证明", "资信证明", "征信", "个人征信", "签证流水", "statement", "solvency", "certificate", "credit_report", "visa"),
+    ("水费", "电费", "燃气", "煤气", "暖气", "取暖费", "罚款", "非税", "物业费", "高速etc", "维修资金", "utility", "electricity", "water", "heating", "traffic_fine", "etc", "maintenance_fund"),
+    ("对公", "公司开户", "企业开户", "基本户", "营业执照", "公章", "回单", "对账", "u盾", "代发工资", "承兑汇票", "信用证", "收款码", "open_corporate_account", "basic_account", "ukey", "hui_dan", "payroll_service", "lc", "pos"),
+    ("冻结", "止付", "非柜面", "暂停非柜面", "解冻", "解控", "不能转账", "诈骗", "反诈", "96110", "frozen", "suspended", "non_counter", "unfreeze", "scam", "fraud"),
+    ("保管箱", "保险箱", "金库", "上门服务", "卧床老人", "不能本人来", "已故", "去世", "遗产提取", "手语", "无障碍", "safe_deposit_box", "vault", "doorstep", "bedridden", "bereavement", "deceased", "sign_language"),
 )
 
 _STOP_WORDS = frozenset({
@@ -158,13 +192,14 @@ def parse_custom_kb(custom_kb: str, scenario_id: str = "") -> list[dict[str, Any
     summary = body.replace("\n", " ")
     if len(summary) > 180:
       summary = summary[:179].rstrip() + "…"
+    kw_tokens = list(dict.fromkeys(_tokenize(f"{title} {body}")))[:15]
     chunks.append({
         "id": f"custom_{scenario_id or 'kb'}_{idx + 1}",
         "category": "Custom Knowledge",
         "title": title,
         "location": "",
         "waypoint": "",
-        "keywords": [title],
+        "keywords": [title] + kw_tokens,
         "summary": summary,
         "content": body,
         "is_custom": True,
@@ -227,6 +262,7 @@ def list_scenarios() -> list[dict[str, Any]]:
         "role": sc.get("role", ""),
         "persona_prompt": sc.get("persona_prompt", ""),
         "waypoints": list(sc.get("waypoints") or []),
+        "topic_guide": list(sc.get("topic_guide") or []),
         "doc_count": len(docs),
         "documents": docs,
     })
@@ -286,53 +322,54 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
 
   if sid == "cymbal_hospital":
     desc = (
-        f"Search the official {org} outpatient triage & concierge RAG knowledge"
-        " base for grounded hospital workflows: outpatient billing & health"
-        " insurance settlement windows, blood draw (phlebotomy) locations &"
-        " fasting rules, floor-by-floor department directory, symptom-based"
-        " clinic triage, pharmacy prescription pickup & herbal delivery,"
-        " CT/MRI/endoscopy preparation & safety rules, specialist clinic"
-        " schedules, inpatient admission/discharge, health checkup packages,"
-        " 24/7 emergency & animal-bite care, and hospital navigation waypoints."
-        " Always call this tool before answering any hospital policy, location,"
-        " or preparation question."
+        f"Search the official {org} 120-entry outpatient triage & concierge RAG"
+        " knowledge base across 10 hospital domains: Registration & Billing,"
+        " Lab & Phlebotomy, Symptom Triage & Navigation, Radiology/Ultrasound &"
+        " Endoscopy, Pharmacy & Prescriptions, Maternity/Pediatrics & Vaccines,"
+        " Dental/Eye/ENT & Rehab, Inpatient/Surgery & Day Care, Health Checkups"
+        " & Medical Records, and 24/7 Emergency & Campus Amenities. Always call"
+        " this tool before answering any hospital policy, floor/window,"
+        " preparation, or fee question."
     )
     query_desc = (
         "The patient or visitor's question or keywords, e.g. 'where to pay my"
-        " outpatient bill and settle insurance', 'where to get a blood draw and"
-        " how long to fast', 'which clinic to register for dizziness', or 'MRI"
-        " scan location and metal safety rules'."
+        " outpatient bill and settle cross-region insurance', 'blood draw"
+        " fasting water rule', 'wisdom tooth extraction weekend prep', '9-valent"
+        " HPV vaccine booking', or 'MRI titanium dental implant safety'."
     )
     cat_desc = (
         "Optional hospital category filter hint (e.g. 'Registration & Billing',"
-        " 'Lab & Phlebotomy', 'Floor & Department Directory', 'Symptom Triage',"
-        " 'Pharmacy & Prescriptions', 'Imaging & Endoscopy Prep', 'Health"
-        " Checkup Center', '24/7 Emergency Care')."
+        " 'Lab & Phlebotomy', 'Symptom Triage & Navigation', 'Radiology,"
+        " Ultrasound & Endoscopy', 'Pharmacy & Prescriptions', 'Maternity,"
+        " Pediatrics & Vaccines', 'Dental, Eye, ENT & Rehab', 'Inpatient,"
+        " Surgery & Day Care', 'Health Checkups & Medical Records', '24/7"
+        " Emergency & Campus Amenities')."
     )
   elif sid == "cymbal_bank":
     desc = (
-        f"Search the official {org} retail & wealth lobby RAG knowledge base"
-        " for grounded banking policies: low-volatility wealth products &"
-        " annualized benchmarks, term deposit & CD interest rates, municipal"
-        " utility & social-security bill payment, personal debit card opening &"
-        " PIN/limit services, large cash withdrawal booking thresholds,"
-        " cross-border SWIFT wire transfers & currency exchange, residential"
-        " mortgages & SME loans, bank statements & solvency certificates,"
-        " corporate banking, VIP wealth lounge tiers, and branch navigation"
-        " waypoints. Always call this tool before answering any banking"
-        " product, rate, fee, or counter routing question."
+        f"Search the official {org} 120-entry retail, wealth & corporate lobby"
+        " RAG knowledge base across 10 banking domains: Lobby Routing & Smart"
+        " Kiosks, Cards & Personal Accounts, Savings/CDs & Sovereign Bonds,"
+        " Wealth Management & Bullion, Cash/Coins & Foreign Exchange,"
+        " Loans/Mortgages & Credit Cards, Statements/Certificates & Credit,"
+        " Utility/Tax & Municipal Pay, Corporate & SME Banking, and"
+        " Security/Accessibility & Special Care. Always call this tool before"
+        " answering any banking product, rate, threshold, document, or counter"
+        " routing question."
     )
     query_desc = (
-        "The client's banking question or keywords, e.g. 'low-risk wealth"
-        " management products and yield', '3-year CD and term deposit rates',"
-        " 'where to pay utility bills', 'do I need an appointment to withdraw"
-        " 100k cash', or 'overseas tuition SWIFT wire code'."
+        "The client's banking question or keywords, e.g. 'R2 fixed-income"
+        " wealth yield and first-time risk assessment', '3-year Large CD rate',"
+        " '100k cash withdrawal booking', 'overseas tuition SWIFT wire code',"
+        " 'safe deposit box rental', or 'unfreeze non-counter suspended card'."
     )
     cat_desc = (
-        "Optional banking category filter hint (e.g. 'Wealth Management',"
-        " 'Deposits, CDs & Bonds', 'Utility & Municipal Bill Pay', 'Cash &"
-        " Foreign Exchange', 'Mortgages & Loans', 'Cards & Account Services',"
-        " 'Statements & Certificates', 'Corporate Banking')."
+        "Optional banking category filter hint (e.g. 'Lobby Routing & Smart"
+        " Kiosks', 'Cards & Personal Accounts', 'Savings, CDs & Sovereign"
+        " Bonds', 'Wealth Management & Bullion', 'Cash, Coins & Foreign"
+        " Exchange', 'Loans, Mortgages & Credit Cards', 'Statements,"
+        " Certificates & Credit', 'Utility, Tax & Municipal Pay', 'Corporate &"
+        " SME Banking', 'Security, Accessibility & Special Care')."
     )
   else:
     desc = (
@@ -414,19 +451,18 @@ def _expand_query_tokens(query: str, base_tokens: list[str]) -> dict[str, float]
   return weights
 
 
-def _bm25_scores(
-    query: str,
-    category: str,
+_bm25_index_cache: dict[str, tuple[list[dict[str, float]], list[float], dict[str, int]]] = {}
+
+
+def _get_or_build_bm25_index(
     docs: list[dict[str, Any]],
-) -> list[float]:
-  """Compute field-weighted BM25 + exact phrase bonus across scenario chunks."""
-  if not docs:
-    return []
-  combined_q = f"{query} {category}".strip()
-  base_q_tokens = _tokenize(combined_q)
-  q_weights = _expand_query_tokens(combined_q, base_q_tokens)
-  if not q_weights:
-    return [0.0 for _ in docs]
+) -> tuple[list[dict[str, float]], list[float], dict[str, int]]:
+  """Build or retrieve cached BM25 term-frequency & DF statistics for `docs`."""
+  sig_raw = "|".join(f"{d.get('id', '')}:{len(str(d.get('content', '')))}" for d in docs)
+  cache_key = hashlib.md5(sig_raw.encode("utf-8")).hexdigest()
+  cached = _bm25_index_cache.get(cache_key)
+  if cached is not None:
+    return cached
 
   doc_term_freqs: list[dict[str, float]] = []
   doc_lengths: list[float] = []
@@ -453,11 +489,35 @@ def _bm25_scores(
     doc_term_freqs.append(tf)
     doc_lengths.append(max(total_len, 1.0))
 
+  built = (doc_term_freqs, doc_lengths, df)
+  if len(_bm25_index_cache) > 16:
+    _bm25_index_cache.clear()
+  _bm25_index_cache[cache_key] = built
+  return built
+
+
+def _bm25_scores(
+    query: str,
+    category: str,
+    docs: list[dict[str, Any]],
+) -> list[float]:
+  """Compute field-weighted BM25 + exact phrase bonus across scenario chunks."""
+  if not docs:
+    return []
+  combined_q = f"{query} {category}".strip()
+  base_q_tokens = _tokenize(combined_q)
+  q_weights = _expand_query_tokens(combined_q, base_q_tokens)
+  if not q_weights:
+    return [0.0 for _ in docs]
+
+  doc_term_freqs, doc_lengths, df = _get_or_build_bm25_index(docs)
+
   n_docs = len(docs)
   avg_dl = sum(doc_lengths) / max(n_docs, 1)
   k1 = 1.5
   b = 0.72
   q_low = (query or "").lower().strip()
+  cat_low = (category or "").lower().strip()
 
   scores: list[float] = []
   for idx, d in enumerate(docs):
@@ -489,14 +549,16 @@ def _bm25_scores(
         score += 3.5
     if q_low and len(q_low) >= 3 and q_low in str(d.get("title", "")).lower():
       score += 4.0
+    if cat_low and cat_low in str(d.get("category", "")).lower() and score > 0:
+      score *= 1.15
     if d.get("is_custom") and score > 0:
-      score *= 1.18
+      score *= 1.45
     scores.append(score)
   return scores
 
 
 def _vertex_embed_batch(texts: list[str], timeout_s: float = 1.1) -> list[list[float]] | None:
-  """Embed texts via Vertex AI `text-embedding-005` (`us-central1`) with cache."""
+  """Embed texts via Vertex AI `text-embedding-005` (`us-central1`) with chunked cache."""
   global _embed_disabled
   if _embed_disabled or os.environ.get("SCENARIO_RAG_EMBEDDINGS", "1") == "0":
     return None
@@ -520,29 +582,34 @@ def _vertex_embed_batch(texts: list[str], timeout_s: float = 1.1) -> list[list[f
         f"https://{loc}-aiplatform.googleapis.com/v1/projects/{project}"
         f"/locations/{loc}/publishers/google/models/text-embedding-005:predict"
     )
-    payload = {
-        "instances": [{"content": texts[i][:1800]} for i in missing_indices]
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-      body = json.loads(resp.read().decode("utf-8"))
-    preds = body.get("predictions") or []
-    if len(preds) != len(missing_indices):
-      return None
+    batch_size = 50
+    eff_timeout = 2.2 if len(missing_indices) > 5 else timeout_s
+    for start in range(0, len(missing_indices), batch_size):
+      sub_indices = missing_indices[start : start + batch_size]
+      payload = {
+          "instances": [{"content": texts[i][:1800]} for i in sub_indices]
+      }
+      req = urllib.request.Request(
+          url,
+          data=json.dumps(payload).encode("utf-8"),
+          headers={
+              "Content-Type": "application/json",
+              "Authorization": f"Bearer {token}",
+          },
+          method="POST",
+      )
+      with urllib.request.urlopen(req, timeout=eff_timeout) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+      preds = body.get("predictions") or []
+      if len(preds) != len(sub_indices):
+        return None
+      with _embed_lock:
+        for idx_pos, pred in zip(sub_indices, preds):
+          vals = (pred.get("embeddings") or {}).get("values")
+          if not vals:
+            return None
+          _embed_cache[keys[idx_pos]] = [float(x) for x in vals]
     with _embed_lock:
-      for idx_pos, pred in zip(missing_indices, preds):
-        vals = (pred.get("embeddings") or {}).get("values")
-        if not vals:
-          return None
-        _embed_cache[keys[idx_pos]] = [float(x) for x in vals]
       return [_embed_cache[k] for k in keys]
   except Exception as exc:  # pylint: disable=broad-except
     logger.debug("Scenario RAG vector embedding skipped (using BM25): %s", exc)

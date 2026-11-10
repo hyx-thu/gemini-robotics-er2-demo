@@ -40,8 +40,10 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertIn("cymbal_hospital", items)
     self.assertIn("cymbal_bank", items)
     self.assertEqual(items["default"]["doc_count"], 0)
-    self.assertGreaterEqual(items["cymbal_hospital"]["doc_count"], 15)
-    self.assertGreaterEqual(items["cymbal_bank"]["doc_count"], 15)
+    self.assertEqual(items["cymbal_hospital"]["doc_count"], 120)
+    self.assertEqual(items["cymbal_bank"]["doc_count"], 120)
+    self.assertEqual(len(items["cymbal_hospital"]["topic_guide"]), 10)
+    self.assertEqual(len(items["cymbal_bank"]["topic_guide"]), 10)
     self.assertIn("blood_draw_center_1f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("vip_wealth_lounge", items["cymbal_bank"]["waypoints"])
 
@@ -70,8 +72,13 @@ class ScenarioRagTest(unittest.TestCase):
         + " "
         + scenario_rag.build_scenario_persona_block("cymbal_hospital").lower()
     )
-    for bank_term in ("wealth", "mortgage", "swift", "teller", "atm", "bullion", "理财", "大额存单"):
-      self.assertNotIn(bank_term.lower(), hosp_full)
+    for bank_term in ("wealth", "mortgage", "swift", "teller", "atm", "bullion"):
+      self.assertIsNone(
+          re.search(rf"\b{re.escape(bank_term)}\b", hosp_full),
+          f"Unexpected bank word {bank_term!r} found in Cymbal Hospital scenario",
+      )
+    for bank_cjk in ("理财", "大额存单"):
+      self.assertNotIn(bank_cjk, hosp_full)
 
     bank_full = (
         json.dumps(scenario_rag.get_scenario("cymbal_bank"), ensure_ascii=False).lower()
@@ -80,58 +87,72 @@ class ScenarioRagTest(unittest.TestCase):
         + " "
         + scenario_rag.build_scenario_persona_block("cymbal_bank").lower()
     )
-    for hosp_term in ("hospital", "patient", "phlebotomy", "triage", "pharmacy", "mri", "endoscopy", "rabies", "义诊", "抽血"):
-      self.assertNotIn(hosp_term.lower(), bank_full)
+    for hosp_term in ("hospital", "patient", "phlebotomy", "triage", "pharmacy", "mri", "endoscopy", "rabies"):
+      self.assertIsNone(
+          re.search(rf"\b{re.escape(hosp_term)}\b", bank_full),
+          f"Unexpected hospital word {hosp_term!r} found in Cymbal Bank scenario",
+      )
+    for hosp_cjk in ("义诊", "抽血"):
+      self.assertNotIn(hosp_cjk, bank_full)
 
   def test_hospital_rag_queries_english_and_chinese(self):
     cases = [
-        ("Where do I pay my outpatient bill and print an invoice?", "hosp_billing"),
-        ("Where do I go for a blood draw and how many hours should I fast?", "hosp_blood_draw"),
-        ("Where do I drop off a urine sample?", "hosp_specimen_drop"),
-        ("Can I wear a metal watch or pacemaker into the MRI room?", "hosp_imaging_mri"),
-        ("Which clinic should I register for dizziness and chest tightness?", "hosp_symptom_triage"),
-        ("Where is the pharmacy and can herbal decoctions be delivered home?", "hosp_pharmacy"),
-        ("What floor is the pre-employment health checkup center on?", "hosp_checkup"),
-        ("Where can I get a rabies vaccine after a cat scratch?", "hosp_emergency"),
-        ("请问去哪里缴费？支持刷医保码吗？", "hosp_billing"),
-        ("去哪里抽血化验？需要空腹几个小时？", "hosp_blood_draw"),
-        ("交完钱去哪里取药？中药可以代煎寄回家吗？", "hosp_pharmacy"),
+        ("Where do I pay my outpatient bill and use a self-service kiosk?", {"hosp_reg_01", "hosp_reg_03", "hosp_reg_06"}),
+        ("Where do I go for a blood draw and can I drink plain water during an 8-hour fast?", {"hosp_lab_02", "hosp_lab_01"}),
+        ("Where do I drop off a midstream urine specimen cup?", {"hosp_lab_05"}),
+        ("Can I undergo an MRI with a titanium dental implant or pacemaker?", {"hosp_img_01"}),
+        ("I feel dizzy when rolling over in bed—should I see Neurology or ENT?", {"hosp_tri_02"}),
+        ("Can herbal decoctions be delivered home by courier?", {"hosp_phm_02"}),
+        ("Where can adults get the 9-valent HPV or shingles vaccine?", {"hosp_mpv_08"}),
+        ("Can I drive home myself after a dilated retinal eye exam?", {"hosp_der_03"}),
+        ("What are the daily inpatient visiting hours and caregiver pass rules?", {"hosp_inp_04"}),
+        ("How fast can I get my pre-employment onboarding physical report?", {"hosp_chk_02"}),
+        ("Where can I get a rabies vaccine after a cat scratch at midnight?", {"hosp_emg_03"}),
+        ("请问门诊去哪里缴费？支持刷异地医保吗？", {"hosp_reg_01", "hosp_reg_03"}),
+        ("去哪里抽血化验？需要空腹几个小时？", {"hosp_lab_01", "hosp_lab_02"}),
+        ("中药可以代煎寄回家吗？", {"hosp_phm_02"}),
+        ("拔智齿周末可以约吗？需要注意什么？", {"hosp_der_01"}),
     ]
-    for query, expected_id in cases:
+    for query, allowed_top_ids in cases:
       with self.subTest(query=query):
         res = scenario_rag.run_rag_tool({"query": query}, "cymbal_hospital")
         self.assertNotIn("error", res)
         ids = [m["id"] for m in res["matches"]]
         self.assertTrue(ids, f"No matches returned for {query}")
-        self.assertEqual(
+        self.assertIn(
             ids[0],
-            expected_id,
-            f"Expected {expected_id} first for {query!r}, got {ids}",
+            allowed_top_ids,
+            f"Expected one of {allowed_top_ids} first for {query!r}, got {ids}",
         )
 
   def test_bank_rag_queries_english_and_chinese(self):
     cases = [
-        ("What low-volatility wealth management products do you offer and what is the yield?", "bank_wealth_products"),
-        ("What are your 3-year term deposit and CD interest rates?", "bank_deposits_bonds"),
-        ("Where can I pay my electricity, water, and gas utility bills?", "bank_bill_payment"),
-        ("Do I need an advance appointment to withdraw 100,000 in cash?", "bank_cash_withdrawal"),
-        ("What is your SWIFT code for an overseas university tuition wire transfer?", "bank_forex_wire"),
-        ("Where can I print bank statements and a visa solvency certificate?", "bank_certificates"),
-        ("What is the first-home mortgage rate and how does early repayment work?", "bank_loans_mortgage"),
-        ("Can you arrange a home visit for a bedridden senior who forgot their PIN?", "bank_accessibility"),
-        ("请问有什么稳健型的理财产品？收益率多少？", "bank_wealth_products"),
-        ("我要取十万现金需要提前预约吗？", "bank_cash_withdrawal"),
+        ("What tasks can I finish in 3 minutes at a Smart Teller Machine STM?", {"bank_lob_02"}),
+        ("I forgot my debit card PIN and locked it—how do I reset it?", {"bank_crd_04"}),
+        ("What are the 3-year Large-Denomination CD rates and can CDs be transferred?", {"bank_dep_02", "bank_dep_01"}),
+        ("What R2 low-volatility fixed-income wealth products and yields do you offer?", {"bank_wlt_03", "bank_wlt_02", "bank_wlt_01"}),
+        ("Do I need an advance appointment to withdraw 100,000 in cash?", {"bank_cfx_02"}),
+        ("What is Cymbal Bank's SWIFT code for an overseas university tuition wire?", {"bank_cfx_08", "bank_cfx_09"}),
+        ("What is the first-home mortgage rate and is there an early repayment fee?", {"bank_lon_01", "bank_lon_03"}),
+        ("Where can I print stamped 5-year bank statements or a visa solvency certificate?", {"bank_doc_01", "bank_doc_02"}),
+        ("Where do I pay electricity, water, and winter heating bills?", {"bank_utl_01"}),
+        ("What documents are needed to open a Corporate Basic Settlement Account?", {"bank_cor_01"}),
+        ("What sizes and rental fees are available for Level B1 Safe Deposit Boxes?", {"bank_sec_03"}),
+        ("Can you arrange doorstep banking for a bedridden senior?", {"bank_sec_04"}),
+        ("请问稳健型理财产品收益率多少？首次风险测评去哪做？", {"bank_wlt_03", "bank_wlt_01", "bank_wlt_02"}),
+        ("取十万现金需要提前预约吗？", {"bank_cfx_02"}),
+        ("银行卡显示非柜面交易中止怎么解冻？", {"bank_sec_01"}),
     ]
-    for query, expected_id in cases:
+    for query, allowed_top_ids in cases:
       with self.subTest(query=query):
         res = scenario_rag.run_rag_tool({"query": query}, "cymbal_bank")
         self.assertNotIn("error", res)
         ids = [m["id"] for m in res["matches"]]
         self.assertTrue(ids, f"No matches returned for {query}")
-        self.assertEqual(
+        self.assertIn(
             ids[0],
-            expected_id,
-            f"Expected {expected_id} first for {query!r}, got {ids}",
+            allowed_top_ids,
+            f"Expected one of {allowed_top_ids} first for {query!r}, got {ids}",
         )
 
   def test_custom_kb_parsing_and_retrieval(self):
@@ -157,7 +178,7 @@ class ScenarioRagTest(unittest.TestCase):
     sc = scenario_rag.get_scenario("cymbal_bank")
     n_docs = len(sc["documents"])
     target_idx = next(
-        i for i, d in enumerate(sc["documents"]) if d["id"] == "bank_wealth_products"
+        i for i, d in enumerate(sc["documents"]) if d["id"] == "bank_wlt_03"
     )
     fake_vecs = [[1.0, 0.0]]  # query vector
     for i in range(n_docs):
@@ -165,7 +186,7 @@ class ScenarioRagTest(unittest.TestCase):
     with mock.patch.object(scenario_rag, "_vertex_embed_batch", return_value=fake_vecs):
       res = scenario_rag.run_rag_tool({"query": "how to grow idle savings safely"}, "cymbal_bank")
       self.assertEqual(res["retrieval_mode"], "hybrid_vector_bm25")
-      self.assertEqual(res["matches"][0]["id"], "bank_wealth_products")
+      self.assertEqual(res["matches"][0]["id"], "bank_wlt_03")
 
   def test_embodiment_scenario_waypoints_and_tool_handler(self):
     wps = scenario_rag.get_scenario_waypoints("cymbal_hospital")
@@ -229,13 +250,13 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(sm.frames_sent, 0)
     self.assertEqual(len(sm.messages), 1)
     fn_resp = sm.messages[0]["toolResponse"]["functionResponses"][0]["response"]
-    self.assertEqual(fn_resp["matches"][0]["id"], "hosp_blood_draw")
+    self.assertEqual(fn_resp["matches"][0]["id"], "hosp_lab_01")
     tool_res_events = [
         ev.data for ev in bus.events
         if ev.type == tool_call_handler.event_bus.EventType.TOOL_RESULT
     ]
     self.assertTrue(tool_res_events)
-    self.assertEqual(tool_res_events[-1]["result"]["matches"][0]["id"], "hosp_blood_draw")
+    self.assertEqual(tool_res_events[-1]["result"]["matches"][0]["id"], "hosp_lab_01")
 
   def test_server_scenarios_endpoints(self):
     app = server.create_app(server.ServerConfig(api_key="test-key"))

@@ -3977,19 +3977,22 @@ function renderRichToolCard(msg) {
 }
 
 // --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
+let selectedScenarioTopic = 'ALL';
+let selectedChatGuideTopic = '';
+
 const SCENARIO_UI_PLACEHOLDERS = {
   cymbal_hospital: {
-    filter: '🔍 Filter hospital guides (e.g., billing, blood draw, fasting, triage, pharmacy, MRI, checkup, emergency)...',
+    filter: '🔍 Search 120 hospital RAG entries (e.g., billing, fasting, MRI titanium, HPV vaccine, wisdom tooth, rabies)...',
     persona: 'e.g. You are the bilingual concierge robot on 5F International Clinic of Cymbal Hospital. Greet patients warmly and remind them of pre-exam preparation steps...',
     kb: '### International Clinic Desk\nLocated on 6F of the Outpatient Podium with English & Japanese medical interpreters (Mon–Fri 08:00–17:00).\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium.',
   },
   cymbal_bank: {
-    filter: '🔍 Filter banking guides (e.g., wealth, term deposit, CD, utility bill, cash withdrawal, SWIFT, mortgage)...',
-    persona: 'e.g. You are the dedicated VIP Private Wealth greeter robot in the 1F South Lounge of Cymbal Bank Flagship Branch. Escort Gold & Private clients courteously...',
-    kb: '### New-Client Steady Yield Offer\nFirst-time clients completing a risk assessment at Smart Kiosks 1–8 can consult a Relationship Manager in the 1F South VIP Lounge.\n\n### Saturday Family Asset Allocation Briefing\nHeld Saturdays at 14:30 in the 1F South VIP Wealth Lounge covering low-volatility fixed-income & gold accumulation.',
+    filter: '🔍 Search 120 banking RAG entries (e.g., R2 wealth, Large CD, 100k cash, SWIFT wire, mortgage, safe deposit box)...',
+    persona: 'e.g. You are the dedicated VIP Private Wealth greeter robot in the West Wing Lounge of Cymbal Bank Flagship Branch. Escort Gold & Private clients courteously...',
+    kb: '### New-Client Steady Yield Offer\nFirst-time clients completing a risk assessment at Smart Kiosks can consult a Relationship Manager in the West Wing VIP Lounge.\n\n### Saturday Family Asset Allocation Briefing\nHeld Saturdays at 14:30 in the West Wing VIP Wealth Lounge covering low-volatility fixed-income & gold accumulation.',
   },
   default: {
-    filter: '🔍 Filter custom knowledge entries...',
+    filter: '🔍 Search custom knowledge entries...',
     persona: 'e.g. You are the executive showroom concierge robot welcoming visitors, introducing demo zones, and assisting with tabletop handoffs...',
     kb: '### Showroom Visiting Hours\nOpen Monday–Friday 09:30–18:00. Visitors can scan the QR badge at the 1F reception desk for guest Wi-Fi and passes.',
   },
@@ -4027,20 +4030,22 @@ function updateScenarioHeaderBadge() {
   const txt = document.getElementById('scenarioBadgeText');
   if (!btn || !txt) return;
   const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
-  const hasCustom = !!String(scenarioCustomKbMap[selectedScenarioId] || '').trim();
+  const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '').length;
+  const totalCnt = (sc ? (sc.documents ? sc.documents.length : (sc.doc_count || 0)) : 0) + customCnt;
   btn.classList.remove('scenario-active', 'scenario-hospital', 'scenario-bank');
   if (selectedScenarioId === 'cymbal_hospital') {
     btn.classList.add('scenario-active', 'scenario-hospital');
-    txt.textContent = '🏥 Cymbal Hospital';
+    txt.textContent = totalCnt ? `🏥 Cymbal Hospital (${totalCnt})` : '🏥 Cymbal Hospital';
   } else if (selectedScenarioId === 'cymbal_bank') {
     btn.classList.add('scenario-active', 'scenario-bank');
-    txt.textContent = '🏦 Cymbal Bank';
-  } else if (hasCustom) {
+    txt.textContent = totalCnt ? `🏦 Cymbal Bank (${totalCnt})` : '🏦 Cymbal Bank';
+  } else if (customCnt > 0) {
     btn.classList.add('scenario-active');
-    txt.textContent = '📖 Custom RAG';
+    txt.textContent = `📖 Custom RAG (${customCnt})`;
   } else {
     txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 Scenario';
   }
+  renderScenarioChatGuide();
 }
 
 function updateScenarioReconnectBanner() {
@@ -4064,78 +4069,269 @@ function openScenarioSettingsTab() {
   loadScenariosCatalog();
 }
 
-const _SAMPLE_QUESTIONS_BY_DOC_ID = {
-  hosp_billing: 'Where do I pay my outpatient bill, settle health insurance, and print an invoice?',
-  hosp_blood_draw: 'Where do I go for a blood draw and how many hours do I need to fast beforehand?',
-  hosp_specimen_drop: 'Where do I drop off my urine and stool lab specimens?',
-  hosp_registration: 'How do I book or check in for an outpatient appointment, and what if I miss my queue call?',
-  hosp_departments: 'Which floor are Internal Medicine, Orthopedics, Pediatrics, and Radiology located on?',
-  hosp_symptom_triage: 'I have been feeling dizzy with chest tightness lately—which clinic should I register for?',
-  hosp_pharmacy: 'After paying, where do I pick up my prescription and can herbal decoctions be delivered home?',
-  hosp_imaging_mri: 'Where are CT and MRI scans performed, and what metal safety rules apply?',
-  hosp_endoscopy: 'How do I schedule a sedated gastroscopy or colonoscopy and what preparation is required?',
-  hosp_doctor_schedule: 'What are the outpatient clinic hours on weekdays and weekends, and what are the consultation fees?',
-  hosp_inpatient: 'Where do I complete inpatient admission, pay the deposit, and what are ward visiting hours?',
-  hosp_checkup: 'Which floor is the pre-employment health checkup center on and when does morning blood draw close?',
-  hosp_records_certs: 'Where do I get an official stamp on my sick-leave certificate or request inpatient chart copies?',
-  hosp_emergency: 'Where can I get a 24/7 rabies vaccine and wound treatment after a cat scratch?',
-  hosp_amenities: 'Where can I borrow a wheelchair, find parking rates, or locate the cafeteria?',
-  bank_wealth_products: 'What low-volatility wealth management products do you offer and what are their annualized benchmarks?',
-  bank_deposits_bonds: 'What are your current term deposit and large-denomination CD interest rates?',
-  bank_bill_payment: 'Where can I pay electricity, water, gas, and municipal social-security bills?',
-  bank_account_card: 'What documents are required to open a Class-I debit card and activate mobile banking?',
-  bank_card_security: 'I forgot my debit card PIN—which counter or kiosk can reset it or raise my transfer limit?',
-  bank_cash_withdrawal: 'Do I need an advance appointment to withdraw 100,000 in cash, and can I exchange small-denomination notes?',
-  bank_forex_wire: 'What documents and SWIFT code do I need to wire overseas university tuition?',
-  bank_loans_mortgage: 'What is your first-home mortgage interest rate and how do I apply for early repayment?',
-  bank_certificates: 'Where can I print stamped bank statements, a visa solvency certificate, or my credit report?',
-  bank_corporate: 'How do I schedule a corporate basic account opening and print corporate tax vouchers?',
-  bank_vip_tiers: 'What are the AUM tiers and priority benefits for Gold, Platinum, and Private Banking clients?',
-  bank_pension_gold: 'How do I open a tax-deferred personal pension account or set up physical gold accumulation?',
-  bank_antifraud_unfreeze: 'Why were non-counter transfers suspended on my card and what documents lift the restriction?',
-  bank_accessibility: 'Can you arrange a two-officer home visit for a bedridden senior who cannot visit the branch in person?',
-  bank_hours_parking: 'What are the branch counter hours on weekdays and weekends, and is client parking free?',
-};
+function _applyScenarioSamplePrompt(qText, closeModal = true) {
+  if (!qText || !textInput) return;
+  if (chatSidebar && chatSidebar.classList.contains('collapsed')) {
+    chatSidebar.classList.remove('collapsed');
+  }
+  textInput.value = qText;
+  if (closeModal && settingsModal) {
+    settingsModal.classList.add('hidden');
+  }
+  textInput.focus();
+}
 
 function _sampleQuestionForDoc(doc, _scenarioId) {
-  if (doc && doc.id && _SAMPLE_QUESTIONS_BY_DOC_ID[doc.id]) {
-    return _SAMPLE_QUESTIONS_BY_DOC_ID[doc.id];
+  const rawTitle = String((doc && doc.title) || 'this service').trim();
+  const cleanTitle = rawTitle.split('(')[0].replace(/\s+&\s+$/, '').trim();
+  if (/location|hours|window/i.test(cleanTitle)) {
+    return `Where is ${cleanTitle.replace(/\s*(Location|Hours|Check-In).*$/i, '').trim()} located, and what are the operating hours?`;
   }
-  const cleanTitle = String((doc && doc.title) || 'this service').split('(')[0].trim();
-  return `Could you tell me the location, hours, and requirements for ${cleanTitle}?`;
+  if (/rules|prep|guidelines|protocol|checklist/i.test(cleanTitle)) {
+    return `What are the preparation rules and step-by-step requirements for ${cleanTitle}?`;
+  }
+  if (/rates|yield|tiers|fee|pricing|threshold/i.test(cleanTitle)) {
+    return `Could you explain the current rates, thresholds, and terms for ${cleanTitle}?`;
+  }
+  return `Could you tell me the exact location, eligibility, and procedure for ${cleanTitle}?`;
+}
+
+function _shortTopicLabel(catName) {
+  const s = String(catName || '').trim();
+  const map = {
+    'Registration & Billing': 'Billing & Insurance',
+    'Lab & Phlebotomy': 'Blood Draw & Lab',
+    'Symptom Triage & Navigation': 'Triage & Floors',
+    'Radiology, Ultrasound & Endoscopy': 'MRI, CT & Endoscopy',
+    'Pharmacy & Prescriptions': 'Pharmacy & Refills',
+    'Maternity, Pediatrics & Vaccines': 'Maternity & Vaccines',
+    'Dental, Eye, ENT & Rehab': 'Dental, Eye & ENT',
+    'Inpatient, Surgery & Day Care': 'Inpatient & Surgery',
+    'Health Checkups & Medical Records': 'Checkups & Records',
+    '24/7 Emergency & Campus Amenities': '24/7 ER & Amenities',
+    'Lobby Routing & Smart Kiosks': 'Lobby & Smart STMs',
+    'Cards & Personal Accounts': 'Cards & Accounts',
+    'Savings, CDs & Sovereign Bonds': 'Deposits & CDs',
+    'Wealth Management & Bullion': 'Wealth & Gold',
+    'Cash, Coins & Foreign Exchange': 'Cash, Coins & FX',
+    'Loans, Mortgages & Credit Cards': 'Mortgages & Credit',
+    'Statements, Certificates & Credit': 'Statements & Visa',
+    'Utility, Tax & Municipal Pay': 'Utility, Tax & ETC',
+    'Corporate & SME Banking': 'Corporate & SME',
+    'Security, Accessibility & Special Care': 'Unfreeze, Vault & Care',
+  };
+  return map[s] || s;
+}
+
+function renderScenarioChatGuide() {
+  const guideEl = document.getElementById('scenario-chat-guide');
+  const titleEl = document.getElementById('scenario-chat-guide-title');
+  const chipsEl = document.getElementById('scenario-chat-topic-chips');
+  const sumEl = document.getElementById('scenario-chat-topic-summary');
+  const listEl = document.getElementById('scenario-chat-sample-list');
+  if (!guideEl || !titleEl || !chipsEl || !listEl) return;
+
+  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
+  const topics = (sc && Array.isArray(sc.topic_guide)) ? sc.topic_guide : [];
+  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '');
+  const totalDocs = (sc ? (sc.documents ? sc.documents.length : (sc.doc_count || 0)) : 0) + customDocs.length;
+
+  guideEl.classList.remove('scenario-hospital', 'scenario-bank');
+  if (!sc || selectedScenarioId === 'default' || !topics.length) {
+    guideEl.classList.add('hidden');
+    chipsEl.innerHTML = '';
+    listEl.innerHTML = '';
+    if (sumEl) sumEl.textContent = '';
+    return;
+  }
+
+  guideEl.classList.remove('hidden');
+  if (selectedScenarioId === 'cymbal_hospital') guideEl.classList.add('scenario-hospital');
+  if (selectedScenarioId === 'cymbal_bank') guideEl.classList.add('scenario-bank');
+
+  titleEl.textContent = `${sc.badge || sc.name} · ${topics.length} Topic Scopes · ${totalDocs} RAG Docs`;
+
+  if (!selectedChatGuideTopic || !topics.some(t => t.category === selectedChatGuideTopic)) {
+    selectedChatGuideTopic = topics[0].category;
+  }
+  const activeTopic = topics.find(t => t.category === selectedChatGuideTopic) || topics[0];
+
+  chipsEl.innerHTML = '';
+  topics.forEach((t) => {
+    const btn = _el(
+      'button',
+      'scenario-chat-topic-chip' + (t.category === activeTopic.category ? ' active' : ''),
+      `${t.icon || '📌'} ${_shortTopicLabel(t.category)}`
+    );
+    btn.type = 'button';
+    btn.title = `${t.category}: ${t.summary || ''}`;
+    btn.onclick = () => {
+      selectedChatGuideTopic = t.category;
+      renderScenarioChatGuide();
+    };
+    chipsEl.appendChild(btn);
+  });
+
+  if (sumEl) {
+    sumEl.textContent = `${activeTopic.icon || '📌'} ${activeTopic.category}: ${activeTopic.summary || ''}`;
+  }
+
+  listEl.innerHTML = '';
+  (activeTopic.sample_prompts || []).slice(0, 3).forEach((pText) => {
+    const pBtn = _el('button', 'scenario-chat-sample-btn', `💬 “${pText}”`);
+    pBtn.type = 'button';
+    pBtn.onclick = () => _applyScenarioSamplePrompt(pText, false);
+    listEl.appendChild(pBtn);
+  });
 }
 
 function renderScenarioKbList() {
   const listEl = document.getElementById('scenario-kb-list');
   const kbSec = document.getElementById('scenario-kb-section');
+  const kbHeading = document.getElementById('scenario-kb-heading');
+  const topicChipsEl = document.getElementById('scenario-topic-chips');
+  const sampleBoxEl = document.getElementById('scenario-sample-prompts');
+  const metaEl = document.getElementById('scenario-kb-result-meta');
   const filterEl = document.getElementById('scenario-kb-filter');
   const countPill = document.getElementById('scenario-doc-count-pill');
   if (!listEl || !kbSec) return;
 
-  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId) || { documents: [] };
+  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId) || { documents: [], topic_guide: [] };
+  const topics = Array.isArray(sc.topic_guide) ? sc.topic_guide : [];
   const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '');
   const allDocs = customDocs.concat(sc.documents || []);
+
   if (countPill) {
-    countPill.textContent = allDocs.length
-      ? `${allDocs.length} KB Entr${allDocs.length === 1 ? 'y' : 'ies'}${customDocs.length ? ` (${customDocs.length} custom)` : ''}`
-      : 'Zero Preset Overhead';
+    if (allDocs.length) {
+      const topicPart = topics.length ? ` · ${topics.length} Topics` : '';
+      const customPart = customDocs.length ? ` (+${customDocs.length} custom)` : '';
+      countPill.textContent = `${allDocs.length} RAG Docs${topicPart}${customPart}`;
+    } else {
+      countPill.textContent = 'Zero Preset Overhead';
+    }
   }
+  if (kbHeading) {
+    kbHeading.textContent = topics.length
+      ? `2. Explore ${topics.length} Topic Domains & ${allDocs.length} RAG Entries`
+      : `2. Scenario RAG Knowledge Base (${allDocs.length} Entries)`;
+  }
+
   if (!allDocs.length) {
     kbSec.classList.add('hidden');
     listEl.innerHTML = '';
+    if (topicChipsEl) topicChipsEl.innerHTML = '';
+    if (sampleBoxEl) { sampleBoxEl.classList.add('hidden'); sampleBoxEl.innerHTML = ''; }
+    if (metaEl) metaEl.textContent = '';
     return;
   }
   kbSec.classList.remove('hidden');
+
+  // Count docs per category
+  const catCounts = {};
+  allDocs.forEach((d) => {
+    const c = d.category || 'General';
+    catCounts[c] = (catCounts[c] || 0) + 1;
+  });
+  if (selectedScenarioTopic !== 'ALL' && !catCounts[selectedScenarioTopic]) {
+    selectedScenarioTopic = 'ALL';
+  }
+
+  // Render Topic Domain Filter Chips
+  if (topicChipsEl) {
+    topicChipsEl.innerHTML = '';
+    if (topics.length > 0 || customDocs.length > 0) {
+      const makeChip = (catKey, label, count) => {
+        const chip = _el('button', 'scenario-topic-chip' + (selectedScenarioTopic === catKey ? ' active' : ''));
+        chip.type = 'button';
+        chip.dataset.topic = catKey;
+        chip.appendChild(document.createTextNode(label + ' '));
+        chip.appendChild(_el('span', 'scenario-topic-chip-cnt', `(${count})`));
+        chip.onclick = () => {
+          selectedScenarioTopic = catKey;
+          renderScenarioKbList();
+        };
+        return chip;
+      };
+      topicChipsEl.appendChild(makeChip('ALL', '✨ All Topics', allDocs.length));
+      if (customDocs.length > 0) {
+        topicChipsEl.appendChild(makeChip('Custom Knowledge', '📝 Custom Knowledge', customDocs.length));
+      }
+      topics.forEach((t) => {
+        const cnt = catCounts[t.category] || 0;
+        if (cnt > 0) {
+          topicChipsEl.appendChild(makeChip(t.category, `${t.icon || '📌'} ${t.category}`, cnt));
+        }
+      });
+    }
+  }
+
+  // Render Interactive Sample Prompts Box
+  if (sampleBoxEl) {
+    sampleBoxEl.innerHTML = '';
+    if (topics.length > 0) {
+      sampleBoxEl.classList.remove('hidden');
+      const head = _el('div', 'scenario-sample-head');
+      const grid = _el('div', 'scenario-sample-grid');
+      if (selectedScenarioTopic === 'ALL' || selectedScenarioTopic === 'Custom Knowledge') {
+        head.appendChild(_el('span', 'scenario-sample-title', '💡 Cross-Domain Sample Prompts to Try'));
+        head.appendChild(_el('span', 'scenario-sample-desc', 'Click a topic pill above for domain-specific prompts, or click any question below to fill Chat:'));
+        // Pick 1 highlight prompt from 6 diverse domains
+        const step = Math.max(1, Math.floor(topics.length / 6));
+        const picked = [];
+        for (let i = 0; i < topics.length && picked.length < 6; i += step) {
+          if (topics[i].sample_prompts && topics[i].sample_prompts[0]) {
+            picked.push({ icon: topics[i].icon || '💬', text: topics[i].sample_prompts[0] });
+          }
+        }
+        picked.forEach((item) => {
+          const b = _el('button', 'scenario-sample-btn', `${item.icon} “${item.text}”`);
+          b.type = 'button';
+          b.onclick = () => _applyScenarioSamplePrompt(item.text, true);
+          grid.appendChild(b);
+        });
+      } else {
+        const activeT = topics.find(t => t.category === selectedScenarioTopic);
+        if (activeT) {
+          head.appendChild(_el('span', 'scenario-sample-title', `${activeT.icon || '📌'} ${activeT.category} — Sample Questions`));
+          head.appendChild(_el('span', 'scenario-sample-desc', activeT.summary || 'Click any prompt to test in Chat:'));
+          (activeT.sample_prompts || []).forEach((pText) => {
+            const b = _el('button', 'scenario-sample-btn', `💬 “${pText}”`);
+            b.type = 'button';
+            b.onclick = () => _applyScenarioSamplePrompt(pText, true);
+            grid.appendChild(b);
+          });
+        }
+      }
+      sampleBoxEl.appendChild(head);
+      sampleBoxEl.appendChild(grid);
+    } else {
+      sampleBoxEl.classList.add('hidden');
+    }
+  }
+
   const kw = String((filterEl && filterEl.value) || '').trim().toLowerCase();
-  const filtered = kw
-    ? allDocs.filter(d =>
-        `${d.category || ''} ${d.title || ''} ${d.location || ''} ${d.summary || ''}`
-          .toLowerCase().includes(kw))
-    : allDocs;
+  const filtered = allDocs.filter((d) => {
+    if (selectedScenarioTopic !== 'ALL' && d.category !== selectedScenarioTopic) {
+      return false;
+    }
+    if (!kw) return true;
+    return `${d.category || ''} ${d.title || ''} ${d.location || ''} ${d.summary || ''}`
+      .toLowerCase()
+      .includes(kw);
+  });
+
+  if (metaEl) {
+    const scopeLabel = selectedScenarioTopic === 'ALL'
+      ? `across ${topics.length || 1} topic domains`
+      : `in "${selectedScenarioTopic}"`;
+    metaEl.textContent = kw
+      ? `Showing ${filtered.length} of ${allDocs.length} RAG entries matching "${kw}" ${scopeLabel}`
+      : `Showing ${filtered.length} of ${allDocs.length} RAG entries ${scopeLabel} (click any entry to inspect policy details & linked waypoint)`;
+  }
 
   listEl.innerHTML = '';
   if (!filtered.length) {
-    listEl.appendChild(_el('div', 'config-help-text', 'No matching knowledge entries found. Try another keyword.'));
+    listEl.appendChild(_el('div', 'config-help-text', 'No matching knowledge entries found. Try clearing the search filter or switching to All Topics.'));
     return;
   }
   filtered.forEach((doc) => {
@@ -4166,14 +4362,7 @@ function renderScenarioKbList() {
       ev.preventDefault();
       ev.stopPropagation();
       const qText = _sampleQuestionForDoc(doc, selectedScenarioId);
-      if (textInput) {
-        if (chatSidebar && chatSidebar.classList.contains('collapsed')) {
-          chatSidebar.classList.remove('collapsed');
-        }
-        textInput.value = qText;
-        if (settingsModal) settingsModal.classList.add('hidden');
-        textInput.focus();
-      }
+      _applyScenarioSamplePrompt(qText, true);
     };
     actions.appendChild(askBtn);
     body.appendChild(actions);
@@ -4199,7 +4388,7 @@ function renderScenarioPanel() {
     top.appendChild(_el('span', 'scenario-card-title', sc.badge || sc.name));
     const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '').length;
     const totalCnt = (sc.documents ? sc.documents.length : (sc.doc_count || 0)) + customCnt;
-    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} KB Docs` : 'General'));
+    top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} RAG Docs` : 'General'));
     card.appendChild(top);
     card.appendChild(_el('div', 'scenario-card-sub', sc.subtitle || sc.role || sc.name));
     card.onclick = () => selectScenario(sc.id);
@@ -4268,6 +4457,8 @@ async function selectScenario(scenarioId) {
   selectedScenarioId = scenarioId || 'default';
   localStorage.setItem('er2_scenario_id', selectedScenarioId);
   if (prevScenario !== selectedScenarioId) {
+    selectedScenarioTopic = 'ALL';
+    selectedChatGuideTopic = '';
     const filterEl = document.getElementById('scenario-kb-filter');
     if (filterEl) filterEl.value = '';
   }
@@ -4328,6 +4519,15 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
 {
   const badgeBtn = document.getElementById('scenarioBadgeBtn');
   if (badgeBtn) badgeBtn.onclick = openScenarioSettingsTab;
+
+  const chatGuideCfgBtn = document.getElementById('scenario-chat-guide-cfg');
+  if (chatGuideCfgBtn) {
+    chatGuideCfgBtn.onclick = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openScenarioSettingsTab();
+    };
+  }
 
   const filterEl = document.getElementById('scenario-kb-filter');
   if (filterEl) filterEl.addEventListener('input', renderScenarioKbList);
