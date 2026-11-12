@@ -3923,36 +3923,56 @@ function appendKnowledgeCard(r) {
   const sid = r.scenario || '';
   const themeCls = sid === 'cymbal_hospital' ? ' kb-hospital'
     : sid === 'cymbal_bank' ? ' kb-bank' : '';
-  const card = _el('div', 'rich-card kb-card' + themeCls);
+  const matches = Array.isArray(r.matches) ? r.matches : [];
+  const isGuardBlock = r.grounded === false || matches.length === 0;
+  const card = _el('div', 'rich-card kb-card' + themeCls + (isGuardBlock ? ' kb-card-ungrounded' : ''));
   const head = _el('div', 'rich-head');
-  const icon = sid === 'cymbal_hospital' ? '🏥' : sid === 'cymbal_bank' ? '🏦' : '📖';
+  const icon = isGuardBlock ? '🛡️' : (sid === 'cymbal_hospital' ? '🏥' : sid === 'cymbal_bank' ? '🏦' : '📖');
   head.appendChild(_el('span', 'rich-icon', icon));
   const orgTitle = (r.organization ? `${r.organization} · RAG Grounding` : 'Scenario RAG Lookup');
   head.appendChild(_el('span', 'rich-title', orgTitle));
-  const matches = Array.isArray(r.matches) ? r.matches : [];
   const modeTag = r.retrieval_mode === 'hybrid_vector_bm25' ? 'Hybrid RRF' : 'BM25 RAG';
-  head.appendChild(_el('span', 'kb-card-badge', `${modeTag} · ${matches.length} match${matches.length === 1 ? '' : 'es'}`));
+  const badgeText = isGuardBlock
+    ? 'Out-of-KB Guard · 0 matches'
+    : `${modeTag} · ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+  head.appendChild(_el('span', 'kb-card-badge' + (isGuardBlock ? ' kb-badge-guard' : ''), badgeText));
   card.appendChild(head);
   if (r.query) {
     card.appendChild(_el('div', 'rich-sub', `🔎 “${r.query}”`));
   }
   const itemsWrap = _el('div', 'kb-card-items');
-  matches.slice(0, 3).forEach((m) => {
-    const item = _el('div', 'kb-card-item');
-    const itemHead = _el('div', 'kb-item-head');
-    if (m.category) itemHead.appendChild(_el('span', 'kb-item-cat', m.category));
-    itemHead.appendChild(_el('span', 'kb-item-title', m.title || 'Knowledge Entry'));
-    item.appendChild(itemHead);
-    if (m.location || m.waypoint) {
-      const meta = _el('div', 'kb-item-meta');
-      if (m.location) meta.appendChild(_el('span', 'kb-meta-pill', `📍 ${m.location}`));
-      if (m.waypoint) meta.appendChild(_el('span', 'kb-meta-pill', `🧭 ${m.waypoint}`));
-      item.appendChild(meta);
+  if (isGuardBlock) {
+    itemsWrap.appendChild(_el(
+      'div',
+      'kb-empty-guard',
+      'Not found in the active RAG knowledge base — ungrounded fabrication blocked.'
+    ));
+  } else {
+    matches.slice(0, 3).forEach((m) => {
+      const item = _el('div', 'kb-card-item');
+      const itemHead = _el('div', 'kb-item-head');
+      if (m.id) itemHead.appendChild(_el('span', 'kb-item-id', `[${m.id}]`));
+      if (m.category) itemHead.appendChild(_el('span', 'kb-item-cat', m.category));
+      itemHead.appendChild(_el('span', 'kb-item-title', m.title || 'Knowledge Entry'));
+      item.appendChild(itemHead);
+      if (m.location || m.waypoint) {
+        const meta = _el('div', 'kb-item-meta');
+        if (m.location) meta.appendChild(_el('span', 'kb-meta-pill', `📍 ${m.location}`));
+        if (m.waypoint) meta.appendChild(_el('span', 'kb-meta-pill', `🧭 ${m.waypoint}`));
+        item.appendChild(meta);
+      }
+      const text = m.summary || (m.content ? String(m.content).slice(0, 180) : '');
+      if (text) item.appendChild(_el('div', 'kb-item-summary', text));
+      itemsWrap.appendChild(item);
+    });
+    if (Array.isArray(r.unmatched_query_terms) && r.unmatched_query_terms.length > 0) {
+      itemsWrap.appendChild(_el(
+        'div',
+        'kb-unmatched-note',
+        `⚠️ Unmatched query terms excluded from grounding: ${r.unmatched_query_terms.join(', ')}`
+      ));
     }
-    const text = m.summary || (m.content ? String(m.content).slice(0, 180) : '');
-    if (text) item.appendChild(_el('div', 'kb-item-summary', text));
-    itemsWrap.appendChild(item);
-  });
+  }
   card.appendChild(itemsWrap);
   _appendCard(card);
 }
@@ -3968,7 +3988,7 @@ function renderRichToolCard(msg) {
       appendMapCard('📍 You are here', [{ q, name: r.place_description ? r.place_description.split(/[。.,，]/)[0] : q, zoom: 16, uri: r.google_maps_url }], q);
     } else if (msg.name === 'get_place_photos' && Array.isArray(r.photos) && r.photos.length) {
       appendPhotoCard(r);
-    } else if (msg.name === 'search_knowledge_base' && Array.isArray(r.matches) && r.matches.length) {
+    } else if (msg.name === 'search_knowledge_base' && (Array.isArray(r.matches) || r.grounded === false)) {
       appendKnowledgeCard(r);
     }
   } catch (e) {
@@ -3979,6 +3999,8 @@ function renderRichToolCard(msg) {
 // --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
 let selectedScenarioTopic = 'ALL';
 let selectedChatGuideTopic = '';
+let chatGuidePromptOffset = 0;
+let modalSampleOffset = 0;
 
 const SCENARIO_UI_PLACEHOLDERS = {
   cymbal_hospital: {
@@ -3998,21 +4020,30 @@ const SCENARIO_UI_PLACEHOLDERS = {
   },
 };
 
-function _parseCustomKbPreview(rawText) {
+function _sampleQuestionForDoc(doc) {
+  const explicit = String((doc && doc.sample_question) || '').trim();
+  if (explicit) return explicit;
+  const cleanTitle = String((doc && doc.title) || 'this entry').replace(/…+$/, '').trim() || 'this entry';
+  if (cleanTitle.endsWith('?')) return cleanTitle;
+  return `What does the knowledge base state regarding ${cleanTitle}?`;
+}
+
+function _parseCustomKbPreview(rawText, scenarioId = selectedScenarioId) {
   const raw = String(rawText || '').trim();
   if (!raw) return [];
   const blocks = /^#{1,3}\s+\S+/m.test(raw)
     ? raw.split(/(?=^#{1,3}\s+\S+)/m)
     : raw.split(/\n\s*\n+/);
   const out = [];
+  const sidPrefix = String(scenarioId || 'kb').trim() || 'kb';
   blocks.forEach((blk, idx) => {
     const lines = blk.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!lines.length) return;
     const first = lines[0].replace(/^#{1,3}\s*/, '').trim();
     const title = lines.length > 1 ? first.slice(0, 72) : first.slice(0, 42);
     const body = lines.length > 1 ? lines.slice(1).join('\n') : first;
-    out.push({
-      id: `custom_${idx + 1}`,
+    const entry = {
+      id: `custom_${sidPrefix}_${idx + 1}`,
       category: 'Custom Knowledge',
       title,
       location: '',
@@ -4020,9 +4051,57 @@ function _parseCustomKbPreview(rawText) {
       summary: body.replace(/\s+/g, ' ').slice(0, 180),
       content: body,
       is_custom: true,
-    });
+    };
+    entry.sample_question = _sampleQuestionForDoc(entry);
+    out.push(entry);
   });
   return out;
+}
+
+function _resolveScenarioTopics(sc, customDocs) {
+  const baseTopics = (sc && Array.isArray(sc.topic_guide)) ? sc.topic_guide : [];
+  const extras = Array.isArray(customDocs) ? customDocs : [];
+  if (!extras.length) return baseTopics;
+  const shortTitles = extras
+    .slice(0, 4)
+    .map(d => String(d.title || '').split(/\s*(?:[:(—]|–)\s*/)[0].trim())
+    .filter(Boolean);
+  const moreCnt = Math.max(0, extras.length - shortTitles.length);
+  const summary = `${extras.length} RAG ${extras.length === 1 ? 'entry' : 'entries'}: ${shortTitles.join(' · ')}${moreCnt > 0 ? ` (+${moreCnt} more)` : ''}`;
+  const groundedPrompts = extras.map(d => ({
+    doc_id: d.id,
+    doc_title: d.title || '',
+    location: d.location || '',
+    prompt: _sampleQuestionForDoc(d),
+  }));
+  const customTopic = {
+    category: 'Custom Knowledge',
+    icon: '📝',
+    doc_count: extras.length,
+    doc_ids: extras.map(d => d.id),
+    summary,
+    sample_prompts: groundedPrompts.map(gp => gp.prompt),
+    grounded_prompts: groundedPrompts,
+  };
+  return [customTopic].concat(baseTopics.filter(t => t.category !== 'Custom Knowledge'));
+}
+
+function _buildGroundedSampleBtn(gp, btnClass, iconPrefix, closeModal) {
+  const btn = _el('button', btnClass);
+  btn.type = 'button';
+  const promptText = String((gp && (gp.prompt || gp.text)) || '').trim();
+  const docId = String((gp && gp.doc_id) || '').trim();
+  const docTitle = String((gp && gp.doc_title) || '').trim();
+  btn.dataset.prompt = promptText;
+  if (docId) {
+    btn.dataset.docId = docId;
+    btn.appendChild(_el('span', 'sample-doc-id', `[${docId}]`));
+    btn.appendChild(document.createTextNode(' '));
+    btn.title = `1-to-1 Grounded in RAG Entry [${docId}]${docTitle ? ': ' + docTitle : ''}`;
+  }
+  btn.appendChild(document.createTextNode(`${iconPrefix ? iconPrefix + ' ' : ''}“${promptText}”`));
+  btn.onclick = () => _applyScenarioSamplePrompt(promptText, closeModal);
+  return btn;
 }
 
 function updateScenarioHeaderBadge() {
@@ -4030,7 +4109,7 @@ function updateScenarioHeaderBadge() {
   const txt = document.getElementById('scenarioBadgeText');
   if (!btn || !txt) return;
   const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
-  const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '').length;
+  const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '', selectedScenarioId).length;
   const totalCnt = (sc ? (sc.documents ? sc.documents.length : (sc.doc_count || 0)) : 0) + customCnt;
   btn.classList.remove('scenario-active', 'scenario-hospital', 'scenario-bank');
   if (selectedScenarioId === 'cymbal_hospital') {
@@ -4081,24 +4160,10 @@ function _applyScenarioSamplePrompt(qText, closeModal = true) {
   textInput.focus();
 }
 
-function _sampleQuestionForDoc(doc, _scenarioId) {
-  const rawTitle = String((doc && doc.title) || 'this service').trim();
-  const cleanTitle = rawTitle.split('(')[0].replace(/\s+&\s+$/, '').trim();
-  if (/location|hours|window/i.test(cleanTitle)) {
-    return `Where is ${cleanTitle.replace(/\s*(Location|Hours|Check-In).*$/i, '').trim()} located, and what are the operating hours?`;
-  }
-  if (/rules|prep|guidelines|protocol|checklist/i.test(cleanTitle)) {
-    return `What are the preparation rules and step-by-step requirements for ${cleanTitle}?`;
-  }
-  if (/rates|yield|tiers|fee|pricing|threshold/i.test(cleanTitle)) {
-    return `Could you explain the current rates, thresholds, and terms for ${cleanTitle}?`;
-  }
-  return `Could you tell me the exact location, eligibility, and procedure for ${cleanTitle}?`;
-}
-
 function _shortTopicLabel(catName) {
   const s = String(catName || '').trim();
   const map = {
+    'Custom Knowledge': 'Custom RAG',
     'Registration & Billing': 'Billing & Insurance',
     'Lab & Phlebotomy': 'Blood Draw & Lab',
     'Symptom Triage & Navigation': 'Triage & Floors',
@@ -4132,16 +4197,17 @@ function renderScenarioChatGuide() {
   if (!guideEl || !titleEl || !chipsEl || !listEl) return;
 
   const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
-  const topics = (sc && Array.isArray(sc.topic_guide)) ? sc.topic_guide : [];
-  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '');
+  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '', selectedScenarioId);
+  const topics = _resolveScenarioTopics(sc, customDocs);
   const totalDocs = (sc ? (sc.documents ? sc.documents.length : (sc.doc_count || 0)) : 0) + customDocs.length;
+  const hasActiveRag = (selectedScenarioId !== 'default') || customDocs.length > 0;
 
   guideEl.classList.remove('scenario-hospital', 'scenario-bank');
-  if (!sc || selectedScenarioId === 'default' || !topics.length) {
+  if (!sc || !hasActiveRag || !topics.length) {
     guideEl.classList.add('hidden');
     chipsEl.innerHTML = '';
     listEl.innerHTML = '';
-    if (sumEl) sumEl.textContent = '';
+    if (sumEl) sumEl.innerHTML = '';
     return;
   }
 
@@ -4149,10 +4215,14 @@ function renderScenarioChatGuide() {
   if (selectedScenarioId === 'cymbal_hospital') guideEl.classList.add('scenario-hospital');
   if (selectedScenarioId === 'cymbal_bank') guideEl.classList.add('scenario-bank');
 
-  titleEl.textContent = `${sc.badge || sc.name} · ${topics.length} Topic Scopes · ${totalDocs} RAG Docs`;
+  const headerLabel = (selectedScenarioId === 'default' && customDocs.length > 0)
+    ? '📖 Custom RAG'
+    : (sc.badge || sc.name);
+  titleEl.textContent = `${headerLabel} · ${topics.length} Topic Scope${topics.length === 1 ? '' : 's'} · ${totalDocs} RAG Doc${totalDocs === 1 ? '' : 's'}`;
 
   if (!selectedChatGuideTopic || !topics.some(t => t.category === selectedChatGuideTopic)) {
     selectedChatGuideTopic = topics[0].category;
+    chatGuidePromptOffset = 0;
   }
   const activeTopic = topics.find(t => t.category === selectedChatGuideTopic) || topics[0];
 
@@ -4164,24 +4234,49 @@ function renderScenarioChatGuide() {
       `${t.icon || '📌'} ${_shortTopicLabel(t.category)}`
     );
     btn.type = 'button';
-    btn.title = `${t.category}: ${t.summary || ''}`;
+    btn.dataset.topic = t.category;
+    btn.title = `${t.category} (${t.doc_count || (t.sample_prompts || []).length} RAG entries): ${t.summary || ''}`;
     btn.onclick = () => {
-      selectedChatGuideTopic = t.category;
+      if (selectedChatGuideTopic !== t.category) {
+        selectedChatGuideTopic = t.category;
+        chatGuidePromptOffset = 0;
+      }
       renderScenarioChatGuide();
     };
     chipsEl.appendChild(btn);
   });
 
+  const groundedList = (Array.isArray(activeTopic.grounded_prompts) && activeTopic.grounded_prompts.length)
+    ? activeTopic.grounded_prompts
+    : (activeTopic.sample_prompts || []).map(p => ({ doc_id: '', doc_title: '', prompt: p }));
+  const pageSize = 3;
+  const total = groundedList.length;
+  const alignedStart = total > 0 ? (Math.floor((chatGuidePromptOffset % total) / pageSize) * pageSize) : 0;
+  const shown = groundedList.slice(alignedStart, alignedStart + pageSize);
+  const end = alignedStart + shown.length;
+
   if (sumEl) {
-    sumEl.textContent = `${activeTopic.icon || '📌'} ${activeTopic.category}: ${activeTopic.summary || ''}`;
+    sumEl.innerHTML = '';
+    sumEl.appendChild(_el(
+      'span',
+      'scenario-chat-summary-text',
+      `${activeTopic.icon || '📌'} ${activeTopic.category} — ${activeTopic.summary || ''}`
+    ));
+    if (total > pageSize) {
+      const cycBtn = _el('button', 'scenario-cycle-btn', `🔄 ${alignedStart + 1}–${end} / ${total} · Next ▸`);
+      cycBtn.type = 'button';
+      cycBtn.title = `Cycle through all ${total} RAG-grounded questions in ${activeTopic.category}`;
+      cycBtn.onclick = () => {
+        chatGuidePromptOffset = (alignedStart + pageSize >= total) ? 0 : (alignedStart + pageSize);
+        renderScenarioChatGuide();
+      };
+      sumEl.appendChild(cycBtn);
+    }
   }
 
   listEl.innerHTML = '';
-  (activeTopic.sample_prompts || []).slice(0, 3).forEach((pText) => {
-    const pBtn = _el('button', 'scenario-chat-sample-btn', `💬 “${pText}”`);
-    pBtn.type = 'button';
-    pBtn.onclick = () => _applyScenarioSamplePrompt(pText, false);
-    listEl.appendChild(pBtn);
+  shown.forEach((gp) => {
+    listEl.appendChild(_buildGroundedSampleBtn(gp, 'scenario-chat-sample-btn', '💬', false));
   });
 }
 
@@ -4197,13 +4292,15 @@ function renderScenarioKbList() {
   if (!listEl || !kbSec) return;
 
   const sc = scenarioCatalog.find(s => s.id === selectedScenarioId) || { documents: [], topic_guide: [] };
-  const topics = Array.isArray(sc.topic_guide) ? sc.topic_guide : [];
-  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '');
+  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '', selectedScenarioId);
+  const topics = _resolveScenarioTopics(sc, customDocs);
   const allDocs = customDocs.concat(sc.documents || []);
 
   if (countPill) {
     if (allDocs.length) {
-      const topicPart = topics.length ? ` · ${topics.length} Topics` : '';
+      const baseTopicCnt = Array.isArray(sc.topic_guide) ? sc.topic_guide.length : 0;
+      const shownTopicCnt = customDocs.length ? topics.length : baseTopicCnt;
+      const topicPart = shownTopicCnt ? ` · ${shownTopicCnt} Topic${shownTopicCnt === 1 ? '' : 's'}` : '';
       const customPart = customDocs.length ? ` (+${customDocs.length} custom)` : '';
       countPill.textContent = `${allDocs.length} RAG Docs${topicPart}${customPart}`;
     } else {
@@ -4212,7 +4309,7 @@ function renderScenarioKbList() {
   }
   if (kbHeading) {
     kbHeading.textContent = topics.length
-      ? `2. Explore ${topics.length} Topic Domains & ${allDocs.length} RAG Entries`
+      ? `2. Explore ${topics.length} RAG-Derived Topic Scope${topics.length === 1 ? '' : 's'} & ${allDocs.length} RAG Entries`
       : `2. Scenario RAG Knowledge Base (${allDocs.length} Entries)`;
   }
 
@@ -4234,12 +4331,13 @@ function renderScenarioKbList() {
   });
   if (selectedScenarioTopic !== 'ALL' && !catCounts[selectedScenarioTopic]) {
     selectedScenarioTopic = 'ALL';
+    modalSampleOffset = 0;
   }
 
-  // Render Topic Domain Filter Chips
+  // Render Topic Domain Filter Chips (topics already includes Custom Knowledge when present)
   if (topicChipsEl) {
     topicChipsEl.innerHTML = '';
-    if (topics.length > 0 || customDocs.length > 0) {
+    if (topics.length > 0) {
       const makeChip = (catKey, label, count) => {
         const chip = _el('button', 'scenario-topic-chip' + (selectedScenarioTopic === catKey ? ' active' : ''));
         chip.type = 'button';
@@ -4247,15 +4345,15 @@ function renderScenarioKbList() {
         chip.appendChild(document.createTextNode(label + ' '));
         chip.appendChild(_el('span', 'scenario-topic-chip-cnt', `(${count})`));
         chip.onclick = () => {
-          selectedScenarioTopic = catKey;
+          if (selectedScenarioTopic !== catKey) {
+            selectedScenarioTopic = catKey;
+            modalSampleOffset = 0;
+          }
           renderScenarioKbList();
         };
         return chip;
       };
       topicChipsEl.appendChild(makeChip('ALL', '✨ All Topics', allDocs.length));
-      if (customDocs.length > 0) {
-        topicChipsEl.appendChild(makeChip('Custom Knowledge', '📝 Custom Knowledge', customDocs.length));
-      }
       topics.forEach((t) => {
         const cnt = catCounts[t.category] || 0;
         if (cnt > 0) {
@@ -4265,45 +4363,103 @@ function renderScenarioKbList() {
     }
   }
 
-  // Render Interactive Sample Prompts Box
+  // Render Grounded Sample Prompts Box (100% derived from active RAG documents)
   if (sampleBoxEl) {
     sampleBoxEl.innerHTML = '';
     if (topics.length > 0) {
       sampleBoxEl.classList.remove('hidden');
       const head = _el('div', 'scenario-sample-head');
       const grid = _el('div', 'scenario-sample-grid');
-      if (selectedScenarioTopic === 'ALL' || selectedScenarioTopic === 'Custom Knowledge') {
-        head.appendChild(_el('span', 'scenario-sample-title', '💡 Cross-Domain Sample Prompts to Try'));
-        head.appendChild(_el('span', 'scenario-sample-desc', 'Click a topic pill above for domain-specific prompts, or click any question below to fill Chat:'));
-        // Pick 1 highlight prompt from 6 diverse domains
-        const step = Math.max(1, Math.floor(topics.length / 6));
-        const picked = [];
-        for (let i = 0; i < topics.length && picked.length < 6; i += step) {
-          if (topics[i].sample_prompts && topics[i].sample_prompts[0]) {
-            picked.push({ icon: topics[i].icon || '💬', text: topics[i].sample_prompts[0] });
+      if (selectedScenarioTopic === 'ALL') {
+        head.appendChild(_el(
+          'span',
+          'scenario-sample-title',
+          '💡 Grounded Sample Prompts (100% Derived from Active RAG Entries)'
+        ));
+        if (topics.length >= 6) {
+          const maxDepth = Math.max(...topics.map(t => (t.grounded_prompts || t.sample_prompts || []).length), 1);
+          const batchIdx = modalSampleOffset % maxDepth;
+          const cycBtn = _el('button', 'scenario-cycle-btn', `🔄 Set ${batchIdx + 1}/${maxDepth} · Next 6 ▸`);
+          cycBtn.type = 'button';
+          cycBtn.title = 'Cycle across grounded sample prompts from all RAG entries';
+          cycBtn.onclick = () => {
+            modalSampleOffset = (batchIdx + 1) % maxDepth;
+            renderScenarioKbList();
+          };
+          head.appendChild(cycBtn);
+          for (let k = 0; k < 6; k++) {
+            const t = topics[(k * 2 + batchIdx) % topics.length];
+            const gList = (Array.isArray(t.grounded_prompts) && t.grounded_prompts.length)
+              ? t.grounded_prompts
+              : (t.sample_prompts || []).map(p => ({ doc_id: '', doc_title: '', prompt: p }));
+            if (gList.length) {
+              const gp = gList[batchIdx % gList.length];
+              grid.appendChild(_buildGroundedSampleBtn(gp, 'scenario-sample-btn', t.icon || '💬', true));
+            }
           }
+        } else {
+          const flat = [];
+          topics.forEach((t) => {
+            const gList = (Array.isArray(t.grounded_prompts) && t.grounded_prompts.length)
+              ? t.grounded_prompts
+              : (t.sample_prompts || []).map(p => ({ doc_id: '', doc_title: '', prompt: p }));
+            gList.forEach(gp => flat.push({ icon: t.icon || '💬', gp }));
+          });
+          const pageSize = 6;
+          const alignedStart = flat.length > 0 ? (Math.floor((modalSampleOffset % flat.length) / pageSize) * pageSize) : 0;
+          const shown = flat.slice(alignedStart, alignedStart + pageSize);
+          if (flat.length > pageSize) {
+            const cycBtn = _el('button', 'scenario-cycle-btn', `🔄 ${alignedStart + 1}–${alignedStart + shown.length} / ${flat.length} · Next ▸`);
+            cycBtn.type = 'button';
+            cycBtn.onclick = () => {
+              modalSampleOffset = (alignedStart + pageSize >= flat.length) ? 0 : (alignedStart + pageSize);
+              renderScenarioKbList();
+            };
+            head.appendChild(cycBtn);
+          }
+          shown.forEach(item => grid.appendChild(_buildGroundedSampleBtn(item.gp, 'scenario-sample-btn', item.icon, true)));
         }
-        picked.forEach((item) => {
-          const b = _el('button', 'scenario-sample-btn', `${item.icon} “${item.text}”`);
-          b.type = 'button';
-          b.onclick = () => _applyScenarioSamplePrompt(item.text, true);
-          grid.appendChild(b);
-        });
+        sampleBoxEl.appendChild(head);
+        sampleBoxEl.appendChild(_el(
+          'div',
+          'scenario-sample-desc',
+          'Every prompt below maps 1-to-1 to a real RAG entry [id]. Click a topic pill above for domain-specific prompts, or click any question to fill Chat:'
+        ));
+        sampleBoxEl.appendChild(grid);
       } else {
         const activeT = topics.find(t => t.category === selectedScenarioTopic);
         if (activeT) {
-          head.appendChild(_el('span', 'scenario-sample-title', `${activeT.icon || '📌'} ${activeT.category} — Sample Questions`));
-          head.appendChild(_el('span', 'scenario-sample-desc', activeT.summary || 'Click any prompt to test in Chat:'));
-          (activeT.sample_prompts || []).forEach((pText) => {
-            const b = _el('button', 'scenario-sample-btn', `💬 “${pText}”`);
-            b.type = 'button';
-            b.onclick = () => _applyScenarioSamplePrompt(pText, true);
-            grid.appendChild(b);
+          const gList = (Array.isArray(activeT.grounded_prompts) && activeT.grounded_prompts.length)
+            ? activeT.grounded_prompts
+            : (activeT.sample_prompts || []).map(p => ({ doc_id: '', doc_title: '', prompt: p }));
+          const pageSize = 4;
+          const total = gList.length;
+          const alignedStart = total > 0 ? (Math.floor((modalSampleOffset % total) / pageSize) * pageSize) : 0;
+          const shown = gList.slice(alignedStart, alignedStart + pageSize);
+          const end = alignedStart + shown.length;
+          head.appendChild(_el(
+            'span',
+            'scenario-sample-title',
+            `${activeT.icon || '📌'} ${activeT.category} — Grounded Questions (${alignedStart + 1}–${end} of ${total})`
+          ));
+          if (total > pageSize) {
+            const cycBtn = _el('button', 'scenario-cycle-btn', `🔄 ${alignedStart + 1}–${end} / ${total} · Next ▸`);
+            cycBtn.type = 'button';
+            cycBtn.title = `Cycle through all ${total} grounded RAG questions in ${activeT.category}`;
+            cycBtn.onclick = () => {
+              modalSampleOffset = (alignedStart + pageSize >= total) ? 0 : (alignedStart + pageSize);
+              renderScenarioKbList();
+            };
+            head.appendChild(cycBtn);
+          }
+          sampleBoxEl.appendChild(head);
+          sampleBoxEl.appendChild(_el('div', 'scenario-sample-desc', activeT.summary || 'Derived strictly from RAG entries in this domain:'));
+          shown.forEach((gp) => {
+            grid.appendChild(_buildGroundedSampleBtn(gp, 'scenario-sample-btn', '💬', true));
           });
+          sampleBoxEl.appendChild(grid);
         }
       }
-      sampleBoxEl.appendChild(head);
-      sampleBoxEl.appendChild(grid);
     } else {
       sampleBoxEl.classList.add('hidden');
     }
@@ -4315,18 +4471,18 @@ function renderScenarioKbList() {
       return false;
     }
     if (!kw) return true;
-    return `${d.category || ''} ${d.title || ''} ${d.location || ''} ${d.summary || ''}`
+    return `${d.id || ''} ${d.category || ''} ${d.title || ''} ${d.location || ''} ${d.summary || ''} ${d.sample_question || ''}`
       .toLowerCase()
       .includes(kw);
   });
 
   if (metaEl) {
     const scopeLabel = selectedScenarioTopic === 'ALL'
-      ? `across ${topics.length || 1} topic domains`
+      ? `across ${topics.length || 1} topic domain${topics.length === 1 ? '' : 's'}`
       : `in "${selectedScenarioTopic}"`;
     metaEl.textContent = kw
       ? `Showing ${filtered.length} of ${allDocs.length} RAG entries matching "${kw}" ${scopeLabel}`
-      : `Showing ${filtered.length} of ${allDocs.length} RAG entries ${scopeLabel} (click any entry to inspect policy details & linked waypoint)`;
+      : `Showing ${filtered.length} of ${allDocs.length} RAG entries ${scopeLabel} (click any entry to inspect policy details, grounded prompt & waypoint)`;
   }
 
   listEl.innerHTML = '';
@@ -4337,6 +4493,9 @@ function renderScenarioKbList() {
   filtered.forEach((doc) => {
     const det = _el('details', 'scenario-kb-item');
     const sum = document.createElement('summary');
+    if (doc.id) {
+      sum.appendChild(_el('span', 'scenario-kb-id', `[${doc.id}]`));
+    }
     if (doc.category) {
       const shortCat = String(doc.category).split(/\s*\(/)[0].trim();
       const catEl = _el('span', 'scenario-kb-cat', shortCat || doc.category);
@@ -4353,15 +4512,16 @@ function renderScenarioKbList() {
 
     const body = _el('div', 'scenario-kb-body');
     body.appendChild(_el('div', '', doc.summary || doc.content || ''));
+    const qText = _sampleQuestionForDoc(doc);
+    body.appendChild(_el('div', 'scenario-kb-q', `💬 Grounded Prompt: “${qText}”`));
     const actions = _el('div', 'scenario-kb-actions');
     const wpInfo = doc.waypoint ? `🧭 Linked Waypoint: ${doc.waypoint}` : '';
     actions.appendChild(_el('span', 'config-help-text', wpInfo));
-    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 Try Sample Question');
+    const askBtn = _el('button', 'scenario-kb-ask-btn', '💬 Try Grounded Question');
     askBtn.type = 'button';
     askBtn.onclick = (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      const qText = _sampleQuestionForDoc(doc, selectedScenarioId);
       _applyScenarioSamplePrompt(qText, true);
     };
     actions.appendChild(askBtn);
@@ -4386,7 +4546,7 @@ function renderScenarioPanel() {
     card.dataset.scenarioId = sc.id;
     const top = _el('div', 'scenario-card-top');
     top.appendChild(_el('span', 'scenario-card-title', sc.badge || sc.name));
-    const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '').length;
+    const customCnt = _parseCustomKbPreview(scenarioCustomKbMap[sc.id] || '', sc.id).length;
     const totalCnt = (sc.documents ? sc.documents.length : (sc.doc_count || 0)) + customCnt;
     top.appendChild(_el('span', 'scenario-card-badge', totalCnt > 0 ? `${totalCnt} RAG Docs` : 'General'));
     card.appendChild(top);
@@ -4459,6 +4619,8 @@ async function selectScenario(scenarioId) {
   if (prevScenario !== selectedScenarioId) {
     selectedScenarioTopic = 'ALL';
     selectedChatGuideTopic = '';
+    chatGuidePromptOffset = 0;
+    modalSampleOffset = 0;
     const filterEl = document.getElementById('scenario-kb-filter');
     if (filterEl) filterEl.value = '';
   }

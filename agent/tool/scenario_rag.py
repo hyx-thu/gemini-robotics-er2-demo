@@ -2,12 +2,15 @@
 
 Provides selectable industry scenarios (e.g. Cymbal Hospital outpatient triage
 concierge, Cymbal Bank flagship branch lobby manager), scenario-specific
-navigation waypoints, concise persona prompt blocks, and a fast hybrid RAG
+navigation waypoints, concise persona prompt blocks, programmatic RAG-grounded
+topic synthesis (`build_topic_guide_from_documents`), and a fast hybrid RAG
 retriever (`search_knowledge_base`) combining:
   1. Field-weighted BM25 over English words, CJK unigrams/bigrams, and
-     bilingual colloquial query-expansion synonyms (<1 ms, zero network deps).
+     bilingual colloquial query-expansion synonyms (<2 ms, zero network deps),
+     with salient-token out-of-KB rejection and unmatched-term detection so the
+     model never fabricates ungrounded policies.
   2. Optional semantic vector similarity (`text-embedding-005` on Vertex AI
-     `us-central1` with in-memory chunk caching and 1.0s timeout guard), fused
+     `us-central1` with in-memory chunk caching and timeout guard), fused
      with BM25 via Reciprocal Rank Fusion (RRF).
 """
 
@@ -36,6 +39,33 @@ _KNOWLEDGE_FILE = os.path.join(
     "knowledge",
     "scenarios.json",
 )
+
+# Visual icons per category (topic metadata is 100% derived from `documents`).
+_CATEGORY_ICONS: dict[str, str] = {
+    "Custom Knowledge": "📝",
+    # Cymbal Hospital (10 Medical Domains)
+    "Registration & Billing": "🪪",
+    "Lab & Phlebotomy": "🩸",
+    "Symptom Triage & Navigation": "🧭",
+    "Radiology, Ultrasound & Endoscopy": "☢️",
+    "Pharmacy & Prescriptions": "💊",
+    "Maternity, Pediatrics & Vaccines": "👶",
+    "Dental, Eye, ENT & Rehab": "🦷",
+    "Inpatient, Surgery & Day Care": "🛏️",
+    "Health Checkups & Medical Records": "📋",
+    "24/7 Emergency & Campus Amenities": "🚑",
+    # Cymbal Bank (10 Banking Domains)
+    "Lobby Routing & Smart Kiosks": "🏛️",
+    "Cards & Personal Accounts": "💳",
+    "Savings, CDs & Sovereign Bonds": "🏦",
+    "Wealth Management & Bullion": "📈",
+    "Cash, Coins & Foreign Exchange": "💱",
+    "Loans, Mortgages & Credit Cards": "🏠",
+    "Statements, Certificates & Credit": "📄",
+    "Utility, Tax & Municipal Pay": "🧾",
+    "Corporate & SME Banking": "🏢",
+    "Security, Accessibility & Special Care": "🛡️",
+}
 
 # Colloquial bilingual synonym clusters so natural visitor phrasing (in either
 # English or Chinese) hits exact English policy chunks even before vector RRF.
@@ -114,6 +144,39 @@ _STOP_WORDS = frozenset({
     "who", "why", "will", "with", "work", "would", "you", "your",
 })
 
+# Generic venue / conversational framing tokens that appear in almost any query
+# ("Can I buy X at the counter?", "Do you offer Y at the hospital?") and MUST NOT
+# by themselves trigger a false-positive RAG match when no domain-specific token
+# matches any document.
+_GENERIC_FRAMING_TOKENS = frozenset({
+    "cymbal", "hospital", "medical", "center", "clinic", "clinics",
+    "patient", "patients", "doctor", "doctors", "nurse", "nurses",
+    "bank", "banking", "branch", "flagship", "client", "clients",
+    "customer", "customers", "visitor", "visitors", "person", "people",
+    "lobby", "hall", "counter", "counters", "window", "windows",
+    "desk", "room", "rooms", "zone", "area", "wing", "east", "west",
+    "north", "south", "central", "level", "building", "tower",
+    "buy", "sell", "open", "apply", "book", "make", "check", "find",
+    "use", "offer", "provide", "available", "support", "handle",
+    "service", "services", "rule", "rules", "policy", "policies",
+    "process", "procedure", "guide", "info", "information", "detail",
+    "details", "question", "help", "ask", "know", "explain", "about",
+    "here", "today", "now", "state", "regarding", "knowledge", "base",
+    "package", "packages", "perform", "plan", "plans",
+})
+
+# Common Chinese conversational/venue framing phrases stripped when identifying
+# unmatched out-of-scope CJK terms in partial-overlap visitor questions.
+_CJK_FRAMING_PHRASES: tuple[str, ...] = (
+    "请问一下", "想问一下", "帮我查下", "帮我看下", "能不能", "可以吗", "有没有",
+    "卖不卖", "办不办", "支持吗", "需要注意什么", "需要注意", "怎么办理",
+    "请问", "你们", "我们", "咱们", "这里", "那边", "医院", "银行", "网点",
+    "支行", "柜台", "窗口", "大厅", "门诊", "服务", "业务", "可以", "是否",
+    "怎么", "哪里", "在哪", "去哪", "什么", "多少", "需要", "支持", "提供",
+    "办理", "一下", "现在", "今天", "请问",
+)
+_CJK_FRAMING_CHARS = frozenset("吗呢啊吧呀的了和跟与或在有是能会要想去到给把被做办打看买卖不没多几哪")
+
 _TOKEN_RE = re.compile(r"[a-z0-9_]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 _CJK_RUN_RE = re.compile(r"^[\u4e00-\u9fff]+$")
 
@@ -121,6 +184,79 @@ _scenarios_cache: dict[str, dict[str, Any]] | None = None
 _embed_lock = threading.Lock()
 _embed_cache: dict[str, list[float]] = {}
 _embed_disabled: bool = False
+
+
+def derive_question_from_doc(doc: dict[str, Any]) -> str:
+  """Return a strictly document-grounded sample question for `doc`.
+
+  Uses the verified `sample_question` stored on built-in RAG entries, or builds
+  a pure title-scoped prompt for user-entered custom RAG notes without adding
+  any unbacked assumptions.
+  """
+  sq = str(doc.get("sample_question") or "").strip()
+  if sq:
+    return sq
+  title = re.sub(r"…+$", "", str(doc.get("title") or "this entry")).strip()
+  if not title:
+    title = "this entry"
+  if title.endswith("?"):
+    return title
+  return f"What does the knowledge base state regarding {title}?"
+
+
+def build_topic_guide_from_documents(
+    docs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Programmatically derive Topic Scopes & Sample Prompts strictly from `docs`.
+
+  Every topic category, summary, and sample question is aggregated directly
+  from the actual RAG `documents` so UI topic scopes can never drift or invent
+  topics absent from the RAG knowledge base.
+  """
+  if not docs:
+    return []
+
+  grouped: dict[str, list[dict[str, Any]]] = {}
+  for d in docs:
+    cat = str(d.get("category") or "General").strip() or "General"
+    grouped.setdefault(cat, []).append(d)
+
+  topics: list[dict[str, Any]] = []
+  for cat, cat_docs in grouped.items():
+    short_titles: list[str] = []
+    for d in cat_docs[:4]:
+      raw_t = str(d.get("title") or "").strip()
+      short_t = re.split(r"\s*(?:[:(—]|–)\s*", raw_t)[0].strip()
+      if short_t:
+        short_titles.append(short_t)
+    more_cnt = max(0, len(cat_docs) - len(short_titles))
+    more_suffix = f" (+{more_cnt} more)" if more_cnt > 0 else ""
+    entry_word = "entry" if len(cat_docs) == 1 else "entries"
+    summary = (
+        f"{len(cat_docs)} RAG {entry_word}: "
+        + " · ".join(short_titles)
+        + more_suffix
+    )
+
+    grounded_prompts = [
+        {
+            "doc_id": str(d.get("id") or ""),
+            "doc_title": str(d.get("title") or ""),
+            "location": str(d.get("location") or ""),
+            "prompt": derive_question_from_doc(d),
+        }
+        for d in cat_docs
+    ]
+    topics.append({
+        "category": cat,
+        "icon": _CATEGORY_ICONS.get(cat, "📌"),
+        "doc_count": len(cat_docs),
+        "doc_ids": [str(d.get("id") or "") for d in cat_docs],
+        "summary": summary,
+        "sample_prompts": [gp["prompt"] for gp in grounded_prompts],
+        "grounded_prompts": grounded_prompts,
+    })
+  return topics
 
 
 def _load_scenarios_map() -> dict[str, dict[str, Any]]:
@@ -193,7 +329,7 @@ def parse_custom_kb(custom_kb: str, scenario_id: str = "") -> list[dict[str, Any
     if len(summary) > 180:
       summary = summary[:179].rstrip() + "…"
     kw_tokens = list(dict.fromkeys(_tokenize(f"{title} {body}")))[:15]
-    chunks.append({
+    doc_entry: dict[str, Any] = {
         "id": f"custom_{scenario_id or 'kb'}_{idx + 1}",
         "category": "Custom Knowledge",
         "title": title,
@@ -203,7 +339,9 @@ def parse_custom_kb(custom_kb: str, scenario_id: str = "") -> list[dict[str, Any
         "summary": summary,
         "content": body,
         "is_custom": True,
-    })
+    }
+    doc_entry["sample_question"] = derive_question_from_doc(doc_entry)
+    chunks.append(doc_entry)
   return chunks
 
 
@@ -221,6 +359,7 @@ def get_scenario(
   if extra:
     docs = extra + docs
   base["documents"] = docs
+  base["topic_guide"] = build_topic_guide_from_documents(docs)
   if (custom_persona or "").strip():
     base["custom_persona"] = custom_persona.strip()
   return base
@@ -236,10 +375,11 @@ def get_scenario_waypoints(scenario_id: str | None) -> list[str] | None:
 
 
 def list_scenarios() -> list[dict[str, Any]]:
-  """Return all scenarios with lightweight document catalogs for the UI."""
+  """Return all scenarios with lightweight document catalogs & derived topics."""
   smap = _load_scenarios_map()
   out = []
   for sid, sc in smap.items():
+    raw_docs = list(sc.get("documents") or [])
     docs = [
         {
             "id": d.get("id", ""),
@@ -248,8 +388,9 @@ def list_scenarios() -> list[dict[str, Any]]:
             "location": d.get("location", ""),
             "waypoint": d.get("waypoint", ""),
             "summary": d.get("summary", ""),
+            "sample_question": derive_question_from_doc(d),
         }
-        for d in (sc.get("documents") or [])
+        for d in raw_docs
     ]
     subtitle = sc.get("subtitle", sc.get("label_zh", sc.get("name", sid)))
     out.append({
@@ -262,7 +403,7 @@ def list_scenarios() -> list[dict[str, Any]]:
         "role": sc.get("role", ""),
         "persona_prompt": sc.get("persona_prompt", ""),
         "waypoints": list(sc.get("waypoints") or []),
-        "topic_guide": list(sc.get("topic_guide") or []),
+        "topic_guide": build_topic_guide_from_documents(docs),
         "doc_count": len(docs),
         "documents": docs,
     })
@@ -296,12 +437,15 @@ def build_scenario_persona_block(
   ]
   if persona_text:
     parts.append(persona_text)
-  elif has_custom_kb:
+  if cp or (sid == DEFAULT_SCENARIO_ID and has_custom_kb):
     parts.append(
-        "Whenever a visitor asks about venue policies, service workflows, floor"
+        "- **Mandatory RAG Grounding & Zero-Hallucination Rule**: Whenever a"
+        " visitor asks about venue policies, service workflows, floor"
         " locations, or operating hours, call `search_knowledge_base` first and"
-        " answer strictly based on the retrieved knowledge entries in the"
-        " visitor's own language."
+        " answer strictly from the retrieved `matches` in the visitor's own"
+        " language. If `grounded` is `false` or a detail is absent from"
+        " `matches`, state clearly that it is not in the active knowledge base"
+        " rather than guessing or inventing details."
     )
   if wp_line:
     parts.append(wp_line)
@@ -329,7 +473,8 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " Dental/Eye/ENT & Rehab, Inpatient/Surgery & Day Care, Health Checkups"
         " & Medical Records, and 24/7 Emergency & Campus Amenities. Always call"
         " this tool before answering any hospital policy, floor/window,"
-        " preparation, or fee question."
+        " preparation, or fee question, and never invent facts outside returned"
+        " matches."
     )
     query_desc = (
         "The patient or visitor's question or keywords, e.g. 'where to pay my"
@@ -355,7 +500,7 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " Utility/Tax & Municipal Pay, Corporate & SME Banking, and"
         " Security/Accessibility & Special Care. Always call this tool before"
         " answering any banking product, rate, threshold, document, or counter"
-        " routing question."
+        " routing question, and never invent facts outside returned matches."
     )
     query_desc = (
         "The client's banking question or keywords, e.g. 'R2 fixed-income"
@@ -377,7 +522,7 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " grounded venue service guides, workflows, floor/counter locations,"
         " fee schedules, policy rules, and associated navigation waypoints."
         " Always call this tool before answering venue-specific policy or"
-        " workflow questions."
+        " workflow questions, and never invent facts outside returned matches."
     )
     query_desc = "The visitor's full question or key search terms."
     cat_desc = "Optional knowledge category filter hint."
@@ -404,7 +549,7 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Hybrid Tokenizer + Synonym Expansion + BM25 + Optional Vector RRF
+# Hybrid Tokenizer + Synonym Expansion + Salient BM25 + Optional Vector RRF
 # ---------------------------------------------------------------------------
 
 
@@ -424,6 +569,19 @@ def _tokenize(text: str) -> list[str]:
   return tokens
 
 
+def _is_salient_token(tok: str) -> bool:
+  """Return True when `tok` carries specific topic meaning rather than generic framing."""
+  if not tok:
+    return False
+  if _CJK_RUN_RE.match(tok):
+    if len(tok) == 1 and tok in _CJK_FRAMING_CHARS:
+      return False
+    if tok in _CJK_FRAMING_PHRASES:
+      return False
+    return True
+  return tok not in _GENERIC_FRAMING_TOKENS
+
+
 def _term_matches_query(term: str, q_low: str, token_set: set[str]) -> bool:
   """Check if a synonym term appears in query (whole-token for ASCII, substring for CJK)."""
   if _CJK_RUN_RE.search(term):
@@ -434,18 +592,32 @@ def _term_matches_query(term: str, q_low: str, token_set: set[str]) -> bool:
   return term in token_set
 
 
-def _expand_query_tokens(query: str, base_tokens: list[str]) -> dict[str, float]:
-  """Return weighted query terms (original terms = 1.0, synonym expansions = 0.45)."""
+def _expand_query_tokens(
+    query: str,
+    base_tokens: list[str],
+    salient_only: bool = False,
+) -> dict[str, float]:
+  """Return weighted query terms (original = 1.0, generic = 0.2, synonyms = 0.45)."""
   weights: dict[str, float] = {}
   for tok in base_tokens:
-    weights[tok] = weights.get(tok, 0.0) + 1.0
+    is_sal = _is_salient_token(tok)
+    if salient_only and not is_sal:
+      continue
+    w = 1.0 if is_sal else 0.2
+    weights[tok] = weights.get(tok, 0.0) + w
 
   q_low = (query or "").lower()
-  token_set = set(base_tokens)
+  token_set = (
+      {t for t in base_tokens if _is_salient_token(t)}
+      if salient_only
+      else set(base_tokens)
+  )
   for group in _SYNONYM_GROUPS:
     if any(_term_matches_query(term, q_low, token_set) for term in group):
       for syn in group:
         for st in _tokenize(syn.replace("_", " ")):
+          if salient_only and not _is_salient_token(st):
+            continue
           if st not in weights:
             weights[st] = 0.45
   return weights
@@ -500,13 +672,14 @@ def _bm25_scores(
     query: str,
     category: str,
     docs: list[dict[str, Any]],
+    salient_only: bool = False,
 ) -> list[float]:
   """Compute field-weighted BM25 + exact phrase bonus across scenario chunks."""
   if not docs:
     return []
   combined_q = f"{query} {category}".strip()
   base_q_tokens = _tokenize(combined_q)
-  q_weights = _expand_query_tokens(combined_q, base_q_tokens)
+  q_weights = _expand_query_tokens(combined_q, base_q_tokens, salient_only=salient_only)
   if not q_weights:
     return [0.0 for _ in docs]
 
@@ -518,6 +691,11 @@ def _bm25_scores(
   b = 0.72
   q_low = (query or "").lower().strip()
   cat_low = (category or "").lower().strip()
+  base_tok_set = (
+      {t for t in base_q_tokens if _is_salient_token(t)}
+      if salient_only
+      else set(base_q_tokens)
+  )
 
   scores: list[float] = []
   for idx, d in enumerate(docs):
@@ -534,10 +712,11 @@ def _bm25_scores(
       score += qw * idf * ((f * (k1 + 1.0)) / denom)
 
     # Exact keyword / phrase hit bonus (whole-word for ASCII, substring for CJK)
-    base_tok_set = set(base_q_tokens)
     for kw in d.get("keywords") or []:
       kw_l = str(kw).lower().strip()
       if len(kw_l) < 2:
+        continue
+      if salient_only and kw_l in _GENERIC_FRAMING_TOKENS:
         continue
       if _CJK_RUN_RE.search(kw_l):
         hit = kw_l in q_low
@@ -548,13 +727,85 @@ def _bm25_scores(
       if hit:
         score += 3.5
     if q_low and len(q_low) >= 3 and q_low in str(d.get("title", "")).lower():
-      score += 4.0
+      if not salient_only or q_low not in _GENERIC_FRAMING_TOKENS:
+        score += 4.0
     if cat_low and cat_low in str(d.get("category", "")).lower() and score > 0:
       score *= 1.15
     if d.get("is_custom") and score > 0:
       score *= 1.45
     scores.append(score)
   return scores
+
+
+def _find_unmatched_query_terms(
+    query: str,
+    selected_indices: list[int],
+    docs: list[dict[str, Any]],
+) -> list[str]:
+  """Identify salient visitor query terms not covered by the retrieved `matches`."""
+  q_low = (query or "").lower()
+  doc_term_freqs, _, _ = _get_or_build_bm25_index(docs)
+  covered_doc_tokens: set[str] = set()
+  for idx in selected_indices:
+    covered_doc_tokens.update(doc_term_freqs[idx].keys())
+
+  raw_ascii: list[str] = []
+  raw_cjk_runs: list[str] = []
+  for raw in _TOKEN_RE.findall(q_low):
+    if _CJK_RUN_RE.match(raw):
+      raw_cjk_runs.append(raw)
+    elif raw not in _STOP_WORDS and _is_salient_token(raw):
+      raw_ascii.append(raw)
+
+  # Which synonym groups matched the query AND also hit at least one selected doc?
+  ascii_set = set(raw_ascii)
+  covered_groups: list[tuple[str, ...]] = []
+  for grp in _SYNONYM_GROUPS:
+    if any(_term_matches_query(t, q_low, ascii_set) for t in grp):
+      grp_toks: set[str] = set()
+      for syn in grp:
+        grp_toks.update(_tokenize(syn.replace("_", " ")))
+      if grp_toks & covered_doc_tokens:
+        covered_groups.append(grp)
+
+  covered_ascii_syns: set[str] = set()
+  covered_cjk_phrases: list[str] = []
+  for grp in covered_groups:
+    for syn in grp:
+      if _CJK_RUN_RE.search(syn):
+        covered_cjk_phrases.append(syn)
+      else:
+        covered_ascii_syns.update(_tokenize(syn.replace("_", " ")))
+
+  unmatched: list[str] = []
+  for tok in raw_ascii:
+    if len(tok) < 3 or tok.isdigit():
+      continue
+    if tok in covered_doc_tokens or tok in covered_ascii_syns:
+      continue
+    # Simple singular/plural stem check
+    stem = tok[:-1] if tok.endswith("s") and len(tok) > 4 else tok
+    if stem in covered_doc_tokens or f"{tok}s" in covered_doc_tokens:
+      continue
+    if tok not in unmatched:
+      unmatched.append(tok)
+
+  # CJK residual check: strip matched synonym phrases + framing phrases/chars
+  covered_cjk_sorted = sorted(set(covered_cjk_phrases), key=len, reverse=True)
+  for run in raw_cjk_runs:
+    rem = run
+    for ph in covered_cjk_sorted:
+      if ph in rem:
+        rem = rem.replace(ph, " ")
+    for fp in _CJK_FRAMING_PHRASES:
+      if fp in rem:
+        rem = rem.replace(fp, " ")
+    for part in rem.split():
+      cleaned = "".join(ch for ch in part if ch not in _CJK_FRAMING_CHARS)
+      if len(cleaned) >= 2 and cleaned not in covered_doc_tokens:
+        if cleaned not in unmatched:
+          unmatched.append(cleaned)
+  return unmatched[:6]
 
 
 def _vertex_embed_batch(texts: list[str], timeout_s: float = 1.1) -> list[list[float]] | None:
@@ -631,9 +882,9 @@ def run_rag_tool(
     args: dict[str, Any],
     scenario_id: str | None,
     custom_kb: str = "",
-    top_k: int = 3,
+    top_k: int = 4,
 ) -> dict[str, Any]:
-  """Execute `search_knowledge_base` and return top-K grounded chunks."""
+  """Execute `search_knowledge_base` and return strictly grounded chunks."""
   t0 = time.monotonic()
   query = str((args or {}).get("query") or "").strip()
   category = str((args or {}).get("category") or "").strip()
@@ -647,15 +898,18 @@ def run_rag_tool(
         "scenario": sc.get("id", DEFAULT_SCENARIO_ID),
         "organization": sc.get("organization", ""),
         "query": query,
+        "grounded": False,
         "matches": [],
         "note": "No scenario knowledge base entries are configured in this session.",
     }
 
-  bm25 = _bm25_scores(query, category, docs)
-  bm25_order = sorted(range(len(docs)), key=lambda i: bm25[i], reverse=True)
+  bm25 = _bm25_scores(query, category, docs, salient_only=False)
+  salient_bm25 = _bm25_scores(query, category, docs, salient_only=True)
+  bm25_order = sorted(range(len(docs)), key=lambda i: (salient_bm25[i], bm25[i]), reverse=True)
   bm25_rank = {doc_idx: rank for rank, doc_idx in enumerate(bm25_order)}
 
   retrieval_mode = "bm25_ngram"
+  cos_scores = [0.0 for _ in docs]
   vec_texts = [
       f"{d.get('title', '')} | {d.get('category', '')} | {d.get('summary', '')} | {' '.join(d.get('keywords') or [])}"
       for d in docs
@@ -666,10 +920,10 @@ def run_rag_tool(
     cos_scores = [_cosine(q_vec, dv) for dv in all_vecs[1:]]
     cos_order = sorted(range(len(docs)), key=lambda i: cos_scores[i], reverse=True)
     cos_rank = {doc_idx: rank for rank, doc_idx in enumerate(cos_order)}
-    # Reciprocal Rank Fusion (BM25 weight 1.15 + Semantic Vector weight 1.0)
+    # Reciprocal Rank Fusion (Salient BM25 weight 1.15 + Semantic Vector weight 1.0)
     fused = [
         1.15 / (12.0 + bm25_rank[i])
-        + (0.015 if bm25[i] > 0 else 0.0)
+        + (0.015 if salient_bm25[i] > 0 else 0.0)
         + 1.0 / (12.0 + cos_rank[i])
         + 0.08 * max(cos_scores[i], 0.0)
         for i in range(len(docs))
@@ -679,18 +933,67 @@ def run_rag_tool(
   else:
     ranked = bm25_order
 
-  # Select top_k relevant chunks (keep at least top 1 even if phrasing was broad)
+  max_salient = max(salient_bm25) if salient_bm25 else 0.0
+  max_cos = max(cos_scores) if cos_scores else 0.0
+  top1_unmatched = _find_unmatched_query_terms(query, ranked[:1] if ranked else [], docs)
+  # Reject out-of-KB queries when NO salient domain token matches any entry, OR
+  # when a multi-term query only hits one weak accidental word while >=3 salient
+  # terms are completely absent from the KB (unless rescued by vector >= 0.78).
+  weak_accidental_overlap = len(top1_unmatched) >= 3 and max_salient < 9.5
+  is_grounded = (max_salient >= 1.2 and not weak_accidental_overlap) or (
+      retrieval_mode == "hybrid_vector_bm25" and max_cos >= 0.78
+  )
+
+  if not is_grounded:
+    unmatched = _find_unmatched_query_terms(query, [], docs)
+    latency_ms = int(round((time.monotonic() - t0) * 1000))
+    return {
+        "scenario": sc.get("id", DEFAULT_SCENARIO_ID),
+        "badge": sc.get("badge", ""),
+        "organization": sc.get("organization", ""),
+        "role": sc.get("role", ""),
+        "query": query,
+        "grounded": False,
+        "retrieval_mode": retrieval_mode,
+        "latency_ms": latency_ms,
+        "matches": [],
+        "unmatched_query_terms": unmatched,
+        "available_topics": [
+            t["category"] for t in (sc.get("topic_guide") or [])
+        ],
+        "available_waypoints": list(sc.get("waypoints") or []),
+        "instruction": (
+            "NO_RAG_MATCH: The visitor's requested topic is NOT present in the"
+            f" {sc.get('organization') or 'active venue'} RAG knowledge base."
+            " Do NOT invent, guess, or extrapolate any policy, floor, counter,"
+            " rate, or fee. Politely inform the visitor in their own language"
+            " that this specific service/topic is not in the current knowledge"
+            " base, mention supported service categories if helpful, or refer"
+            " them to the 1F staffed reception desk / official hotline."
+        ),
+    }
+
   selected: list[dict[str, Any]] = []
-  max_bm25 = max(bm25) if bm25 else 0.0
+  selected_indices: list[int] = []
   for rank_pos, idx in enumerate(ranked[: max(1, top_k)]):
-    if rank_pos > 0 and max_bm25 > 0 and bm25[idx] <= 0.02 * max_bm25 and retrieval_mode == "bm25_ngram":
-      continue
+    if rank_pos > 0:
+      if (
+          retrieval_mode == "bm25_ngram"
+          and (salient_bm25[idx] < 1.5 or salient_bm25[idx] < 0.18 * max_salient)
+      ):
+        continue
+      if (
+          retrieval_mode == "hybrid_vector_bm25"
+          and salient_bm25[idx] < 1.2
+          and cos_scores[idx] < 0.72
+      ):
+        continue
     d = docs[idx]
-    norm_score = (
-        round(min(0.99, 0.55 + 0.44 * (bm25[idx] / max(max_bm25, 1.0))), 2)
-        if max_bm25 > 0
-        else 0.60
-    )
+    # Honest calibrated score (saturation curve rather than blind max-ratio 0.99)
+    s_val = salient_bm25[idx]
+    vec_bonus = 0.22 * max(cos_scores[idx] - 0.55, 0.0) if retrieval_mode == "hybrid_vector_bm25" else 0.0
+    norm_score = round(min(0.99, max(0.18, (s_val / (s_val + 6.5)) + vec_bonus)), 2)
+    selected_indices.append(idx)
     selected.append({
         "id": d.get("id", ""),
         "category": d.get("category", ""),
@@ -702,21 +1005,34 @@ def run_rag_tool(
         "score": norm_score,
     })
 
+  unmatched = _find_unmatched_query_terms(query, selected_indices, docs)
   latency_ms = int(round((time.monotonic() - t0) * 1000))
+  unmatched_note = (
+      f" Note: query terms {unmatched} do NOT appear in `matches`—do NOT assume"
+      " or fabricate coverage for those unmentioned terms; clarify strictly"
+      " what `matches` covers."
+      if unmatched
+      else ""
+  )
   return {
       "scenario": sc.get("id", DEFAULT_SCENARIO_ID),
       "badge": sc.get("badge", ""),
       "organization": sc.get("organization", ""),
       "role": sc.get("role", ""),
       "query": query,
+      "grounded": True,
       "retrieval_mode": retrieval_mode,
       "latency_ms": latency_ms,
       "matches": selected,
+      "unmatched_query_terms": unmatched,
       "available_waypoints": list(sc.get("waypoints") or []),
       "instruction": (
-          "Answer the visitor concisely in their own language using ONLY the"
-          " facts in `matches` (state exact floor/window/hours/thresholds/prep"
-          " rules clearly in 1-3 short spoken sentences). If the visitor wants"
-          " to go there, offer to guide them or call navigate(waypoint=...)."
+          "STRICT_RAG_GROUNDING: Answer the visitor concisely in their own"
+          " language using ONLY facts explicitly stated in `matches` (state"
+          " exact floor/window/hours/thresholds/prep rules in 1-3 short spoken"
+          " sentences; NEVER invent or extrapolate unmentioned policies)."
+          + unmatched_note
+          + " If the visitor wants to go there, offer to guide them or call"
+          " navigate(waypoint=...)."
       ),
   }

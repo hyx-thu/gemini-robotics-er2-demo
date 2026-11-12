@@ -3312,9 +3312,97 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   color: #ceead6;
 }
 .scenario-chat-topic-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   font-size: 10.8px;
   color: var(--text-secondary);
   line-height: 1.35;
+}
+.scenario-chat-summary-text {
+  min-width: 0;
+  flex: 1;
+}
+.scenario-cycle-btn {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.13s ease;
+}
+.scenario-cycle-btn:hover {
+  color: var(--text-primary);
+  border-color: #1a73e8;
+  background: rgba(26, 115, 232, 0.08);
+}
+.sample-doc-id,
+.scenario-kb-id,
+.kb-item-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(26, 115, 232, 0.11);
+  color: #174ea6;
+  flex-shrink: 0;
+}
+.scenario-chat-guide.scenario-hospital .sample-doc-id,
+.kb-hospital .kb-item-id {
+  background: rgba(19, 115, 51, 0.12);
+  color: #0d652d;
+}
+.dark-theme .sample-doc-id,
+.dark-theme .scenario-kb-id,
+.dark-theme .kb-item-id {
+  background: rgba(138, 180, 248, 0.18);
+  color: #8ab4f8;
+}
+.dark-theme .scenario-chat-guide.scenario-hospital .sample-doc-id,
+.dark-theme .kb-hospital .kb-item-id {
+  background: rgba(129, 201, 149, 0.18);
+  color: #81c995;
+}
+.scenario-kb-q {
+  font-size: 11.3px;
+  color: var(--text-primary);
+  background: rgba(26, 115, 232, 0.05);
+  border-left: 2.5px solid rgba(26, 115, 232, 0.45);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.rich-card.kb-card.kb-card-ungrounded {
+  border-left-color: #d93025;
+}
+.kb-badge-guard {
+  background: rgba(217, 48, 37, 0.12);
+  color: #c5221f;
+}
+.dark-theme .kb-badge-guard {
+  background: rgba(242, 139, 130, 0.18);
+  color: #f28b82;
+}
+.kb-empty-guard {
+  font-size: 11.5px;
+  line-height: 1.42;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(217, 48, 37, 0.06);
+  border: 1px dashed rgba(217, 48, 37, 0.35);
+  color: var(--text-secondary);
+}
+.kb-unmatched-note {
+  font-size: 10.8px;
+  color: var(--text-secondary);
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(251, 188, 4, 0.12);
 }
 .scenario-chat-sample-list {
   display: flex;

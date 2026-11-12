@@ -288,6 +288,71 @@ class ScenarioRagTest(unittest.TestCase):
     tool_names_bank = [t["name"] for t in cfg_bank["tools"]]
     self.assertIn("search_knowledge_base", tool_names_bank)
 
+  def test_no_standalone_topic_guide_and_all_240_questions_rank_first(self):
+    with open(scenario_rag._KNOWLEDGE_FILE, "r", encoding="utf-8") as f:  # pylint: disable=protected-access
+      raw_file = json.load(f)
+    for sc in raw_file["scenarios"]:
+      self.assertNotIn(
+          "topic_guide",
+          sc,
+          f"Standalone topic_guide must not exist in scenarios.json for {sc['id']}",
+      )
+
+    catalog = {s["id"]: s for s in scenario_rag.list_scenarios()}
+    for sid in ("cymbal_hospital", "cymbal_bank"):
+      sc = catalog[sid]
+      self.assertEqual(len(sc["documents"]), 120)
+      self.assertEqual(len(sc["topic_guide"]), 10)
+      all_doc_ids = {d["id"] for d in sc["documents"]}
+      derived_prompt_ids = set()
+      for t in sc["topic_guide"]:
+        self.assertEqual(t["doc_count"], 12)
+        self.assertEqual(len(t["grounded_prompts"]), 12)
+        for gp in t["grounded_prompts"]:
+          self.assertIn(gp["doc_id"], all_doc_ids)
+          derived_prompt_ids.add(gp["doc_id"])
+      self.assertEqual(derived_prompt_ids, all_doc_ids)
+
+      # Verify 100% 1-to-1 Rank-#1 retrieval across all 120 grounded questions
+      for doc in sc["documents"]:
+        q = doc["sample_question"]
+        self.assertTrue(q, f"Missing sample_question on {doc['id']}")
+        res = scenario_rag.run_rag_tool({"query": q}, sid)
+        self.assertTrue(res["grounded"], f"Expected grounded=True for {doc['id']}: {q}")
+        self.assertEqual(
+            res["matches"][0]["id"],
+            doc["id"],
+            f"Expected {doc['id']} at Rank #1 for {q!r}, got {[m['id'] for m in res['matches']]}",
+        )
+
+  def test_out_of_kb_rejection_and_partial_overlap_guardrails(self):
+    out_of_kb_cases = [
+        ("cymbal_hospital", "你们医院一楼卖高铁票和飞机票吗？"),
+        ("cymbal_hospital", "Do you offer pet grooming and veterinary kennel boarding?"),
+        ("cymbal_hospital", "Can I book airline hotel vacation packages at the desk?"),
+        ("cymbal_bank", "Can I buy Bitcoin and Ethereum NFTs at the counter?"),
+        ("cymbal_bank", "请问你们银行网点可以办理结婚证和护照签证吗？"),
+        ("cymbal_bank", "Do you provide dry cleaning and car wash services in the lobby?"),
+    ]
+    for sid, query in out_of_kb_cases:
+      with self.subTest(sid=sid, query=query):
+        res = scenario_rag.run_rag_tool({"query": query}, sid)
+        self.assertFalse(res["grounded"], f"Expected grounded=False for {query!r}, got {res}")
+        self.assertEqual(res["matches"], [])
+        self.assertIn("NO_RAG_MATCH", res["instruction"])
+
+    partial_cases = [
+        ("cymbal_hospital", "请问你们医院能给宠物狗打疫苗吗？", "宠物狗"),
+        ("cymbal_hospital", "Do you perform cosmetic facelift surgery at the clinic?", "facelift"),
+        ("cymbal_bank", "Can I open a cryptocurrency debit card at a Smart Teller Machine?", "cryptocurrency"),
+    ]
+    for sid, query, expected_unmatched in partial_cases:
+      with self.subTest(sid=sid, query=query):
+        res = scenario_rag.run_rag_tool({"query": query}, sid)
+        self.assertTrue(res["grounded"])
+        self.assertIn(expected_unmatched, res["unmatched_query_terms"])
+        self.assertIn("do NOT appear in `matches`", res["instruction"])
+
 
 if __name__ == "__main__":
   unittest.main()
