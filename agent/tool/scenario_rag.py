@@ -72,47 +72,50 @@ _CATEGORY_ICONS: dict[str, str] = {
 # Kept fine-grained per sub-topic so 120-doc per-scenario catalogs distinguish
 # sibling policies cleanly.
 _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
-    # Hospital — Registration, Billing & Insurance
-    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "门诊缴费", "收费窗口", "pay", "payment", "billing", "cashier", "outpatient_bill", "kiosk"),
-    ("发票", "电子发票", "收据", "费用清单", "报销清单", "打发票", "invoice", "receipt", "itemized"),
-    ("异地医保", "跨省医保", "异地就医", "跨省结算", "cross_region", "filing", "medicare"),
-    ("刷医保", "医保", "医保卡", "医保码", "慢性病医保", "门特", "public_insurance", "medicare", "settlement"),
-    ("商保", "商业保险", "直付", "高端医疗", "commercial_insurance", "direct_billing", "bupa", "cigna", "allianz"),
-    ("挂号", "预约挂号", "加号", "放号", "几点放号", "初诊", "建卡", "register", "registration", "appointment", "booking", "specialist"),
-    ("签到", "报到", "过号", "迟到", "回诊", "看结果", "missed_turn", "check_in", "return_visit"),
-    ("退号", "取消预约", "退费", "退款", "refund", "cancel", "reschedule"),
+    # Hospital — Registration, Billing & International Insurance
+    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "门诊缴费", "收费窗口", "pay", "payment", "billing", "cashier", "outpatient_bill", "kiosk", "apple_pay", "hsa"),
+    ("发票", "电子发票", "收据", "费用清单", "报销清单", "报销明细", "打发票", "superbill", "icd_10", "cpt", "invoice", "receipt", "itemized", "reimbursement"),
+    ("刷医保", "医保", "医保卡", "政府医保", "公费医疗", "院外报销", "自付额", "medicare", "public_health_plan", "out_of_network", "deductible", "eligibility"),
+    ("商保", "商业保险", "国际保险", "直付", "免现金直付", "高端医疗", "担保函", "commercial_insurance", "direct_billing", "gop", "bupa", "cigna", "allianz", "aetna", "unitedhealthcare", "axa"),
+    ("挂号", "预约", "预约挂号", "专家号", "加号", "放号", "当日号", "初诊", "建卡", "病历号", "护照挂号", "appointment", "booking", "scheduling", "specialist", "mrn", "new_patient", "passport"),
+    ("签到", "报到", "过号", "迟到", "回诊", "看结果", "复诊", "missed_turn", "check_in", "late_arrival", "return_visit"),
+    ("退号", "取消预约", "改约", "退费", "退款", "refund", "cancel", "reschedule"),
+    ("慢病管理", "慢性病报销", "年度封顶", "工伤", "车祸", "交通事故", "chronic_care_plan", "out_of_pocket_maximum", "workers_comp", "motor_vehicle_accident"),
     # Hospital — Lab & Phlebotomy
     ("抽血", "采血", "验血", "查血", "化验", "抽血窗口", "blood_draw", "phlebotomy", "venipuncture", "adult"),
     ("空腹", "禁食", "喝水", "几个小时", "肝功", "肾功", "血脂", "fasting", "hours", "water", "lipid", "liver"),
-    ("儿童抽血", "小孩抽血", "指尖血", "末梢血", "血常规", "fingerstick", "pediatric_lab", "cbc"),
-    ("糖耐", "糖耐量", "喝糖水", "胰岛素释放", "ogtt", "glucose_tolerance"),
+    ("儿童抽血", "小孩抽血", "指尖血", "末梢血", "血常规", "fingerstick", "pediatric_blood_draw", "cbc"),
+    ("糖耐", "糖耐量", "喝糖水", "妊娠糖尿病", "胰岛素释放", "ogtt", "glucose_tolerance"),
     ("尿检", "验尿", "尿常规", "中段尿", "24小时尿", "urine", "urinalysis", "midstream"),
-    ("大便", "便常规", "潜血", "便潜血", "留样", "标本", "stool", "fecal", "occult", "specimen"),
-    ("痰培养", "咽拭子", "甲流", "支原体", "sputum", "throat_swab", "influenza"),
+    ("大便", "便常规", "潜血", "便潜血", "留样", "标本", "stool", "fecal", "occult", "fit_test", "specimen"),
+    ("痰培养", "咽拭子", "流感拭子", "支原体", "链球菌", "sputum", "throat_swab", "influenza_swab", "strep_swab"),
     # Hospital — Triage, Imaging & Endoscopy
-    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "floor", "directory", "department"),
-    ("头晕", "眩晕", "天旋地转", "耳石症", "dizziness", "dizzy", "vertigo", "neurology"),
-    ("胸闷", "胸痛", "心慌", "肚子疼", "胃痛", "咳嗽", "发烧", "发热", "皮疹", "扭伤", "triage", "symptom", "chest", "stomachache", "cough", "fever", "rash", "sprain"),
+    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "带路", "floor", "directory", "department", "escort"),
+    ("头晕", "眩晕", "天旋地转", "耳石症", "偏头痛", "dizziness", "dizzy", "vertigo", "bppv", "neurology"),
+    ("胸闷", "胸痛", "心慌", "肚子疼", "胃痛", "反酸", "咳嗽", "发烧", "高烧", "发热", "皮疹", "扭伤", "triage", "symptom", "chest", "stomachache", "cough", "fever", "pulmonology", "rash", "sprain"),
     ("核磁", "核磁共振", "金属", "种植牙核磁", "起搏器", "幽闭", "mri", "titanium", "pacemaker", "metal"),
-    ("增强ct", "造影剂", "拍片", "胸片", "辐射", "心电图", "动态心电", "ct", "contrast", "xray", "holter", "ecg"),
-    ("彩超", "b超", "超声", "憋尿", "空腹超声", "ultrasound", "bladder"),
-    ("胃镜", "肠镜", "胃肠镜", "无痛胃镜", "无痛肠镜", "内镜", "清肠", "呼气试验", "幽门螺杆菌", "endoscopy", "gastroscopy", "colonoscopy", "sedated", "urea_breath"),
-    # Hospital — Pharmacy, Maternity/Peds, Specialties, Inpatient, Checkup & Emergency
-    ("取药", "拿药", "药房", "西药房", "用药咨询", "pharmacy", "dispensary", "medication", "prescription"),
-    ("中药", "代煎", "煎药", "寄回家", "快递到家", "herbal", "decoction", "courier", "delivered"),
-    ("胰岛素", "冷链", "冰袋", "冷藏药", "慢病长处方", "长处方", "开三个月", "输液", "打点滴", "insulin", "ice_pack", "refill", "90_day", "infusion"),
-    ("产检", "建档", "孕妇", "怀孕", "四维", "大排畸", "无创", "胎心监护", "分娩", "待产", "prenatal", "maternity", "nt", "4d", "nipt", "labor"),
-    ("儿科", "小孩看病", "雾化", "生长发育", "骨龄", "哺乳室", "母婴室", "pediatrics", "nebulizer", "growth", "lactation"),
-    ("疫苗", "打疫苗", "预防接种", "九价", "宫颈癌疫苗", "带状疱疹", "流感疫苗", "vaccine", "vaccination", "hpv", "shingles", "flu"),
+    ("增强ct", "造影剂", "二甲双胍", "拍片", "胸片", "辐射", "心电图", "动态心电", "ct", "contrast", "metformin", "xray", "holter", "ecg"),
+    ("彩超", "b超", "超声", "憋尿", "空腹超声", "骨密度", "钼靶", "ultrasound", "bladder", "dexa", "mammogram"),
+    ("胃镜", "肠镜", "胃肠镜", "无痛胃镜", "无痛肠镜", "静脉镇静", "内镜", "清肠", "呼气试验", "幽门螺杆菌", "endoscopy", "egd", "gastroscopy", "colonoscopy", "iv_sedation", "urea_breath"),
+    # Hospital — Pharmacy, Maternity/Peds, Specialties, Inpatient, Travel/Checkup & Emergency
+    ("取药", "拿药", "药房", "自动药房", "用药咨询", "药物相互作用", "pharmacy", "dispensary", "medication", "prescription", "polypharmacy"),
+    ("特配药", "院内制剂", "儿童调味药", "送药", "送药上门", "寄回家", "快递到家", "送到酒店", "compounding", "flavored_suspension", "home_delivery", "hotel_delivery", "medication_courier", "courier"),
+    ("胰岛素", "冷链", "冰袋", "冷藏药", "慢病长处方", "长处方", "开三个月", "输液", "生物制剂", "静脉补铁", "打点滴", "靶向药", "预授权", "insulin", "ice_pack", "90_day_supply", "infusion_center", "biologics_infusion", "iv_iron", "prior_authorization"),
+    ("产检", "建档", "孕早期", "助产士", "参观产房", "四维", "大排畸", "无创", "胎心监护", "分娩", "宫缩", "破水", "prenatal_intake", "midwife", "maternity_tour", "nt_scan", "20_week_anatomy_scan", "nipt", "nst", "labor"),
+    ("儿科", "小孩看病", "雾化", "儿保", "生长发育", "骨龄", "哺乳室", "母婴室", "产后复查", "盆底肌", "通乳", "pediatrics", "nebulizer", "well_child", "bone_age", "lactation", "postpartum", "pelvic_floor"),
+    ("疫苗", "打疫苗", "儿童疫苗", "预防接种", "黄卡", "九价", "宫颈癌疫苗", "带状疱疹", "流感疫苗", "宫颈筛查", "vaccine", "immunization", "yellow_card", "hpv", "shingles", "flu", "pap_test"),
     ("牙科", "口腔", "拔牙", "智齿", "阻生齿", "洗牙", "补牙", "根管", "种牙", "dental", "wisdom", "tooth", "extraction", "scaling"),
-    ("眼科", "散瞳", "眼底", "近视", "配镜", "白内障", "青光眼", "干眼", "ophthalmology", "dilated", "retinal", "myopia", "cataract"),
-    ("耳鼻喉", "耳鸣", "听力", "鼻炎", "鱼刺", "卡鱼刺", "打呼噜", "睡眠监测", "ent", "tinnitus", "audiometry", "rhinitis", "fishbone", "snoring", "apnea"),
-    ("康复", "理疗", "冲击波", "针灸", "拔罐", "推拿", "失眠", "睡眠门诊", "换药", "拆线", "picc", "rehab", "physiotherapy", "acupuncture", "insomnia", "suture", "wound"),
-    ("住院", "入院", "出院", "押金", "病房", "探视", "陪护", "护工", "日间手术", "inpatient", "admission", "discharge", "visiting", "caregiver", "day_surgery"),
-    ("体检", "入职体检", "驾照体检", "换证体检", "早癌筛查", "checkup", "physical", "onboarding", "driver_vision"),
-    ("病历", "病假条", "请假条", "诊断证明", "盖章", "复印病历", "病案", "sick_leave", "stamp", "seal", "medical_record", "photocopy"),
-    ("急诊", "急救", "狗咬", "猫抓", "狂犬", "狂犬疫苗", "破伤风", "24小时", "emergency", "rabies", "tetanus", "bite", "scratch"),
-    ("轮椅", "平车", "停车", "停车费", "食堂", "餐厅", "咖啡", "班车", "地铁", "失物招领", "wheelchair", "parking", "cafeteria", "coffee", "shuttle", "metro"),
+    ("眼科", "散瞳", "眼底", "近视", "配镜", "角膜塑形镜", "白内障", "青光眼", "干眼", "ophthalmology", "dilated", "retinal", "myopia", "ortho_k", "cataract"),
+    ("耳鼻喉", "耳鸣", "突聋", "听力", "鼻窦炎", "鼻炎", "流鼻血", "鱼刺", "卡鱼刺", "咽喉异物", "打呼噜", "睡眠监测", "ent", "tinnitus", "audiometry", "sinusitis", "nosebleed", "fishbone", "foreign_body", "snoring", "sleep_apnea"),
+    ("康复", "理疗", "运动康复", "冲击波", "针灸", "干针", "整合医学", "肌筋膜", "失眠", "心理门诊", "冷冻祛疣", "激光祛疤", "换药", "拆线", "picc", "physical_therapy", "physiotherapy", "acupuncture", "dry_needling", "integrative_medicine", "insomnia", "wart_cryotherapy", "suture_removal", "wound_care"),
+    ("住院", "入院", "出院", "床旁结算", "送药到床", "探视", "陪护", "私人陪护", "注册护士", "日间手术", "inpatient", "admission", "discharge", "meds_to_beds", "visiting_hours", "cna", "private_duty_sitter", "day_surgery"),
+    ("住院餐", "病房点餐", "营养餐", "糖尿病餐", "清真", "清真餐", "犹太洁食", "素食", "无麸质", "halal", "kosher", "vegan", "gluten_free", "diabetic_diet", "low_sodium", "inpatient_meals"),
+    ("国际医疗", "国际部", "医学翻译", "医疗口译", "口译", "翻译", "多语种", "英语陪诊", "西语翻译", "阿语翻译", "日语翻译", "医疗签证", "特需套房", "international_patient", "medical_interpreter", "spanish_interpreter", "arabic_interpreter", "medical_visa", "deluxe_suite"),
+    ("体检", "年度体检", "高管体检", "入职体检", "留学体检", "签证体检", "驾照体检", "视力体检", "运动体检", "早癌筛查", "executive_physical", "pre_employment_physical", "visa_medical", "driver_medical", "sports_clearance"),
+    ("旅行门诊", "国际旅行", "旅行疫苗", "出国疫苗", "黄热病", "黄皮书", "伤寒", "疟疾", "高原反应", "travel_clinic", "travel_vaccine", "yellow_fever", "icvp", "typhoid", "malaria_pills", "altitude_sickness"),
+    ("病历", "病假条", "请假条", "医疗证明", "适航证明", "乘机证明", "复印病历", "出生证明", "新生儿护照", "病理切片", "工作能力评估", "sick_note", "work_excuse", "fmla", "fit_to_fly", "medical_records", "hipaa_release", "birth_certificate", "pathology_slide", "functional_capacity"),
+    ("急诊", "急救", "分级分诊", "胸痛急救", "卒中", "创伤", "狗咬", "猫抓", "蝙蝠", "狂犬", "狂犬疫苗", "免疫球蛋白", "破伤风", "emergency", "esi_triage", "stemi", "stroke", "rabies_vaccine", "hrig", "tetanus_shot", "bite", "scratch"),
+    ("轮椅", "助行器", "停车", "停车费", "充电桩", "食堂", "餐厅", "轻食", "咖啡", "班车", "地铁", "祈祷室", "礼拜室", "冥想室", "静思室", "行李寄存", "手语", "盲文", "无障碍", "社工", "慈善救助", "失物招领", "丢护照", "wheelchair", "parking_validation", "ev_charging", "cafeteria", "healthy_deli", "free_shuttle", "metro", "prayer_room", "meditation_room", "luggage_locker", "sign_language", "asl_interpreter", "braille", "social_worker", "lost_and_found"),
     # Bank — Lobby, Cards, Deposits & Wealth
     ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
     ("办卡", "开卡", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡", "外籍开户", "debit", "tier_i", "payroll", "expat"),
@@ -477,10 +480,11 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " matches."
     )
     query_desc = (
-        "The patient or visitor's question or keywords, e.g. 'where to pay my"
-        " outpatient bill and settle cross-region insurance', 'blood draw"
-        " fasting water rule', 'wisdom tooth extraction weekend prep', '9-valent"
-        " HPV vaccine booking', or 'MRI titanium dental implant safety'."
+        "The patient or visitor's question or keywords, e.g. 'international"
+        " insurance cashless direct billing GOP', 'blood draw fasting water"
+        " rule', 'MRI titanium dental implant safety', 'WHO Yellow Fever travel"
+        " vaccine', 'Fit-to-Fly medical certificate', or '15-language medical"
+        " interpreter'."
     )
     cat_desc = (
         "Optional hospital category filter hint (e.g. 'Registration & Billing',"

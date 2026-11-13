@@ -4004,9 +4004,9 @@ let modalSampleOffset = 0;
 
 const SCENARIO_UI_PLACEHOLDERS = {
   cymbal_hospital: {
-    filter: '🔍 Search 120 hospital RAG entries (e.g., billing, fasting, MRI titanium, HPV vaccine, wisdom tooth, rabies)...',
-    persona: 'e.g. You are the bilingual concierge robot on 5F International Clinic of Cymbal Hospital. Greet patients warmly and remind them of pre-exam preparation steps...',
-    kb: '### International Clinic Desk\nLocated on 6F of the Outpatient Podium with English & Japanese medical interpreters (Mon–Fri 08:00–17:00).\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium.',
+    filter: '🔍 Search 120 hospital RAG entries (e.g., direct billing, fasting, MRI titanium, Yellow Fever, Halal meal, interpreter)...',
+    persona: 'e.g. You are the multilingual concierge robot in the 5F International Patient Center of Cymbal Hospital. Greet patients warmly and remind them of pre-exam preparation steps...',
+    kb: '### International Patient Services Extension\nLocated on 5F West with certified English, Spanish, Mandarin & Arabic medical interpreters (+1-800-555-2962 ext. 8).\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Medical Center Station every 15 minutes straight to the 1F Main Atrium.',
   },
   cymbal_bank: {
     filter: '🔍 Search 120 banking RAG entries (e.g., R2 wealth, Large CD, 100k cash, SWIFT wire, mortgage, safe deposit box)...',

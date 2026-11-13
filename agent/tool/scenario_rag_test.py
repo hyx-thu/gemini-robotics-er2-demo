@@ -98,20 +98,35 @@ class ScenarioRagTest(unittest.TestCase):
   def test_hospital_rag_queries_english_and_chinese(self):
     cases = [
         ("Where do I pay my outpatient bill and use a self-service kiosk?", {"hosp_reg_01", "hosp_reg_03", "hosp_reg_06"}),
+        ("Do you offer cashless direct billing GOP for Cigna Global or Bupa international insurance?", {"hosp_reg_04"}),
+        ("Where can I print an itemized ICD-10 and CPT superbill for insurance reimbursement?", {"hosp_reg_06"}),
         ("Where do I go for a blood draw and can I drink plain water during an 8-hour fast?", {"hosp_lab_02", "hosp_lab_01"}),
         ("Where do I drop off a midstream urine specimen cup?", {"hosp_lab_05"}),
         ("Can I undergo an MRI with a titanium dental implant or pacemaker?", {"hosp_img_01"}),
         ("I feel dizzy when rolling over in bed—should I see Neurology or ENT?", {"hosp_tri_02"}),
-        ("Can herbal decoctions be delivered home by courier?", {"hosp_phm_02"}),
+        ("Can compounded medications be delivered to my home or hotel by same-day courier?", {"hosp_phm_02"}),
+        ("Where is the outpatient biologics and IV iron infusion center?", {"hosp_phm_05"}),
         ("Where can adults get the 9-valent HPV or shingles vaccine?", {"hosp_mpv_08"}),
         ("Can I drive home myself after a dilated retinal eye exam?", {"hosp_der_03"}),
-        ("What are the daily inpatient visiting hours and caregiver pass rules?", {"hosp_inp_04"}),
-        ("How fast can I get my pre-employment onboarding physical report?", {"hosp_chk_02"}),
+        ("Do you offer integrative medical acupuncture or dry needling for migraines?", {"hosp_der_10"}),
+        ("What are the daily inpatient visiting hours and overnight support pass rules?", {"hosp_inp_04"}),
+        ("Do inpatient rooms offer Halal, Kosher, vegan, or diabetic meal options?", {"hosp_inp_06"}),
+        ("How do I request a Spanish, Arabic, or Mandarin medical interpreter?", {"hosp_inp_12"}),
+        ("How fast can I get my pre-employment or university physical report?", {"hosp_chk_02"}),
+        ("Where can I get a WHO Yellow Fever travel vaccine and malaria prophylaxis?", {"hosp_chk_04"}),
+        ("Where do I request an airline Fit-to-Fly certificate or FMLA medical leave form?", {"hosp_chk_07"}),
         ("Where can I get a rabies vaccine after a cat scratch at midnight?", {"hosp_emg_03"}),
-        ("请问门诊去哪里缴费？支持刷异地医保吗？", {"hosp_reg_01", "hosp_reg_03"}),
+        ("Is there a 24/7 multi-faith prayer and meditation room in the hospital?", {"hosp_emg_09"}),
+        ("Can I borrow an ASL sign-language video interpretation tablet at the lobby desk?", {"hosp_emg_10"}),
+        ("请问门诊去哪里自助缴费？支持国际商业保险 Cigna 直付吗？", {"hosp_reg_04", "hosp_reg_01"}),
+        ("去哪里打印带 ICD-10 诊断编码的英文保险理赔单 Superbill？", {"hosp_reg_06"}),
         ("去哪里抽血化验？需要空腹几个小时？", {"hosp_lab_01", "hosp_lab_02"}),
-        ("中药可以代煎寄回家吗？", {"hosp_phm_02"}),
+        ("特配药房的药可以当天冷链快递送到酒店或家里吗？", {"hosp_phm_02"}),
         ("拔智齿周末可以约吗？需要注意什么？", {"hosp_der_01"}),
+        ("病房支持清真餐、犹太洁食或者糖尿病餐点餐吗？", {"hosp_inp_06"}),
+        ("怎么预约免费的医学口译员？支持阿拉伯语、西班牙语和中文吗？", {"hosp_inp_12"}),
+        ("出国旅行去哪里打黄热病疫苗领小黄本？", {"hosp_chk_04"}),
+        ("坐飞机需要的适航证明 Fit-to-Fly 和病假证明去哪里开？", {"hosp_chk_07"}),
     ]
     for query, allowed_top_ids in cases:
       with self.subTest(query=query):
@@ -124,6 +139,39 @@ class ScenarioRagTest(unittest.TestCase):
             allowed_top_ids,
             f"Expected one of {allowed_top_ids} first for {query!r}, got {ids}",
         )
+
+  def test_hospital_rag_international_standards_no_china_only_terms(self):
+    hosp_full = (
+        json.dumps(scenario_rag.get_scenario("cymbal_hospital"), ensure_ascii=False).lower()
+        + " "
+        + json.dumps(scenario_rag.search_knowledge_base_tool("cymbal_hospital"), ensure_ascii=False).lower()
+        + " "
+        + scenario_rag.build_scenario_persona_block("cymbal_hospital").lower()
+    )
+    china_only_terms = (
+        "out-of-province",
+        "cross-region",
+        "12123",
+        "hu-gong",
+        "accompany-free",
+        "400-820",
+        "red prescription",
+        "dual-channel",
+        "dual channel",
+        "civil-service",
+        "food-handler",
+        "moxibustion",
+        "tuina",
+        "37.3",
+        "fever clinic",
+        "fiscal",
+    )
+    for term in china_only_terms:
+      self.assertNotIn(
+          term,
+          hosp_full,
+          f"Found China-only healthcare term {term!r} in internationalized Cymbal Hospital scenario",
+      )
 
   def test_bank_rag_queries_english_and_chinese(self):
     cases = [
@@ -158,7 +206,7 @@ class ScenarioRagTest(unittest.TestCase):
   def test_custom_kb_parsing_and_retrieval(self):
     custom_md = (
         "### International VIP Clinic\n"
-        "Located on 6F of the Outpatient Podium with dedicated English and Japanese medical interpreters; booking hotline 400-800-9999.\n\n"
+        "Located on 6F of the Outpatient Podium with dedicated English and Japanese medical interpreters; booking hotline +1-800-555-9999.\n\n"
         "### Free Metro Shuttle Schedule\n"
         "Complimentary wheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium."
     )
@@ -327,9 +375,9 @@ class ScenarioRagTest(unittest.TestCase):
 
   def test_out_of_kb_rejection_and_partial_overlap_guardrails(self):
     out_of_kb_cases = [
-        ("cymbal_hospital", "你们医院一楼卖高铁票和飞机票吗？"),
+        ("cymbal_hospital", "你们医院一楼卖高铁票和电影票吗？"),
         ("cymbal_hospital", "Do you offer pet grooming and veterinary kennel boarding?"),
-        ("cymbal_hospital", "Can I book airline hotel vacation packages at the desk?"),
+        ("cymbal_hospital", "Can I book Broadway concert tickets and cruise ship cabins at the desk?"),
         ("cymbal_bank", "Can I buy Bitcoin and Ethereum NFTs at the counter?"),
         ("cymbal_bank", "请问你们银行网点可以办理结婚证和护照签证吗？"),
         ("cymbal_bank", "Do you provide dry cleaning and car wash services in the lobby?"),
@@ -344,6 +392,7 @@ class ScenarioRagTest(unittest.TestCase):
     partial_cases = [
         ("cymbal_hospital", "请问你们医院能给宠物狗打疫苗吗？", "宠物狗"),
         ("cymbal_hospital", "Do you perform cosmetic facelift surgery at the clinic?", "facelift"),
+        ("cymbal_hospital", "Can I book airline hotel vacation packages at the desk?", "vacation"),
         ("cymbal_bank", "Can I open a cryptocurrency debit card at a Smart Teller Machine?", "cryptocurrency"),
     ]
     for sid, query, expected_unmatched in partial_cases:
