@@ -3485,7 +3485,7 @@ main,
    Stays ONLY in dev/test; skip when merging to main/stable.
    ===================================================================== */
 .twin-real2sim-bar {
-  display: none;
+  display: flex;
   position: absolute;
   left: 8px;
   right: 8px;
@@ -3501,7 +3501,13 @@ main,
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.12s ease 0s,
+              transform 0.14s ease 0s,
+              visibility 0s linear 0.14s;
 }
 .dark-theme .twin-real2sim-bar {
   background: rgba(14, 19, 26, 0.86);
@@ -3509,8 +3515,13 @@ main,
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 .robot-twin.expanded .twin-real2sim-bar {
-  display: flex;
-  animation: fadeIn 0.18s ease-out;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition: opacity 0.22s ease 0.14s,
+              transform 0.26s cubic-bezier(0.22, 1, 0.36, 1) 0.14s,
+              visibility 0s linear 0s;
 }
 .real2sim-badge {
   flex: none;

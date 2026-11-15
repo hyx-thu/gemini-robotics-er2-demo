@@ -810,6 +810,7 @@ function init() {
   const expandBtn = document.getElementById('twin-expand');
   const stageRow = document.getElementById('stage-row');
   const twinSlot = document.getElementById('robot-twin-slot');
+  let preloadTimer = 0;
   let inSlotTransition = false;
   let settleResizeTimer = 0;
   function finishSlotTransition() {
@@ -851,12 +852,20 @@ function init() {
     }
     // Fallback in case prefers-reduced-motion or hidden tab skips transitionend
     settleResizeTimer = window.setTimeout(finishSlotTransition, 650);
+    clearTimeout(preloadTimer);
     if (exp) {
-      // [INTERNAL-TEST-ONLY: Real2Sim] Preload all CAD bundles when expanded so switching is instant
-      for (const r of Object.values(rigs)) {
-        if (r.ensureLoaded) r.ensureLoaded();
-      }
       syncReal2SimBar();
+      // [INTERNAL-TEST-ONLY: Real2Sim] Defer & stagger background CAD bundle preloading until
+      // AFTER the 380ms CSS transition finishes so 20MB mesh parsing never stutters the animation.
+      preloadTimer = window.setTimeout(() => {
+        if (!panel.classList.contains('expanded')) return;
+        const pending = Object.values(rigs).filter((r) => r !== R && r.ensureLoaded);
+        pending.forEach((r, idx) => {
+          window.setTimeout(() => {
+            if (panel.classList.contains('expanded')) r.ensureLoaded();
+          }, idx * 260);
+        });
+      }, 500);
     }
   }
   window.addEventListener('robot-twin:collapse', () => setExpanded(false));
