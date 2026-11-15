@@ -90,8 +90,8 @@ def google_search_tool() -> dict[str, Any]:
               "type": "STRING",
               "description": (
                   "The full natural-language question to answer, e.g."
-                  " '今天上海的天气怎么样' or 'latest Boston Dynamics Spot"
-                  " price'."
+                  " '今天上海的天气怎么样' or 'latest humanoid robotics"
+                  " news'."
               ),
           },
       },

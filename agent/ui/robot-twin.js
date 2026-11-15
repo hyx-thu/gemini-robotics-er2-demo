@@ -137,7 +137,7 @@ function buildDog() {
   let pawMode = 'shake';
 
   return {
-    name: 'dog', icon: '🐕', label: 'Spot', spec: 'Quadruped + 6-DOF Top Arm',
+    name: 'dog', icon: '🐕', label: 'Quadruped', spec: 'Quadruped + 6-DOF Top Arm',
     group, gripPoint, cone, flashMat: stripe.material,
     STAND_H, SIT_H, STOW, ik,
     ready: () => ik(0.62, STAND_H + 0.32, 0, -0.25),

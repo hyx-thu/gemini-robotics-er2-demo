@@ -32,10 +32,13 @@ let endpointDropdown = document.getElementById('endpointDropdown');
 // Audio Toggle DOM
 let audioToggleBtn = document.getElementById('audioToggleBtn');
 
-// Agent Selector DOM
-let agentSelectorBtn = document.getElementById('agentSelectorBtn');
+// Agent Badge DOM
 let agentSelectorLabel = document.getElementById('agentSelectorLabel');
-let agentDropdown = document.getElementById('agentDropdown');
+
+function normalizeAgentName(name) {
+  const cleaned = String(name || '').trim().toLowerCase();
+  return (!cleaned || cleaned === 'spot') ? 'robot' : cleaned;
+}
 
 const ENDPOINT_MODELS = {
   gemini_live_api: [
@@ -421,20 +424,13 @@ async function initServerDefaults() {
     updateRecordBtn();
     if (defaults.video_sources) {
       agentVideoSources = Object.assign({}, agentVideoSources, defaults.video_sources);
-      if (defaults.spot_simulated) {
-        const spotOpt = agentDropdown &&
-          Array.from(agentDropdown.querySelectorAll('.agent-option'))
-            .find(o => o.dataset.agent === 'spot');
-        if (spotOpt && !/sim/i.test(spotOpt.textContent)) {
-          spotOpt.textContent = spotOpt.textContent.trim() + ' (webcam sim)';
-        }
-      }
     }
-    // Server-chosen default agent (DEFAULT_AGENT env, "spot" by default).
+    // Server-chosen default agent (DEFAULT_AGENT env, "robot" by default).
     // Only applied before a session starts so a live run is never switched.
     if (defaults.default_agent && typeof selectedAgentName !== 'undefined' &&
         !(typeof geminiClient !== 'undefined' && geminiClient.isConnected())) {
       selectAgent(defaults.default_agent);
+      videoSource = videoSourceForAgent(selectedAgentName);
     }
     // Dynamically rebuild the model dropdown based on available server models
     if (defaults.available_models && modelDropdown) {
@@ -867,7 +863,6 @@ let geminiClient = new GeminiClient({
     setTimeout(() => updateRecordBtn(), 0);
     if (modelSelectorBtn) modelSelectorBtn.disabled = true;
     if (audioToggleBtn) audioToggleBtn.disabled = true;
-    if (agentSelectorBtn) agentSelectorBtn.disabled = true;
 
     // Apply the current video source mode
     applyVideoSource(videoSource);
@@ -931,10 +926,11 @@ updateMicUI();
 
 // --- Plan panel (driven by update_plan OR automatic live tool-step tracking) ---
 
-let agentVideoSources = { human: 'computer', spot: 'spot', tinybot: 'tinybot' };
+let agentVideoSources = { robot: 'computer' };
 
 function videoSourceForAgent(agent) {
-  return agentVideoSources[agent] || (agent === 'human' ? 'computer' : agent);
+  const norm = normalizeAgentName(agent);
+  return agentVideoSources[norm] || 'computer';
 }
 
 // Meta / silent tools that should NOT appear as standalone steps in auto tool-step mode.
@@ -952,8 +948,7 @@ const TOOL_STEP_EXCLUDED = new Set([
 // Physical embodiment tools where the Stop button remains relevant in tool-step mode.
 const EMBODIMENT_STEP_TOOLS = new Set([
   'detect', 'pick', 'place', 'navigate', 'drive', 'look', 'stand', 'sit',
-  'stow', 'wait_for_pick_up', 'run_instruction', 'turn_head_to_uv',
-  'move_absolute', 'move_relative',
+  'stow', 'wait_for_pick_up',
 ]);
 
 let userTurnSeq = 0;
@@ -1699,7 +1694,7 @@ function applyVideoSource(source) {
       videoContainer.classList.remove('spot-aspect');
     } else {
       videoContainer.classList.remove('atari-aspect');
-      videoContainer.classList.toggle('spot-aspect', source === 'spot');
+      videoContainer.classList.toggle('spot-aspect', source === 'robot');
     }
 
     // Show robot cam (stitched MJPEG from camera poller)
@@ -1715,62 +1710,17 @@ function applyVideoSource(source) {
   }
 }
 
-// --- Agent Selector Click Bindings ---
-if (agentSelectorBtn) {
-  agentSelectorBtn.onclick = (e) => {
-    e.stopPropagation();
-    agentDropdown.classList.toggle('hidden');
-  };
-}
-
-document.addEventListener('click', (e) => {
-  if (agentDropdown && !agentDropdown.contains(e.target) &&
-    e.target !== agentSelectorBtn) {
-    agentDropdown.classList.add('hidden');
-  }
-});
-
-if (agentDropdown) {
-  agentDropdown.querySelectorAll('.agent-option').forEach(opt => {
-    opt.onclick = () => {
-      const agent = opt.dataset.agent;
-      selectAgent(agent);
-
-      applyVideoSource(videoSourceForAgent(agent));
-
-      agentDropdown.classList.add('hidden');
-    };
-  });
-}
-
 function selectAgent(type) {
+  const norm = normalizeAgentName(type);
   if (typeof selectedAgentName !== 'undefined') {
-    selectedAgentName = type;
+    selectedAgentName = norm;
   }
-  // The 3D twin models a quadruped with an arm — only meaningful for Spot.
   const twin = document.getElementById('robot-twin');
-  if (twin) twin.classList.toggle('hidden', type !== 'spot');
+  if (twin) twin.classList.toggle('hidden', norm !== 'robot');
   const twinSlot = document.getElementById('robot-twin-slot');
-  if (twinSlot) twinSlot.classList.toggle('hidden', type !== 'spot');
-  if (type !== 'spot') {
-    const stageRow = document.getElementById('stage-row');
-    if (stageRow) stageRow.classList.remove('twin-split');
-    window.dispatchEvent(new CustomEvent('robot-twin:collapse'));
-  }
-
-  // Clear active state from all agent dropdown options
-  if (agentDropdown) {
-    agentDropdown.querySelectorAll('.agent-option')
-      .forEach(o => o.classList.remove('active'));
-    const activeOpt =
-      Array.from(agentDropdown.querySelectorAll('.agent-option'))
-        .find(o => o.dataset.agent === type);
-    if (activeOpt) {
-      activeOpt.classList.add('active');
-      if (agentSelectorLabel) {
-        agentSelectorLabel.textContent = activeOpt.textContent;
-      }
-    }
+  if (twinSlot) twinSlot.classList.toggle('hidden', norm !== 'robot');
+  if (agentSelectorLabel) {
+    agentSelectorLabel.textContent = '🤖 Robot';
   }
 }
 
@@ -3317,7 +3267,6 @@ function resetUI() {
   connectBtn.title = 'Connect to Agent';
   if (modelSelectorBtn) modelSelectorBtn.disabled = false;
   if (audioToggleBtn) audioToggleBtn.disabled = false;
-  if (agentSelectorBtn) agentSelectorBtn.disabled = false;
   updateAudioUI();
 
   mediaHandler.stopAudio();
@@ -3349,7 +3298,7 @@ let closeModalBtn = document.getElementById('close-modal-btn');
 let themeRadios = document.querySelectorAll('input[name="theme"]');
 let modalTabs = document.querySelectorAll('.modal-sidebar li[data-tab]');
 
-let selectedAgentName = 'spot';  // Track the currently selected agent
+let selectedAgentName = 'robot';  // Active robot embodiment
 
 // Tab switching
 modalTabs.forEach(tab => {
@@ -3381,8 +3330,9 @@ async function loadAgentConfig(name = selectedAgentName, model = selectedModel) 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const cfg = await resp.json();
 
+    const titleLabel = cfg.name === 'robot' ? 'Robot' : cfg.name;
     document.getElementById('config-title').textContent =
-      `${cfg.name} Agent Config`;
+      `${titleLabel} Agent Config`;
     const sessionCfg = getResolvedSessionConfig();
     document.getElementById('config-model').textContent = sessionCfg.model;
     document.getElementById('config-modality').textContent =
@@ -3635,14 +3585,6 @@ document.addEventListener('keydown', (e) => {
         // Send stop command
         geminiClient.sendText('stop');
       }
-      break;
-    case '1':
-      selectAgent('human');
-      applyVideoSource('computer');
-      break;
-    case '2':
-      selectAgent('spot');
-      applyVideoSource(videoSourceForAgent('spot'));
       break;
     case 't':
     case 'T':

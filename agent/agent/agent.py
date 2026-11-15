@@ -6,7 +6,7 @@ the same Agent can be used with any embodiment.
 
 Typical usage:
 
-    agent = Agent.from_name("human")
+    agent = Agent.from_name("robot")
     print(agent.system_instruction)
     print(agent.tools)
 """
@@ -20,8 +20,16 @@ from tool import tools as tools_lib
 
 
 def spot_simulated() -> bool:
-  """True when Spot runs webcam-in-the-loop without a robot backend."""
+  """True when the robot runs webcam-in-the-loop without a robot backend."""
   return os.getenv("SPOT_SIMULATED", "1").lower() in ("1", "true", "yes")
+
+
+def normalize_agent_name(name: str | None) -> str:
+  """Normalize agent name, mapping legacy 'spot' alias to 'robot'."""
+  cleaned = (name or "").strip().lower()
+  if cleaned in ("robot", "spot"):
+    return "robot"
+  return (name or "").strip()
 
 
 # System instruction shared by all physical-robot agents. Lives in the SI slot
@@ -60,23 +68,13 @@ class Agent:
   # ---------------------------------------------------------------------------
 
   @classmethod
-  def human(cls) -> "Agent":
-    """Local/browser mode with webcam."""
-    return cls(
-        name="human",
-        system_instruction="",
-        developer_instruction=_build_di("human_di.md", "plan_protocol.md"),
-        tools=tools_lib.human_tools(),
-    )
-
-  @classmethod
-  def spot(cls) -> "Agent":
-    """Boston Dynamics Spot robot agent."""
+  def robot(cls) -> "Agent":
+    """Physical / simulated Robot agent."""
     files = ["spot_di.md", "plan_protocol.md"]
     if spot_simulated():
       files.append("spot_sim_addendum.md")
     return cls(
-        name="spot",
+        name="robot",
         system_instruction=embodiment_system_instruction(),
         developer_instruction=_build_di(*files),
         tools=(
@@ -86,15 +84,8 @@ class Agent:
         ),
     )
 
-  @classmethod
-  def tinybot(cls) -> "Agent":
-    """Tinybot robot agent."""
-    return cls(
-        name="tinybot",
-        system_instruction=embodiment_system_instruction(),
-        developer_instruction=_build_di("tinybot_di.md", "plan_protocol.md"),
-        tools=tools_lib.tinybot_tools(),
-    )
+  # Backward-compatible alias for internal callers.
+  spot = robot
 
   # ---------------------------------------------------------------------------
   # Name-based lookup
@@ -105,7 +96,7 @@ class Agent:
     """Returns an Agent for the specified name string.
 
     Args:
-      name: "human", "spot", or "tinybot" is supported for Lite.
+      name: "robot" (or legacy alias "spot").
 
     Returns:
       An Agent instance.
@@ -113,13 +104,9 @@ class Agent:
     Raises:
       ValueError: If the name is unknown.
     """
-    presets = {
-        "human": cls.human,
-        "spot": cls.spot,
-        "tinybot": cls.tinybot,
-    }
-    if name not in presets:
+    normalized = normalize_agent_name(name)
+    if normalized != "robot":
       raise ValueError(
-          f"Unknown agent name: {name}. Available: {list(presets.keys())}"
+          f"Unknown agent name: {name}. Available: ['robot']"
       )
-    return presets[name]()
+    return cls.robot()

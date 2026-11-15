@@ -316,7 +316,7 @@ class ToolCallHandlerTest(unittest.IsolatedAsyncioTestCase):
 
   def test_negated_sit_request_is_not_authorized(self):
     self.assertFalse(tool_call_handler.user_requested_sit("Do not sit."))
-    self.assertFalse(tool_call_handler.user_requested_sit("Never ask Spot to sit"))
+    self.assertFalse(tool_call_handler.user_requested_sit("Never ask the robot to sit"))
     self.assertTrue(tool_call_handler.user_requested_sit("Please sit down"))
 
   def test_multilingual_sit_requests_are_authorized(self):

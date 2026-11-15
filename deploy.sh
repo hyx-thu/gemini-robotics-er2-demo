@@ -76,7 +76,7 @@ deploy() {
     --timeout=3600 \
     --cpu=2 --memory=2Gi --max-instances=3 \
     --set-secrets="GEMINI_API_KEY=${SECRET_NAME}:latest,TTS_API_KEY=${SECRET_NAME}:latest" \
-    --set-env-vars="ROBOT_URL=http://127.0.0.1:8888,TTS_PROVIDER=gemini,GEMINI_TTS_MODEL=gemini-3.8-flash-tts,SPOT_SIMULATED=1,DEFAULT_AGENT=spot" \
+    --set-env-vars="ROBOT_URL=http://127.0.0.1:8888,TTS_PROVIDER=gemini,GEMINI_TTS_MODEL=gemini-3.8-flash-tts,SPOT_SIMULATED=1,DEFAULT_AGENT=robot" \
     --quiet
 
   local url

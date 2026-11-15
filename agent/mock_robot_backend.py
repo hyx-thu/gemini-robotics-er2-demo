@@ -1,4 +1,4 @@
-"""Unified Virtual/Mock Robot Backend for Spot and Tinybot on port 8888."""
+"""Virtual/Mock Robot Backend on port 8888."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 from pydantic import BaseModel, Field
 import uvicorn
 
-app = fastapi.FastAPI(title="Virtual Spot & Tinybot Backend", version="0.1.0")
+app = fastapi.FastAPI(title="Virtual Robot Backend", version="0.1.0")
 
 STATE: dict[str, Any] = {
     "connected": True,
@@ -34,7 +34,7 @@ STATE: dict[str, Any] = {
 }
 
 
-def render_scene_jpeg(mode: str = "spot") -> bytes:
+def render_scene_jpeg(mode: str = "robot") -> bytes:
   """Render a synthetic 640x480 workspace scene with interactive objects."""
   img = Image.new("RGB", (640, 480), color=(28, 33, 43))
   draw = ImageDraw.Draw(img)
@@ -86,7 +86,7 @@ def render_scene_jpeg(mode: str = "spot") -> bytes:
       fill=(160, 230, 160),
   )
 
-  # Draw any Tinybot point overlays
+  # Draw any point overlays
   for pt in STATE["overlay_points"]:
     coords = pt.get("point") or [240, 320]
     label = str(pt.get("label", "target"))
@@ -546,74 +546,6 @@ def detect_force_change(req: ForceChangeRequest):
 def connect_spot(req: dict[str, Any]):
   STATE["connected"] = True
   return {"status": "connected", "virtual": True}
-
-
-# ---------------------------------------------------------------------------
-# Tinybot Endpoints
-# ---------------------------------------------------------------------------
-@app.get("/camera_image/")
-def get_tinybot_camera_image(camera_id: str = "camera"):
-  b64 = base64.b64encode(render_scene_jpeg(mode="tinybot")).decode("ascii")
-  return Response(content=f'<img src="data:image/jpeg;base64,{b64}" />', media_type="text/html")
-
-
-@app.get("/video-stream")
-async def stream_tinybot_video():
-  async def frame_generator():
-    while True:
-      jpg = render_scene_jpeg(mode="tinybot")
-      yield (
-          b"--frame\r\n"
-          b"Content-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
-      )
-      await asyncio.sleep(0.5)
-
-  return StreamingResponse(
-      frame_generator(),
-      media_type="multipart/x-mixed-replace; boundary=frame",
-  )
-
-
-@app.post("/make-gesture")
-def tinybot_make_gesture(gesture: str = "nod", speed: int = 150):
-  STATE["last_gesture"] = gesture
-  STATE["last_action"] = f"gesture({gesture})"
-  return {"status": f"completed gesture {gesture} at speed {speed}"}
-
-
-@app.post("/move-absolute")
-def tinybot_move_absolute(req: dict[str, Any]):
-  STATE["last_action"] = f"move_absolute({req.get('angles')})"
-  return {"status": "ok", "angles": req.get("angles", [])}
-
-
-@app.post("/move-relative")
-def tinybot_move_relative(req: dict[str, Any]):
-  STATE["last_action"] = f"move_relative({req.get('relative_angles')})"
-  return {"status": "ok", "relative_angles": req.get("relative_angles", [])}
-
-
-@app.post("/look-to-uv")
-def tinybot_look_to_uv(req: dict[str, Any]):
-  u = int(req.get("u", 500))
-  v = int(req.get("v", 500))
-  STATE["head_uv"] = (u, v)
-  STATE["last_action"] = f"look_to_uv({u}, {v})"
-  return {"status": f"turned head to ({u}, {v})"}
-
-
-@app.post("/point")
-def tinybot_point(points: list[dict[str, Any]]):
-  STATE["overlay_points"] = points
-  STATE["last_action"] = f"point({len(points)} targets)"
-  return {"status": "ok", "count": len(points)}
-
-
-@app.post("/clear-overlay")
-def tinybot_clear_overlay():
-  STATE["overlay_points"] = []
-  STATE["last_action"] = "clear_overlay"
-  return {"status": "cleared"}
 
 
 if __name__ == "__main__":

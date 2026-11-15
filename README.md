@@ -2,11 +2,11 @@
 
 Voice-driven embodied agent built on **Gemini Robotics-ER 2 (streaming / Live API)**.
 Talk to the agent, show it a camera feed, and it reasons about the scene and
-drives a robot embodiment (Spot, Tinybot, or a simulated "human").
+drives a general-purpose **Robot** embodiment.
 
 Forked from [google-gemini/robotics-samples/live-api](https://github.com/google-gemini/robotics-samples/tree/main/live-api)
 and extended with streaming TTS + barge-in, grasp-point suggestion, tool-call
-visualisation, session resumption, and a Spot simulator.
+visualisation, session resumption, and a webcam-in-the-loop Robot simulator.
 
 - **Deploy**: Cloud Run via `deploy.sh` (set `PROJECT_ID` / `REGION` for your own GCP project).
 
@@ -18,17 +18,16 @@ gemini-robotics-er-demo/
 │   ├── server.py          # entry point: WebSocket /ws, static UI, REST
 │   ├── session_manager.py # Live API session, reconnect, VAD, TTS pipeline
 │   ├── core/              # observation / decision / tool-call handling / watchdog
-│   ├── embodiment/        # human | spot | tinybot drivers (+ spot simulator)
+│   ├── embodiment/        # robot embodiment driver (+ webcam-in-the-loop simulator)
 │   ├── model/             # Live API client, streaming TTS client
 │   ├── prompt/            # system instructions per embodiment
 │   ├── tool/              # tool declarations exposed to the model
-│   ├── ui/                # browser client (agent-ui.js, media-handler.js)
-│   ├── mock_robot_backend.py  # local Spot/Tinybot simulator on :8888
+│   ├── ui/                # browser client (agent-ui.js, media-handler.js, robot-twin.js)
+│   ├── mock_robot_backend.py  # local robot simulator on :8888
 │   ├── .env.example       # local config template  ← copy to .env
 │   └── Dockerfile / entrypoint.sh
 ├── robots/
-│   ├── spot/              # Boston Dynamics Spot bridge (upstream)
-│   └── tinybot/           # Tinybot firmware/hardware (upstream)
+│   └── spot/              # Physical robot bridge (upstream)
 ├── deploy.sh              # Cloud Run deploy with Secret Manager
 ├── scripts/pre-commit     # secret scanner git hook
 └── UPSTREAM_README.md     # original upstream docs

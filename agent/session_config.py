@@ -130,8 +130,8 @@ DEFAULT_MODEL_SPEC = ModelSpec(name="default", thinking_level=DEFAULT_THINKING_L
 class SessionConfig:
   """Configuration for a specific session/agent instance at runtime."""
 
-  # Agent name (e.g., "human", "apollo", "custom")
-  agent_name: str = "human"
+  # Agent name ("robot")
+  agent_name: str = "robot"
 
   # Custom system instruction (used if agent_name is "custom")
   custom_si: str = ""

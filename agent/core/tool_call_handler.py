@@ -77,7 +77,7 @@ _CJK_GAP_RE = re.compile(r"(?<=[^\x00-\x7f])\s+(?=[^\x00-\x7f])")
 
 
 def user_requested_sit(text: str) -> bool:
-  """Return whether a user utterance explicitly asks Spot to sit (any language)."""
+  """Return whether a user utterance explicitly asks the robot to sit (any language)."""
   text = _CJK_GAP_RE.sub("", text or "")
   return bool(_SIT_PATTERN.search(text)) and not bool(
       _NEGATED_SIT_PATTERN.search(text)
@@ -808,7 +808,7 @@ class ToolCallHandler:
         if not self._sit_authorized:
           return {
               "executed": False,
-              "error": "Sit rejected: the user did not explicitly ask Spot to sit.",
+              "error": "Sit rejected: the user did not explicitly ask the robot to sit.",
           }
         self._sit_authorized = False
       if func_name == "send_message":

@@ -409,17 +409,6 @@ def update_plan_tool() -> dict[str, Any]:
   )
 
 
-def human_tools() -> list[dict[str, Any]]:
-  """Human/local mode tools: run_instruction, stop, ack."""
-  return _wrap([
-      update_plan_tool(),
-      run_instruction_tool(),
-      stop_tool(),
-      ack_tool(),
-      send_message_tool(enable_send_message_to_user=True),
-  ])
-
-
 def all_tools() -> list[dict[str, Any]]:
   """All available tools (robot + UI + gesture + ack)."""
   return _wrap([
@@ -474,13 +463,13 @@ def drive_tool() -> dict[str, Any]:
   return _tool(
       name="drive",
       description=(
-          "Drive Spot without a waypoint for a short, bounded interval using"
-          " body-frame velocities. Positive v_x moves forward, positive v_y"
-          " moves left, and positive v_rot turns counterclockwise. The robot"
-          " powers on and stands automatically. The current camera-arm joint"
-          " pose is held relative to the body, so the gripper camera moves"
-          " with Spot. Use small commands near people, furniture, stairs, or"
-          " other obstacles."
+          "Drive the robot without a waypoint for a short, bounded interval"
+          " using body-frame velocities. Positive v_x moves forward, positive"
+          " v_y moves left, and positive v_rot turns counterclockwise. The"
+          " robot powers on and stands automatically. The current camera-arm"
+          " joint pose is held relative to the body, so the gripper camera"
+          " moves with the robot. Use small commands near people, furniture,"
+          " stairs, or other obstacles."
       ),
       parameters={
           "type": "OBJECT",
@@ -526,12 +515,13 @@ def drive_tool() -> dict[str, Any]:
 
 
 def stop_spot_tool() -> dict[str, Any]:
-  """Tool to immediately stop Spot motion and freeze the arm."""
+  """Tool to immediately stop robot motion and freeze the arm."""
   return _tool(
       name="stop",
       description=(
           "Immediately cancel base motion and navigation and freeze the arm."
-          " Call this whenever motion is unsafe or the user asks Spot to stop."
+          " Call this whenever motion is unsafe or the user asks the robot to"
+          " stop."
       ),
       parameters={"type": "OBJECT", "properties": {}},
       behavior="BLOCKING",
@@ -543,7 +533,7 @@ def look_tool() -> dict[str, Any]:
   return _tool(
       name="look",
       description=(
-          "Aim Spot's gripper-mounted camera by rotating only the arm; the"
+          "Aim the robot's gripper-mounted camera by rotating only the arm; the"
           " robot body and feet remain stationary. Use small steps and"
           " inspect the fresh camera frame returned after each move."
       ),
@@ -576,7 +566,7 @@ def detect_tool() -> dict[str, Any]:
   return _tool(
       name="detect",
       description=(
-          "Use the Spot backend's Gemini Robotics detector to locate exactly"
+          "Use the robot backend's Gemini Robotics detector to locate exactly"
           " one language-specified object or placement location in the stable"
           " hand-camera image."
           " When the user asks to pick up an object, assume it is in the"
@@ -615,7 +605,7 @@ def pick_tool() -> dict[str, Any]:
           " and before any robot or camera motion. The target is consumed"
           " after one attempt. A completed call still requires visual success"
           " verification. The backend reduces the gripper hold torque after"
-          " the native Spot grasp succeeds."
+          " the native grasp succeeds."
       ),
       parameters={"type": "OBJECT", "properties": {}},
       behavior="BLOCKING",
@@ -780,8 +770,8 @@ def sit_tool() -> dict[str, Any]:
       name="sit",
       description=(
           "Sit the robot down and power off its motors. Call this only when"
-          " the user's current instruction explicitly asks Spot to sit; never"
-          " sit automatically when a task ends or Spot becomes idle."
+          " the user's current instruction explicitly asks the robot to sit;"
+          " never sit automatically when a task ends or the robot becomes idle."
       ),
       parameters={"type": "OBJECT", "properties": {}},
       behavior="BLOCKING",
@@ -857,8 +847,8 @@ def wait_for_pick_up_tool() -> dict[str, Any]:
   return _tool(
       name="wait_for_pick_up",
       description=(
-          "Wait for a person to pick up the object currently held by Spot."
-          " Call from carry pose after reaching the recipient. The tool"
+          "Wait for a person to pick up the object currently held by the"
+          " robot. Call from carry pose after reaching the recipient. The tool"
           " monitors upward hand motion; when the hand rises by the threshold,"
           " it opens the gripper, waits briefly, closes the gripper, and stows"
           " the arm. A timeout leaves the object held."
@@ -1340,96 +1330,6 @@ def spot_sim_tools() -> list[dict[str, Any]]:
 
 
 
-def tinybot_make_gesture_tool() -> dict[str, Any]:
-  """Tool to make the tinybot perform a gesture."""
-  return _tool(
-      name="make_gesture",
-      description="Make the tinybot perform a gesture.",
-      parameters={
-          "type": "OBJECT",
-          "properties": {
-              "gesture": {
-                  "type": "STRING",
-                  "description": (
-                      "The name of the gesture to perform. Valid gestures"
-                      " are: 'nod', 'no', 'home', 'home_pose'."
-                  ),
-              },
-              "speed": {
-                  "type": "INTEGER",
-                  "description": "Speed of gesture (default: 150).",
-              },
-          },
-          "required": ["gesture"],
-      },
-      behavior="NON_BLOCKING",
-  )
-
-
-def move_absolute_tool() -> dict[str, Any]:
-  """Tool to move tinybot joints to absolute angles."""
-  return _tool(
-      name="move_absolute",
-      description="Move tinybot joints to absolute angles in degrees.",
-      parameters={
-          "type": "OBJECT",
-          "properties": {
-              "angles": {
-                  "type": "ARRAY",
-                  "items": {"type": "NUMBER"},
-                  "description": "Target joint angles in degrees.",
-              },
-              "speeds": {
-                  "type": "ARRAY",
-                  "items": {"type": "INTEGER"},
-                  "description": "Movement speeds for each joint.",
-              },
-              "blocking": {
-                  "type": "BOOLEAN",
-                  "description": (
-                      "Whether to block until movement is complete (default:"
-                      " true)."
-                  ),
-              },
-          },
-          "required": ["angles", "speeds"],
-      },
-      behavior="BLOCKING",
-  )
-
-
-def move_relative_tool() -> dict[str, Any]:
-  """Tool to move tinybot joints by relative angles."""
-  return _tool(
-      name="move_relative",
-      description="Move tinybot joints by relative angles in degrees.",
-      parameters={
-          "type": "OBJECT",
-          "properties": {
-              "relative_angles": {
-                  "type": "ARRAY",
-                  "items": {"type": "NUMBER"},
-                  "description": "Relative angles in degrees.",
-              },
-              "speeds": {
-                  "type": "ARRAY",
-                  "items": {"type": "INTEGER"},
-                  "description": "Movement speeds for each joint.",
-              },
-              "blocking": {
-                  "type": "BOOLEAN",
-                  "description": (
-                      "Whether to block until movement is complete (default:"
-                      " true)."
-                  ),
-              },
-          },
-          "required": ["relative_angles", "speeds"],
-      },
-      behavior="BLOCKING",
-  )
-
-
 def clear_overlay_tool() -> dict[str, Any]:
   """Tool to clear point overlays on the camera image."""
   return _tool(
@@ -1440,18 +1340,5 @@ def clear_overlay_tool() -> dict[str, Any]:
   )
 
 
-def tinybot_tools() -> list[dict[str, Any]]:
-  """Tinybot motion + drawing tools."""
-  return _wrap([
-      update_plan_tool(),
-      turn_head_to_uv_tool(),
-      tinybot_make_gesture_tool(),
-      move_absolute_tool(),
-      move_relative_tool(),
-      draw_points_tool(),
-      clear_overlay_tool(),
-      stop_tool(),
-      ack_tool(),
-      send_message_tool(enable_send_message_to_user=True),
-  ])
+robot_sim_tools = spot_sim_tools
 

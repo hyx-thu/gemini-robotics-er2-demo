@@ -163,16 +163,19 @@ class ModelCapabilityTest(unittest.TestCase):
 
   def test_strips_text_only_comms_rules_for_native_audio(self):
     from agent import agent as agent_lib
-    for name in ("spot", "tinybot"):
+    for name in ("robot", "spot"):
       ag = agent_lib.Agent.from_name(name)
+      self.assertEqual("robot", ag.name)
       stripped = server._strip_text_only_comms_rules(ag.developer_instruction)  # pylint: disable=protected-access
       self.assertNotIn("You MUST NOT reply directly with text or audio", stripped)
       self.assertNotIn("talk to the user via the `send_message` tool", stripped)
       self.assertNotIn("send_message(target='user'", stripped)
       self.assertNotIn('send_message(target="user"', stripped)
-      if name == "spot":
-        self.assertIn("LANGUAGE RULE", stripped)
-        self.assertIn("Always speak and reply in the SAME language", stripped)
+      self.assertIn("LANGUAGE RULE", stripped)
+      self.assertIn("Always speak and reply in the SAME language", stripped)
+    for removed in ("human", "tinybot"):
+      with self.assertRaises(ValueError):
+        agent_lib.Agent.from_name(removed)
 
   def test_er2_routes_to_gemini_platform_vertex(self):
     import os

@@ -457,10 +457,9 @@ class LanguageLockTest(unittest.TestCase):
     from tool import tools as tools_lib  # pylint: disable=g-import-not-at-top
 
     for build in (
-        tools_lib.human_tools,
         tools_lib.spot_tools,
         tools_lib.spot_sim_tools,
-        tools_lib.tinybot_tools,
+        tools_lib.robot_sim_tools,
     ):
       names = {
           d["name"]

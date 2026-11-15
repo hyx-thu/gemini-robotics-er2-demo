@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Starting Virtual Spot & Tinybot Simulator Backend on 127.0.0.1:8888..."
+echo "Starting Virtual Robot Simulator Backend on 127.0.0.1:8888..."
 python3 /app/mock_robot_backend.py &
 
 # Wait briefly for mock backend to listen on 8888

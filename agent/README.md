@@ -1,6 +1,6 @@
 # Physical Agent Server
 
-Physical Agent Server managed with [`uv`](https://github.com/astral-sh/uv). It exposes a FastAPI server, WebSocket endpoints for live streaming audio/video with Gemini Live API, and robot embodiment integrations (Spot, Human, Tinybot).
+Physical Agent Server managed with [`uv`](https://github.com/astral-sh/uv). It exposes a FastAPI server, WebSocket endpoints for live streaming audio/video with Gemini Live API, and Robot embodiment integration.
 
 ---
 

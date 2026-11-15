@@ -1466,7 +1466,7 @@ class SessionManager:
             req_desc = self._pending_user_action_text or "user manipulation request"
             self._pending_action_nudge = (
                 "[HEARTBEAT] SYSTEM MANDATE: The user just requested a physical"
-                f" robot task ({req_desc!r}). You are the embodied Spot robot"
+                f" robot task ({req_desc!r}). You are the embodied robot"
                 " arm — NEVER give manual human DIY instructions and NEVER"
                 " stop after saying you will look. Right now in this turn, you"
                 " MUST call update_plan(goal=..., steps=['detect() - ...',"

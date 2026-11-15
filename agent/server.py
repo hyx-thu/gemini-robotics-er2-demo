@@ -46,11 +46,9 @@ import uvicorn
 import session_config
 import session_manager
 from agent import agent as agent_lib
-from embodiment import human as human_embodiment_lib
 from embodiment.spot import robot_client as spot_robot_client_lib
 from embodiment.spot import spot_embodiment as spot_embodiment_lib
 from embodiment.spot import spot_sim_embodiment as spot_sim_embodiment_lib
-from embodiment.tinybot import tinybot_embodiment as tinybot_embodiment_lib
 from model import live_api_client
 from model import tts_client as tts_client_lib
 from model import vertex_rest
@@ -327,14 +325,20 @@ async def api_server_defaults(request: fastapi.Request):
       "spot_simulated": agent_lib.spot_simulated(),
       # Opt-in dataset recording (private bucket) is available on this server.
       "recording_available": bool(os.environ.get("RECORDING_BUCKET")),
-      # Agent pre-selected in the UI on page load (env DEFAULT_AGENT).
-      "default_agent": os.environ.get("DEFAULT_AGENT", "spot").strip() or "spot",
+      # Agent pre-selected in the UI on page load (env DEFAULT_AGENT; legacy
+      # "spot" resolves to "robot").
+      "default_agent": (
+          "robot"
+          if agent_lib.normalize_agent_name(
+              os.environ.get("DEFAULT_AGENT", "robot")
+          )
+          == "robot"
+          else "robot"
+      ),
       "default_scenario": config.scenario_id,
-      # Which video source the UI should use per agent.
+      # Which video source the UI should use for the robot embodiment.
       "video_sources": {
-          "human": "computer",
-          "spot": "computer" if agent_lib.spot_simulated() else "spot",
-          "tinybot": "tinybot",
+          "robot": "computer" if agent_lib.spot_simulated() else "robot",
       },
   }
 
@@ -342,12 +346,12 @@ async def api_server_defaults(request: fastapi.Request):
 def _validate_agent_name(name: object) -> str:
   if not isinstance(name, str) or not name.strip():
     raise fastapi.HTTPException(status_code=400, detail="agent_name is required")
-  name = name.strip()
+  normalized = agent_lib.normalize_agent_name(name)
   try:
-    agent_lib.Agent.from_name(name)
+    agent_lib.Agent.from_name(normalized)
   except ValueError as exc:
     raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
-  return name
+  return normalized
 
 
 def _set_optional_override(
@@ -544,22 +548,18 @@ async def api_agent_config(
 ):
   """Return the resolved agent configuration."""
   config = request.app.state.config
-  try:
-    agent = agent_lib.Agent.from_name(name)
-    agent_si = config.custom_si.get(name, "")
-    agent_di = config.custom_di.get(name, "")
-    agent_hb = (
-        config.custom_heartbeat_text.get(name, "")
-        or session_manager.get_default_heartbeat_text()
-    )
-    if agent_si:
-      agent.system_instruction = agent_si
-    if agent_di:
-      agent.developer_instruction = agent_di
-  except ValueError:
-    raise fastapi.HTTPException(
-        status_code=400, detail=f"Unknown agent name: {name}"
-    )
+  name = _validate_agent_name(name)
+  agent = agent_lib.Agent.from_name(name)
+  agent_si = config.custom_si.get(name, "")
+  agent_di = config.custom_di.get(name, "")
+  agent_hb = (
+      config.custom_heartbeat_text.get(name, "")
+      or session_manager.get_default_heartbeat_text()
+  )
+  if agent_si:
+    agent.system_instruction = agent_si
+  if agent_di:
+    agent.developer_instruction = agent_di
 
   active_scenario = scenario_rag.normalize_scenario_id(
       scenario if scenario is not None else config.scenario_id
@@ -638,7 +638,7 @@ async def api_agent_config(
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: fastapi.WebSocket,
-    agent_name: str = "human",
+    agent_name: str = "robot",
     custom_si: str = "",
     enabled_tools: str = "",
     response_modality: str | None = None,
@@ -654,6 +654,14 @@ async def websocket_endpoint(
 
   await websocket.accept()
   logger.info("WebSocket connected")
+
+  normalized_agent = agent_lib.normalize_agent_name(agent_name)
+  if normalized_agent != "robot":
+    await websocket.close(
+        code=1008, reason=f"Unknown agent name: {agent_name}"
+    )
+    return
+  agent_name = normalized_agent
 
   async def ui_callback(event):
     await websocket.send_json(event)
@@ -673,26 +681,18 @@ async def websocket_endpoint(
     )
     active_custom_kb = config.custom_scenario_kb.get(active_scenario, "")
 
-    if agent_name == "spot" and agent_lib.spot_simulated():
+    if agent_lib.spot_simulated():
       # Webcam-in-the-loop: browser camera/mic, simulated actuation.
       current_embodiment = spot_sim_embodiment_lib.SimulatedSpotEmbodiment(
           waypoints=scenario_rag.get_scenario_waypoints(active_scenario)
       )
       app.state.active_poller_ref = None
-    elif agent_name == "spot":
+    else:
       current_embodiment = spot_embodiment_lib.SpotEmbodiment(
           robot_url=config.robot_url
       )
       await current_embodiment.initialize()
       app.state.active_poller_ref = current_embodiment.poller
-    elif agent_name == "tinybot":
-      current_embodiment = tinybot_embodiment_lib.TinybotEmbodiment(
-          robot_url=config.robot_url
-      )
-      app.state.active_poller_ref = current_embodiment.poller
-    else:
-      # Default to human (local webcam/mic) embodiment
-      current_embodiment = human_embodiment_lib.HumanEmbodiment()
 
     # Build SessionConfig from query params
     session_cfg = session_config.SessionConfig(
@@ -774,12 +774,8 @@ async def websocket_endpoint(
           resolved_model, hb_interval, hb_min_delay,
       )
 
-    # Determine tools (agent tools, optionally filtered)
-    agent_tools = (
-        current_embodiment.get_tools()
-        if agent_name in ("spot", "tinybot")
-        else agent.tools
-    )
+    # Determine tools (embodiment tools, optionally filtered)
+    agent_tools = current_embodiment.get_tools()
     agent_tools = _inject_rag_tool(
         agent_tools, active_scenario, active_custom_kb
     )
@@ -803,7 +799,7 @@ async def websocket_endpoint(
 
     er_orchestrator_config = None
     heartbeat_enabled = config.heartbeat_enabled
-    if orchestrator_model and agent_name in ("spot", "tinybot"):
+    if orchestrator_model:
       live_tools, er_tools = tools_lib.split_for_orchestration(agent_tools)
       agent_tools = live_tools
       agent.developer_instruction = (

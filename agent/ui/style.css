@@ -394,6 +394,15 @@ header h1 {
   transform: translateX(-50%);
 }
 
+.agent-selector-btn.agent-badge-static {
+  cursor: default;
+  user-select: none;
+  font-size: 14.5px;
+}
+.agent-selector-btn.agent-badge-static:hover {
+  background: var(--bg-panel);
+}
+
 /* Status Label (unified connection + robot state + timer) */
 .status-label {
   display: flex;
