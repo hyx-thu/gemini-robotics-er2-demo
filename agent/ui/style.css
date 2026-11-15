@@ -3435,6 +3435,183 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
 }
 
 /* =====================================================================
+   Layout v3: Stage Row (Bottom-Right PiP + 50:50 Split) & Slim Control Bar
+   ===================================================================== */
+main,
+.app-section,
+.app-grid,
+.left-panel {
+  min-width: 0;
+}
+.app-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.stage-row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.stage-row > .video-container {
+  flex: 1 1 100%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: radial-gradient(ellipse at 50% 50%, #1a222e 0%, #0d1117 100%);
+}
+.stage-row > .video-container video,
+.stage-row > .video-container .robot-cam-img {
+  background: transparent;
+}
+
+/* Default State: Floating PiP card in bottom-right corner of camera stage */
+.stage-row:not(.twin-split) > .robot-twin-slot {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: clamp(168px, 20vh, 212px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  z-index: 18;
+  overflow: visible;
+}
+.stage-row:not(.twin-split) > .robot-twin-slot > .robot-twin {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+.dark-theme .stage-row:not(.twin-split) > .robot-twin-slot > .robot-twin {
+  border-color: rgba(138, 180, 248, 0.36);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* Expanded State: 50:50 Side-by-Side Equal-Height Split Stage */
+.stage-row.twin-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.stage-row.twin-split:has(> .robot-twin-slot.hidden),
+.stage-row.twin-split:has(> .robot-twin-slot > .robot-twin.hidden) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.stage-row.twin-split > .robot-twin-slot {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  min-width: 0;
+  min-height: 0;
+  z-index: 15;
+}
+.stage-row.twin-split > .robot-twin-slot > .robot-twin,
+.stage-row.twin-split > .robot-twin-slot > .robot-twin.expanded {
+  position: relative;
+  bottom: auto;
+  right: auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.14);
+}
+
+/* Slim Single-Row Bottom Control Bar (~56px total height) */
+.lower-row {
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  align-items: center;
+}
+.lower-left {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  min-height: 54px;
+  min-width: 0;
+}
+.lower-left .status-row {
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+}
+.lower-left .status-label {
+  padding: 4px 8px 4px 4px;
+  font-size: 12.5px;
+}
+.lower-left .controls-grid {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+.lower-left .controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.lower-left .model-selector-wrapper {
+  flex: 1 1 110px;
+  max-width: 380px;
+  min-width: 0;
+  order: 0;
+  margin-right: 4px;
+}
+.lower-left .model-selector-btn {
+  height: 38px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 12px;
+  min-width: 0;
+}
+.lower-left .controls-row > .btn {
+  height: 38px;
+  min-width: 38px;
+  width: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+}
+
+@media (max-width: 960px) {
+  .stage-row:not(.twin-split) > .robot-twin-slot {
+    width: clamp(132px, 17vh, 168px);
+    right: 10px;
+    bottom: 10px;
+  }
+  .stage-row.twin-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .lower-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .lower-left .controls-grid {
+    flex: 1 1 100%;
+  }
+  .lower-left .controls-row {
+    justify-content: space-between;
+  }
+}
+
+/* =====================================================================
    [INTERNAL-TEST-ONLY: Real2Sim] Expanded 3D Twin Robot Model Selector
    Stays ONLY in dev/test; skip when merging to main/stable.
    ===================================================================== */

@@ -1752,6 +1752,11 @@ function selectAgent(type) {
   if (twin) twin.classList.toggle('hidden', type !== 'spot');
   const twinSlot = document.getElementById('robot-twin-slot');
   if (twinSlot) twinSlot.classList.toggle('hidden', type !== 'spot');
+  if (type !== 'spot') {
+    const stageRow = document.getElementById('stage-row');
+    if (stageRow) stageRow.classList.remove('twin-split');
+    window.dispatchEvent(new CustomEvent('robot-twin:collapse'));
+  }
 
   // Clear active state from all agent dropdown options
   if (agentDropdown) {
@@ -2904,8 +2909,11 @@ function redrawOverlay() {
   }
 }
 
-// Keep markers aligned when the layout or the video geometry changes.
+// Keep markers aligned when the layout or the video geometry changes (including 50:50 split & chat sidebar toggle).
 window.addEventListener('resize', redrawOverlay);
+if (overlayCanvas && overlayCanvas.parentElement && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => redrawOverlay()).observe(overlayCanvas.parentElement);
+}
 if (videoPreview) videoPreview.addEventListener('loadedmetadata', redrawOverlay);
 if (robotCamImg) robotCamImg.addEventListener('load', redrawOverlay);
 

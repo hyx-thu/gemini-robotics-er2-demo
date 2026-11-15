@@ -808,12 +808,14 @@ function init() {
     };
   }
   const expandBtn = document.getElementById('twin-expand');
+  const stageRow = document.getElementById('stage-row');
   function setExpanded(exp) {
     panel.classList.toggle('expanded', exp);
+    if (stageRow) stageRow.classList.toggle('twin-split', exp);
     if (expandBtn) {
       expandBtn.setAttribute('aria-expanded', String(exp));
-      expandBtn.title = exp ? 'Restore 3D view (1×)' : 'Expand 3D view (4×)';
-      expandBtn.setAttribute('aria-label', exp ? 'Restore 3D view' : 'Expand 3D view');
+      expandBtn.title = exp ? 'Restore corner view (PiP)' : 'Expand 50/50 split view';
+      expandBtn.setAttribute('aria-label', exp ? 'Restore corner view' : 'Expand 50/50 split view');
     }
     if (exp) {
       // [INTERNAL-TEST-ONLY: Real2Sim] Preload all CAD bundles when expanded so switching is instant
@@ -824,6 +826,7 @@ function init() {
     }
     resize();
   }
+  window.addEventListener('robot-twin:collapse', () => setExpanded(false));
   if (expandBtn) {
     expandBtn.onclick = (e) => {
       e.stopPropagation();
@@ -886,11 +889,21 @@ function init() {
   const clock = new THREE.Clock();
   let t = 0, walkAmt = 0, gaitPhase = 0, idleAt = 0;
   function now() { return t; }
+  const BASE_FOV = 40;
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
-    if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) {
-      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    const aspect = w / h;
+    // Preserve at least BASE_FOV horizontal field-of-view when the 50:50 split pane is portrait (aspect < 1)
+    const targetFov = aspect >= 1
+      ? BASE_FOV
+      : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.max(0.55, aspect)));
+    const dpr = renderer.getPixelRatio();
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr) || Math.abs(camera.fov - targetFov) > 0.05) {
+      renderer.setSize(w, h, false);
+      camera.aspect = aspect;
+      camera.fov = targetFov;
+      camera.updateProjectionMatrix();
     }
   }
   new ResizeObserver(resize).observe(canvas);
