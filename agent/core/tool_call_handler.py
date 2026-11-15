@@ -499,19 +499,27 @@ class ToolCallHandler:
         user_lang = getattr(
             self._session_manager, "user_language_name", None
         )
-        if user_lang:
+        if user_lang == "English":
+          rule = (
+              "The user is speaking English. Your reply (voice and text) MUST"
+              " be 100% in English ONLY. Do NOT reply in Mandarin Chinese,"
+              " Portuguese, Spanish, German, or any other non-English language,"
+              " even if earlier turns in this conversation were in another"
+              " language."
+          )
+        elif user_lang:
           rule = (
               f"The user is speaking {user_lang}. Your reply (voice and text)"
               f" MUST be entirely in {user_lang}. Do NOT switch to English,"
-              " German, Spanish or any other language because this tool"
-              " response is written in English."
+              " Portuguese, German, Spanish, or any other language because this"
+              " tool response is written in English."
           )
         else:
           rule = (
-              "Speak to the user in the EXACT language the user spoke or typed"
-              " (e.g. reply in Mandarin Chinese if the user spoke Chinese;"
-              " reply in English if the user spoke English). Do NOT switch"
-              " language because this tool response is in English."
+              "Speak to the user in the EXACT language of the user's MOST"
+              " RECENT utterance (reply in English if the user spoke English;"
+              " reply in Mandarin Chinese if the user spoke Chinese). Never"
+              " reply in Portuguese, Spanish, or another unrequested language."
           )
         result_dict.setdefault("reply_language_rule", rule)
 

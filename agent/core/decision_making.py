@@ -59,11 +59,24 @@ def _is_reasoning_leak_in_transcription(text: str) -> bool:
   return False
 
 
+# Unambiguous Romanized Mandarin Pinyin syllables (excluding English words like
+# "me", "ben", "bang", "ma", "na", "bi" so normal English speech never triggers
+# garbled-ASR replacement).
 _PINYIN_TOKENS = frozenset({
-    "ni", "nhao", "nihao", "wo", "zhe", "ge", "bi", "jia", "zai", "ben",
-    "zi", "zhong", "jian", "bang", "cha", "yi", "xia", "zen", "me", "ba",
-    "fang", "dao", "shang", "na", "qu", "kan", "hao", "ma", "qing", "gei",
+    "ni", "nhao", "nihao", "wo", "zhe", "ge", "jia", "zai",
+    "zi", "zhong", "jian", "cha", "yi", "xia", "zen", "ba",
+    "fang", "dao", "shang", "qu", "kan", "hao", "qing", "gei",
     "yan", "jing", "shou", "ji", "zhuo", "bei",
+})
+
+_COMMON_ENGLISH_WORDS = frozenset({
+    "the", "and", "is", "are", "am", "was", "were", "you", "your", "my", "we",
+    "they", "he", "she", "it", "this", "that", "what", "where", "when", "which",
+    "who", "why", "how", "can", "could", "should", "would", "will", "do",
+    "does", "did", "have", "has", "had", "need", "want", "get", "got", "go",
+    "pick", "put", "place", "take", "give", "tell", "show", "help", "please",
+    "thank", "thanks", "hello", "good", "cold", "room", "pay", "bill",
+    "doctor", "hospital", "english", "speak",
 })
 
 
@@ -112,9 +125,9 @@ def is_garbled_input_transcription(text: str) -> bool:
     return True
   # Romanized Mandarin Pinyin tokens without CJK characters.
   tokens = re.findall(r"[a-zA-Z]+", text.lower())
-  if len(tokens) >= 2:
+  if len(tokens) >= 2 and not any(t in _COMMON_ENGLISH_WORDS for t in tokens):
     pinyin_hits = sum(1 for t in tokens if t in _PINYIN_TOKENS)
-    if pinyin_hits >= 2 and pinyin_hits / len(tokens) >= 0.35:
+    if pinyin_hits >= 2 and pinyin_hits / len(tokens) >= 0.45:
       return True
   return False
 
@@ -181,10 +194,13 @@ class DecisionMaking:
     # Tracks whether the current turn has received any inlineData audio chunk
     # so we can distinguish real speech transcriptions from pre-tool thought leaks.
     self._turn_had_audio: bool = False
-    # Utterance tracking for clean UI replacement when inputTranscription is garbled.
+    # Utterance tracking for clean UI replacement when inputTranscription is garbled,
+    # plus full-utterance text accumulation so chunked English transcripts reach
+    # language detection intact.
     self._utterance_seq: int = 0
     self._utterance_open: bool = False
     self._utterance_garbled: bool = False
+    self._utterance_text: str = ""
     self.last_transcript_garbled: bool = False
     self.last_garbled_utterance_id: int | None = None
     self._refine_task: asyncio.Task | None = None
@@ -354,6 +370,7 @@ class DecisionMaking:
                 source=event_bus.EventSource.USER,
                 data={
                     "text": cleaned,
+                    "full_text": cleaned,
                     "replace": True,
                     "utterance_id": utterance_id,
                 },
@@ -559,6 +576,7 @@ class DecisionMaking:
           self._utterance_seq += 1
           self._utterance_open = True
           self._utterance_garbled = False
+          self._utterance_text = ""
         uid = self._utterance_seq
         if is_garbled_input_transcription(raw_text) or self._utterance_garbled:
           if not self._utterance_garbled:
@@ -580,11 +598,24 @@ class DecisionMaking:
         else:
           clean_text = normalize_input_transcription(raw_text)
           if clean_text:
+            if not self._utterance_text:
+              self._utterance_text = clean_text
+            elif (
+                re.match(r"[A-Za-z0-9.,!?;:]", self._utterance_text[-1])
+                and re.match(r"[A-Za-z0-9]", clean_text[0])
+            ):
+              self._utterance_text = f"{self._utterance_text} {clean_text}"
+            else:
+              self._utterance_text = f"{self._utterance_text}{clean_text}"
             await self._bus.publish(
                 event_bus.Event(
                     type=event_bus.EventType.USER_TRANSCRIPT,
                     source=event_bus.EventSource.USER,
-                    data={"text": clean_text, "utterance_id": uid},
+                    data={
+                        "text": clean_text,
+                        "full_text": self._utterance_text,
+                        "utterance_id": uid,
+                    },
                 )
             )
 

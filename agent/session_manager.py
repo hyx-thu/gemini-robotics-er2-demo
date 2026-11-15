@@ -91,16 +91,77 @@ _LANGUAGE_NAMES = {
     "hi": "Hindi (हिन्दी)",
     "th": "Thai (ไทย)",
     "en": "English",
+    "es": "Spanish (Español)",
+    "fr": "French (Français)",
+    "de": "German (Deutsch)",
+    "pt": "Portuguese (Português)",
+    "it": "Italian (Italiano)",
 }
 
-# Function words that are near-unique to each major Latin-script language.
+# Unambiguous short English conversational words / greetings that may contain
+# fewer than 6 Latin letters ("Hi", "Hey", "Hello", "Yes", "Help", "Stop").
+# Bare "ok" is intentionally omitted because speakers of all languages say "OK".
+_EN_SHORT_WORDS_RE = re.compile(
+    r"\b(hello|hi|hey|yes|yeah|yep|nope|okay|sure|thanks|thank|"
+    r"please|sorry|help|stop|english|morning|afternoon|evening|bye|goodbye)\b",
+    re.IGNORECASE,
+)
+
+# Function & high-frequency conversational words near-unique to each major
+# Latin-script language. Non-English patterns MUST exclude words shared with
+# everyday English ("a", "as", "o", "die", "in", "an", "on", "or", "me", "no",
+# "come") so normal English sentences never match Portuguese/German/French/etc.
 _LATIN_LANG_MARKERS = {
-    "en": r"\b(the|and|is|are|you|with|this|that|have|will|can|please|it's|i'm)\b",
-    "de": r"\b(und|ist|nicht|das|die|der|ich|sie|wir|ein|eine|mit|für|auf|können|bitte)\b|[äöüß]",
-    "es": r"\b(el|la|los|las|es|está|para|con|por|una|uno|puedo|gracias|aquí|qué)\b|[ñ¿¡]",
-    "fr": r"\b(le|la|les|est|pour|avec|une|vous|nous|je|c'est|merci|voici)\b|[àâçéèêëîïôûùüÿœ]",
-    "pt": r"\b(o|a|os|as|é|para|com|uma|você|não|obrigado|aqui|está)\b|[ãõç]",
-    "it": r"\b(il|lo|gli|le|è|per|con|una|sono|questo|grazie|ecco)\b",
+    "en": (
+        r"\b("
+        r"the|an|and|or|but|if|because|about|into|from|with|without|for|of|to|"
+        r"at|by|up|out|off|over|under|again|here|there|now|today|"
+        r"i|i'm|i'd|i'll|i've|my|mine|myself|you|you're|your|yours|"
+        r"we|we're|our|us|they|them|their|he|him|his|she|her|it|it's|its|"
+        r"what|what's|where|where's|when|who|whom|whose|why|how|which|"
+        r"this|that|these|those|"
+        r"am|is|isn't|are|aren't|was|wasn't|were|be|been|being|"
+        r"do|does|doesn't|did|didn't|don't|have|has|had|haven't|"
+        r"will|won't|would|can|can't|cannot|could|should|shall|may|might|must|"
+        r"please|thank|thanks|hello|hi|hey|good|morning|afternoon|evening|"
+        r"yes|yeah|okay|sure|sorry|excuse|help|need|want|get|got|go|going|"
+        r"take|put|pick|place|look|see|show|tell|speak|talk|english|chinese|"
+        r"room|floor|window|counter|appointment|doctor|hospital|bank|pay|bill|cold"
+        r")\b"
+    ),
+    "de": (
+        r"\b(und|ist|nicht|das|der|dem|des|ein|eine|einen|einem|"
+        r"ich|du|sie|wir|ihr|mir|mich|dir|dich|sich|"
+        r"habe|haben|werde|werden|sind|mit|für|auf|aus|nach|bei|oder|aber|"
+        r"wenn|weil|können|kann|muss|bitte|danke|hallo|guten|jetzt|hier|"
+        r"wo|wie|warum)\b|[äöüß]"
+    ),
+    "es": (
+        r"\b(el|la|los|las|del|al|es|está|están|estoy|somos|para|con|por|"
+        r"una|uno|unas|unos|pero|como|cómo|dónde|qué|cuál|quién|cuándo|"
+        r"puedo|puede|quiero|necesito|tengo|tiene|vamos|voy|ahora|"
+        r"usted|ustedes|nosotros|gracias|hola|buenos|buenas|aquí)\b|[ñ¿¡]"
+    ),
+    "fr": (
+        r"\b(le|la|les|des|du|au|aux|est|sont|suis|sommes|êtes|pour|avec|"
+        r"dans|sur|chez|une|mais|ou|donc|comme|vous|nous|je|tu|ils|elles|"
+        r"ce|cet|cette|ces|c'est|j'ai|qu'il|n'est|ne|pas|très|bien|"
+        r"merci|bonjour|bonsoir|voici|voilà|où|comment|quel|quelle|"
+        r"puis|veux|besoin)\b|[àâçéèêëîïôûùüÿœ]"
+    ),
+    "pt": (
+        r"\b(é|você|vocês|não|sim|obrigado|obrigada|estou|está|estão|"
+        r"somos|são|para|com|pelo|pela|pelos|pelas|uma|uns|umas|"
+        r"isso|isto|aquilo|aqui|onde|qual|quais|como|quando|"
+        r"posso|pode|preciso|quero|tenho|tem|vamos|vou|muito|"
+        r"bom|boa|tarde|noite|atendimento|dirija)\b|[ãõ]"
+    ),
+    "it": (
+        r"\b(il|lo|gli|le|nel|nella|della|dello|dei|degli|delle|è|"
+        r"sono|siamo|siete|per|con|una|uno|questo|questa|questi|queste|"
+        r"quello|quella|anche|molto|grazie|ciao|buongiorno|buonasera|"
+        r"ecco|dove|quale|quando|posso|vorrei|bisogno|favore)\b"
+    ),
 }
 
 
@@ -124,17 +185,36 @@ def detect_language(text: str) -> str | None:
   if re.search(r"[\u0e00-\u0e7f]", s):
     return "th"
   latin_letters = len(re.findall(r"[A-Za-zÀ-ÿ]", s))
-  if latin_letters < 6:
+  if latin_letters < 2:
     return None
+  has_non_ascii_latin = bool(re.search(r"[À-ÿ¿¡œŒ]", s))
   lower = s.lower()
-  best, best_hits = None, 0
+  if not has_non_ascii_latin and _EN_SHORT_WORDS_RE.search(lower):
+    # Short English greetings ("Hi", "Hello", "Thanks", "Help") unless a
+    # non-English Latin greeting pair ("Hola gracias", "Bonjour merci") wins.
+    if latin_letters < 6:
+      return "en"
+  if latin_letters < 4:
+    return None
+  en_hits = len(re.findall(_LATIN_LANG_MARKERS["en"], lower))
+  best_other, best_other_hits = None, 0
   for code, pat in _LATIN_LANG_MARKERS.items():
+    if code == "en":
+      continue
     hits = len(re.findall(pat, lower))
-    if hits > best_hits:
-      best, best_hits = code, hits
-  if best is None:
-    return "en" if latin_letters >= 12 else None
-  return best
+    if hits > best_other_hits:
+      best_other, best_other_hits = code, hits
+  if best_other is not None and best_other_hits > en_hits:
+    # In pure ASCII text (no accents/diacritics), require >=2 non-English hits
+    # so a single cross-lingual word like "pour" ("pour water") never hijacks
+    # an English utterance.
+    if has_non_ascii_latin or best_other_hits >= 2:
+      return best_other
+  if en_hits > 0:
+    return "en"
+  if not has_non_ascii_latin and latin_letters >= 8:
+    return "en"
+  return None
 
 
 def language_display_name(code: str | None) -> str | None:
@@ -380,6 +460,11 @@ class SessionManager:
     code = detect_language(text)
     if code and code != self.user_language:
       logger.info("User language switched: %s -> %s", self.user_language, code)
+      self._language_nudge_count = 0
+      if getattr(self, "_pending_action_nudge", "").startswith(
+          "[HEARTBEAT] LANGUAGE"
+      ):
+        self._pending_action_nudge = ""
     if code:
       self.user_language = code
       self.user_language_name = language_display_name(code)
@@ -388,6 +473,12 @@ class SessionManager:
   def _language_lock_line(self) -> str:
     if not self.user_language_name:
       return ""
+    if self.user_language == "en":
+      return (
+          "\n[LANGUAGE LOCK] The user is speaking English. Anything you say or"
+          " write MUST be 100% in English ONLY (do NOT reply in Chinese,"
+          " Portuguese, Spanish, or any other language)."
+      )
     return (
         f"\n[LANGUAGE LOCK] The user speaks {self.user_language_name}. Anything"
         f" you say or write MUST be in {self.user_language_name} only (this"
@@ -1089,6 +1180,33 @@ class SessionManager:
         self._record_bus_event,
     )
 
+    async def _track_user_language(event: event_bus.Event):
+      """Track user language across all session modes (including heartbeat_enabled=False)."""
+      if event.type == event_bus.EventType.USER_TRANSCRIPT:
+        if isinstance(event.data, dict):
+          full_txt = event.data.get("full_text") or event.data.get("text") or ""
+        else:
+          full_txt = str(event.data or "")
+        if full_txt.strip() and full_txt.strip() != "🎤 正在识别语音…":
+          self.note_user_language(full_txt)
+      elif event.type == event_bus.EventType.TEXT_INPUT:
+        txt = str(event.data or "").strip()
+        if (
+            txt
+            and not txt.startswith("[HEARTBEAT]")
+            and not txt.startswith("[ROBOT")
+            and not txt.startswith("[SYSTEM")
+        ):
+          self.note_user_language(txt)
+
+    self.bus.subscribe(
+        [
+            event_bus.EventType.USER_TRANSCRIPT,
+            event_bus.EventType.TEXT_INPUT,
+        ],
+        _track_user_language,
+    )
+
     async def _ui_handler(event: event_bus.Event):
       await ui_queue.put(event)
 
@@ -1151,8 +1269,13 @@ class SessionManager:
               if isinstance(event.data, dict)
               else str(event.data or "")
           )
-          if txt.strip() and txt.strip() != "🎤 正在识别语音…":
-            self.note_user_language(txt)
+          full_txt = (
+              (event.data.get("full_text") or txt)
+              if isinstance(event.data, dict)
+              else txt
+          )
+          if full_txt.strip() and full_txt.strip() != "🎤 正在识别语音…":
+            self.note_user_language(full_txt)
           is_replace = (
               bool(event.data.get("replace"))
               if isinstance(event.data, dict)
@@ -1168,7 +1291,12 @@ class SessionManager:
               self._action_nudge_retries = 0
         elif event.type == event_bus.EventType.TEXT_INPUT:
           txt = str(event.data or "").strip()
-          if txt and not txt.startswith("[HEARTBEAT]"):
+          if (
+              txt
+              and not txt.startswith("[HEARTBEAT]")
+              and not txt.startswith("[ROBOT")
+              and not txt.startswith("[SYSTEM")
+          ):
             self.note_user_language(txt)
             if _is_action_request_text(txt):
               self._pending_user_action_text = txt[:200]

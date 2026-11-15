@@ -718,6 +718,30 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     await self.handler._execute_single_tool({"id": "ack-1", "name": "ack", "args": {}})
     self.assertEqual([], self.session.ui_notifications)
 
+  async def test_reply_language_rule_is_unambiguous_for_english_and_non_english(self):
+    # 1. When user speaks English, rule MUST NOT say "Do NOT switch to English"!
+    self.session.user_language = "en"
+    self.session.user_language_name = "English"
+    resp_en = await self._call("stand")
+    rule_en = resp_en["reply_language_rule"]
+    self.assertIn("100% in English ONLY", rule_en)
+    self.assertNotIn("Do NOT switch to English", rule_en)
+    self.assertIn("Portuguese", rule_en)
+
+    # 2. When user speaks Chinese, rule protects Chinese against English tool payload drift.
+    self.session.user_language = "zh"
+    self.session.user_language_name = "Mandarin Chinese (简体中文)"
+    resp_zh = await self._call("stand")
+    rule_zh = resp_zh["reply_language_rule"]
+    self.assertIn("Mandarin Chinese (简体中文)", rule_zh)
+    self.assertIn("Do NOT switch to English", rule_zh)
+
+    # 3. When user language is not yet known, rule instructs matching MOST RECENT utterance.
+    self.session.user_language = None
+    self.session.user_language_name = None
+    resp_none = await self._call("stand")
+    self.assertIn("MOST RECENT utterance", resp_none["reply_language_rule"])
+
 
 if __name__ == "__main__":
   unittest.main()
