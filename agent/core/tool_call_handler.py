@@ -496,8 +496,20 @@ class ToolCallHandler:
           function_response["scheduling"] = "SILENT"
           result_dict.setdefault("scheduling", "SILENT")
       else:
-        user_lang = getattr(
-            self._session_manager, "user_language_name", None
+        sm = self._session_manager
+        dm = getattr(sm, "decision_making", None)
+        speech_start = float(getattr(dm, "last_user_speech_start", 0.0) or 0.0)
+        last_lang_ts = float(getattr(sm, "_last_user_input_time", 0.0) or 0.0)
+        # If server VAD detected a brand-new user utterance and toolCall raced
+        # ahead of inputTranscription, do not stamp a stale previous-turn
+        # language lock onto this tool response.
+        speech_newer_than_transcript = bool(
+            speech_start > 0.0 and speech_start > last_lang_ts + 0.05
+        )
+        user_lang = (
+            None
+            if speech_newer_than_transcript
+            else getattr(sm, "user_language_name", None)
         )
         if user_lang == "English":
           rule = (
@@ -505,7 +517,7 @@ class ToolCallHandler:
               " be 100% in English ONLY. Do NOT reply in Mandarin Chinese,"
               " Portuguese, Spanish, German, or any other non-English language,"
               " even if earlier turns in this conversation were in another"
-              " language."
+              " language or the speaker has a non-native accent."
           )
         elif user_lang:
           rule = (
@@ -516,10 +528,12 @@ class ToolCallHandler:
           )
         else:
           rule = (
-              "Speak to the user in the EXACT language of the user's MOST"
-              " RECENT utterance (reply in English if the user spoke English;"
-              " reply in Mandarin Chinese if the user spoke Chinese). Never"
-              " reply in Portuguese, Spanish, or another unrequested language."
+              "Speak to the user in the EXACT language of the WORDS in the"
+              " user's MOST RECENT utterance (reply 100% in English if the user"
+              " spoke English words, even with an accent or after earlier"
+              " Chinese turns; reply in Mandarin Chinese if the user spoke"
+              " Chinese words). Never reply in Portuguese, Spanish, or another"
+              " unrequested language."
           )
         result_dict.setdefault("reply_language_rule", rule)
 

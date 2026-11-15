@@ -742,6 +742,20 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
     resp_none = await self._call("stand")
     self.assertIn("MOST RECENT utterance", resp_none["reply_language_rule"])
 
+    # 4. If server VAD started a new user turn and toolCall raced ahead of
+    #    inputTranscription, do NOT stamp stale previous-turn Chinese lock!
+    self.session.user_language = "zh"
+    self.session.user_language_name = "Mandarin Chinese (简体中文)"
+    self.session._last_user_input_time = 100.0
+    self.session.decision_making = type(
+        "DummyDM", (), {"last_user_speech_start": 105.0}
+    )()
+    resp_race = await self._call("stand")
+    self.assertIn("MOST RECENT utterance", resp_race["reply_language_rule"])
+    self.assertNotIn(
+        "user is speaking Mandarin Chinese", resp_race["reply_language_rule"]
+    )
+
 
 if __name__ == "__main__":
   unittest.main()

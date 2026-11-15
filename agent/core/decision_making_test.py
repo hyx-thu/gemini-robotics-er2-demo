@@ -185,6 +185,50 @@ class DecisionMakingTest(unittest.IsolatedAsyncioTestCase):
     )
     self.assertFalse(router.speaking.is_set())
 
+  async def test_tool_call_does_not_split_concurrent_input_transcription_chunks(self):
+    """Ensure toolCall arriving mid-utterance keeps full_text intact."""
+    from core import event_bus  # pylint: disable=g-import-not-at-top
+
+    bus = FakeBus()
+    dm = decision_making.DecisionMaking(bus)
+    for payload in (
+        {"voiceActivity": {"type": "ACTIVITY_START"}},
+        {"serverContent": {"inputTranscription": {"text": "Where can"}}},
+        {
+            "toolCall": {
+                "functionCalls": [
+                    {"name": "get_waypoints", "args": {}, "id": "c1"}
+                ]
+            }
+        },
+        {
+            "serverContent": {
+                "inputTranscription": {"text": "I do the payment?"}
+            }
+        },
+    ):
+      await dm._handle(
+          event_bus.Event(
+              type=event_bus.EventType.MODEL_RESPONSE,
+              source=event_bus.EventSource.ASSISTANT,
+              data=payload,
+          )
+      )
+
+    transcripts = [
+        e.data
+        for e in bus.events
+        if e.type == event_bus.EventType.USER_TRANSCRIPT
+    ]
+    self.assertEqual(2, len(transcripts))
+    self.assertEqual(
+        transcripts[0]["utterance_id"], transcripts[1]["utterance_id"]
+    )
+    self.assertEqual(
+        "Where can I do the payment?", transcripts[1]["full_text"]
+    )
+    self.assertGreater(dm.last_model_output_time, 0.0)
+
 
 class LanguageLockTest(unittest.TestCase):
 
@@ -346,6 +390,68 @@ class LanguageLockTest(unittest.TestCase):
     self.assertEqual("zh", dummy.user_language)
     self.assertIn("Mandarin Chinese", dummy.user_language_name)
     self.assertIn("Mandarin Chinese", dummy._language_lock_line())
+
+  def test_cjk_breath_fillers_and_mixed_asr_never_flip_english_to_chinese(self):
+    """Exact regression test for 2026-11-15T02:08:38Z live Cloud Run log."""
+    import session_manager  # pylint: disable=g-import-not-at-top
+
+    # 1. Exact live Cloud Run utterance at 02:08:38.993Z:
+    #    '啊。Yes, can you take me to the self-service kiosk?'
+    live_utterance = "啊。Yes, can you take me to the self-service kiosk?"
+    self.assertEqual(
+        "Yes, can you take me to the self-service kiosk?",
+        decision_making.normalize_input_transcription(live_utterance),
+    )
+    self.assertEqual("en", session_manager.detect_language(live_utterance))
+
+    # 2. Other breath/hesitation fillers or 1-char stray ASR homophones before English:
+    for mixed_en in (
+        "嗯，where can I do the blood test?",
+        "呃... I've caught a cold and keep coughing. Which floor should I go to?",
+        "哦, can you take me there?",
+        "好。Yes, can you take me to the self-service kiosk?",
+        "喂, where can I pay the bill?",
+    ):
+      self.assertEqual(
+          "en",
+          session_manager.detect_language(mixed_en),
+          f"Expected 'en' for {mixed_en!r}",
+      )
+
+    # 3. Standalone breath/hesitation fillers MUST return None (never flip en <-> zh):
+    for filler_only in ("啊。", "嗯", "呃...", "哦！", "唔", "Uh...", "Um", "Hmm"):
+      self.assertIsNone(
+          session_manager.detect_language(filler_only),
+          f"Expected None for standalone filler {filler_only!r}",
+      )
+
+    # 4. Real Chinese utterances with English loanwords or leading 'Hallo' stay 'zh':
+    for real_zh in (
+        "Hallo, hallo. 你可以听到吗?",
+        "我想做个 MRI 检查",
+        "请问 VIP 窗口在哪里？",
+        "我想预约一个 English speaking doctor",
+    ):
+      self.assertEqual(
+          "zh",
+          session_manager.detect_language(real_zh),
+          f"Expected 'zh' for {real_zh!r}",
+      )
+
+    # 5. Navigation phrase ("Can you take me there?") and get_waypoints must NOT
+    #    trigger tabletop manipulation action_nudge:
+    self.assertFalse(
+        session_manager._is_action_request_text("Can you take me there?")
+    )
+    self.assertFalse(
+        session_manager._is_action_request_text(
+            "Yes, can you take me to the self-service kiosk?"
+        )
+    )
+    self.assertIn("get_waypoints", session_manager._REAL_EMBODIMENT_ACTION_TOOLS)
+    self.assertTrue(
+        session_manager._is_action_request_text("Pick up the blue pen")
+    )
 
   def test_every_tool_set_includes_information_tools(self):
     from tool import tools as tools_lib  # pylint: disable=g-import-not-at-top

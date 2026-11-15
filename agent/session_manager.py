@@ -34,10 +34,15 @@ _REAL_EMBODIMENT_ACTION_TOOLS = frozenset({
     "look",
     "drive",
     "navigate",
+    "get_waypoints",
+    "stand",
+    "sit",
+    "make_gesture",
     "stow",
     "wait_for_pick_up",
     "stop",
     "confirm_action",
+    "robot_task",
 })
 
 _ACTION_INTENT_RE = re.compile(
@@ -45,6 +50,11 @@ _ACTION_INTENT_RE = re.compile(
     r"眼镜|手机|纸|球|块|桌面|桌|工具|调用|试一下|演示|pick|place|grab|put|"
     r"move|take|bring|lift|drop|detect|look|clip|pen|notebook|cup|mug|"
     r"glasses|phone|box|block)",
+    re.IGNORECASE,
+)
+
+_NAVIGATION_ONLY_RE = re.compile(
+    r"(\b(take me|guide me|lead me|show me the way|walk me)\b|带我去|领我去|带路)",
     re.IGNORECASE,
 )
 
@@ -68,6 +78,8 @@ def _is_action_request_text(text: str) -> bool:
   if not cleaned or cleaned.startswith("[HEARTBEAT]") or cleaned == "🎤 正在识别语音…":
     return False
   if _CHITCHAT_ONLY_RE.match(cleaned):
+    return False
+  if _NAVIGATION_ONLY_RE.search(cleaned):
     return False
   return bool(_ACTION_INTENT_RE.search(cleaned))
 
@@ -165,17 +177,55 @@ _LATIN_LANG_MARKERS = {
 }
 
 
+# Non-lexical vocal breath / hesitation sounds that ASR often emits at the
+# start of an utterance ("Uh..." transcribed as "啊。" before pure English, or
+# "嗯..." transcribed as "Hmm" / "Um" before Chinese). Stripped before language
+# classification so isolated vocal fillers return None and never flip an active
+# language lock.
+_CJK_FILLER_CHARS_RE = re.compile(r"[啊嗯呃哦噢唉唔欸]+")
+_LATIN_FILLER_WORDS_RE = re.compile(
+    r"\b(?:uh+|um+|er+|ah+|eh+|hmm+|mm+)\b",
+    re.IGNORECASE,
+)
+
+
 def detect_language(text: str) -> str | None:
   """Best-effort language code from script / function words; None if unknown."""
-  s = (text or "").strip()
+  raw = (text or "").strip()
+  if not raw:
+    return None
+  s = _CJK_FILLER_CHARS_RE.sub(" ", raw)
+  s = _LATIN_FILLER_WORDS_RE.sub(" ", s).strip()
   if not s:
     return None
-  if re.search(r"[\u3040-\u30ff]", s):
+
+  latin_words = re.findall(r"[A-Za-zÀ-ÿ']{2,}", s)
+  latin_word_count = len(latin_words)
+  lower = s.lower()
+  en_hits = len(re.findall(_LATIN_LANG_MARKERS["en"], lower))
+
+  kana_count = len(re.findall(r"[\u3040-\u30ff]", s))
+  if kana_count > 0 and not (
+      latin_word_count >= 4 and en_hits >= 3 and latin_word_count >= kana_count * 3
+  ):
     return "ja"
-  if re.search(r"[\uac00-\ud7af]", s):
+  hangul_count = len(re.findall(r"[\uac00-\ud7af]", s))
+  if hangul_count > 0 and not (
+      latin_word_count >= 4 and en_hits >= 3 and latin_word_count >= hangul_count * 3
+  ):
     return "ko"
-  if re.search(r"[\u4e00-\u9fff]", s):
-    return "zh"
+  cjk_count = len(re.findall(r"[\u4e00-\u9fff]", s))
+  if cjk_count > 0:
+    # Guard against 1-2 stray ASR CJK homophones attached to a predominantly
+    # English sentence (e.g. '好。Yes, can you take me to the self-service kiosk?'),
+    # while preserving Chinese sentences that embed English loanwords
+    # ('我想做个 MRI 检查', 'Hallo, hallo. 你可以听到吗?').
+    if not (
+        latin_word_count >= 3
+        and en_hits >= 2
+        and latin_word_count >= cjk_count * 2
+    ):
+      return "zh"
   if re.search(r"[\u0400-\u04ff]", s):
     return "ru"
   if re.search(r"[\u0600-\u06ff]", s):
@@ -188,7 +238,6 @@ def detect_language(text: str) -> str | None:
   if latin_letters < 2:
     return None
   has_non_ascii_latin = bool(re.search(r"[À-ÿ¿¡œŒ]", s))
-  lower = s.lower()
   if not has_non_ascii_latin and _EN_SHORT_WORDS_RE.search(lower):
     # Short English greetings ("Hi", "Hello", "Thanks", "Help") unless a
     # non-English Latin greeting pair ("Hola gracias", "Bonjour merci") wins.
@@ -196,7 +245,6 @@ def detect_language(text: str) -> str | None:
       return "en"
   if latin_letters < 4:
     return None
-  en_hits = len(re.findall(_LATIN_LANG_MARKERS["en"], lower))
   best_other, best_other_hits = None, 0
   for code, pat in _LATIN_LANG_MARKERS.items():
     if code == "en":
@@ -1594,6 +1642,7 @@ class SessionManager:
               #    _STALE_SPEECH_S); other soft holds (TTS / model generating)
               #    are bounded by safety_timeout.
               hold_started = loop.time()
+              initial_hold_started = hold_started
               last_reason = None
               forced_reason = None
               while True:
@@ -1604,6 +1653,18 @@ class SessionManager:
                   logger.info("Holding %s heartbeat: %s", trigger, reason)
                   last_reason = reason
                 if reason in ("blocking_tool", "user_speaking", "mic_active"):
+                  hold_started = loop.time()
+                elif (
+                    reason == "model_generating"
+                    and self.decision_making is not None
+                    and time.monotonic()
+                    - getattr(self.decision_making, "last_model_output_time", 0.0)
+                    < 3.0
+                    and loop.time() - initial_hold_started < 30.0
+                ):
+                  # Spoken audio / outputTranscription chunks are actively
+                  # streaming right now (not wedged) — do not interrupt a
+                  # 12-second spoken RAG answer at 10s.
                   hold_started = loop.time()
                 elif loop.time() - hold_started > safety_timeout:
                   logger.warning(
@@ -1697,6 +1758,11 @@ class SessionManager:
               if self._pending_action_nudge:
                 hb_text = self._pending_action_nudge
                 self._pending_action_nudge = ""
+                if (
+                    not hb_text.startswith("[HEARTBEAT] LANGUAGE")
+                    and "[LANGUAGE LOCK]" not in hb_text
+                ):
+                  hb_text = hb_text + self._language_lock_line()
                 trigger = f"{trigger}+action_nudge"
               else:
                 hb_text = self._get_heartbeat_text()

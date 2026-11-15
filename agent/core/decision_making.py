@@ -90,6 +90,14 @@ def normalize_input_transcription(text: str) -> str:
   # Remove spaces between CJK characters and punctuation.
   s = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[，。！？、；：,.!?;:])", "", s)
   s = re.sub(r"(?<=[，。！？、；：,.!?;:])\s+(?=[\u4e00-\u9fff])", "", s)
+  # Strip leading CJK vocal breath/hesitation fillers before an English/Latin
+  # sentence (e.g. '啊。Yes, can you take me to the self-service kiosk?' ->
+  # 'Yes, can you take me to the self-service kiosk?').
+  s = re.sub(
+      r"^\s*[啊嗯呃哦噢唉唔欸]{1,3}[。，！？、；：,.!?;:\s]+(?=[A-Za-zÀ-ÿ]{2,}\b.*\s+[A-Za-zÀ-ÿ]{2,})",
+      "",
+      s,
+  )
   cjk_chars = re.findall(r"[\u4e00-\u9fff]", s)
   if cjk_chars:
     # Strip leading/trailing whitespace adjacent to CJK so multi-chunk CJK
@@ -217,6 +225,7 @@ class DecisionMaking:
     # while this is set so a heartbeat never cuts into a reply the model is
     # already producing (e.g. its answer to the user's speech).
     self.model_generating = asyncio.Event()
+    self.last_model_output_time: float = 0.0
     # The currently active non-blocking TTS background task, if any.
     # Used to cancel in-flight TTS when the user interrupts the model.
     self._active_tts_task: asyncio.Task | None = None
@@ -387,13 +396,19 @@ class DecisionMaking:
     if self._turn_start_time is None:
       self._turn_start_time = time.monotonic()
 
-  def _mark_first_response(self) -> None:
+  def _mark_first_response(self, close_utterance: bool = True) -> None:
     # Any model output means a turn is in progress until turnComplete or
-    # interrupted clears it (both go through _reset_timing).
-    self._utterance_open = False
+    # interrupted clears it (both go through _reset_timing). Spoken/text
+    # responses close _utterance_open, whereas toolCall passes
+    # close_utterance=False because Live API toolCall events often arrive
+    # concurrently with trailing inputTranscription chunks of the same turn.
+    if close_utterance:
+      self._utterance_open = False
+    now = time.monotonic()
+    self.last_model_output_time = now
     self.model_generating.set()
     if self._first_response_time is None:
-      self._first_response_time = time.monotonic()
+      self._first_response_time = now
 
   def _reset_timing(self) -> dict[str, Any]:
     """Reset timing and return metrics for the completed turn."""
@@ -443,7 +458,7 @@ class DecisionMaking:
     if "toolCall" in response:
       for fc in response["toolCall"].get("functionCalls", []):
         self._current_turn_tool_names.append(str(fc.get("name", "")))
-      self._mark_first_response()
+      self._mark_first_response(close_utterance=False)
       await self._bus.publish(
           event_bus.Event(
               type=event_bus.EventType.TOOL_CALL,
