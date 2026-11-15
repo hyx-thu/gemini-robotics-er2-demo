@@ -2001,10 +2001,1009 @@ function buildLgCloidRig(THREE) {
   };
 }
 
+// ============================================================================
+// 4. ENCHANTED TOOLS MIROKAÏ (28-DOF Ballbot + 60 FPS Curved Anime Face + Fox Ears)
+//    [INTERNAL-TEST-ONLY: Real2Sim] Company-specific robot — stays on dev/test only
+// ============================================================================
+function buildMirokaiRig(THREE) {
+  const group = new THREE.Group();
+  const mujocoRoot = new THREE.Group();
+  mujocoRoot.rotation.x = -Math.PI / 2; // MuJoCo Z-up -> Three.js Y-up
+  group.add(mujocoRoot);
+
+  const poseGroup = new THREE.Group();
+  mujocoRoot.add(poseGroup);
+
+  const gripPoint = new THREE.Group();
+  group.add(gripPoint);
+
+  const cone = makeVisionCone(THREE);
+  group.add(cone);
+
+  const flashMat = new THREE.MeshPhysicalMaterial({
+    color: 0xf5f7fc,
+    roughness: 0.22,
+    metalness: 0.06,
+    clearcoat: 0.48,
+    clearcoatRoughness: 0.20,
+  });
+
+  const runeGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xff9e44,
+    emissive: 0xff7a1a,
+    emissiveIntensity: 1.45,
+    roughness: 0.22,
+    metalness: 0.10,
+  });
+
+  // 60 FPS 3D-Projected Curved Mask Character Face (Gobelins-inspired animated eyes, brows, blush & lip-sync)
+  const faceCanvas = document.createElement('canvas');
+  faceCanvas.width = 512;
+  faceCanvas.height = 384;
+  const faceCtx = faceCanvas.getContext('2d');
+  const faceTexture = new THREE.CanvasTexture(faceCanvas);
+  faceTexture.colorSpace = THREE.SRGBColorSpace;
+
+  function renderMirokaiFace(nowSec, exprCode, headYaw, headPitch, mouthOpen = 0) {
+    if (!faceCtx) return;
+    const W = 512, H = 384;
+    faceCtx.clearRect(0, 0, W, H);
+
+    // Subtle enchanted inner projection aura (fades to 0 alpha at edges so curved dome has zero seam)
+    const aura = faceCtx.createRadialGradient(W * 0.5, H * 0.50, 18, W * 0.5, H * 0.50, 215);
+    aura.addColorStop(0.0, 'rgba(30, 64, 175, 0.24)');
+    aura.addColorStop(0.58, 'rgba(15, 23, 42, 0.14)');
+    aura.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+    faceCtx.fillStyle = aura;
+    faceCtx.fillRect(0, 0, W, H);
+
+    // exprCode: 0=normal, 1=happy, 2=heart, 3=focused, 4=curious/think, 5=empathy
+    const blinkPhase = nowSec % 3.9;
+    const isBlinking = (exprCode === 0 || exprCode === 3 || exprCode === 4 || exprCode === 5)
+      && blinkPhase > 3.72 && blinkPhase < 3.86;
+    const gazeX = clamp(-headYaw * 28 + (exprCode === 4 ? -12 : 0), -28, 28);
+    const gazeY = clamp(headPitch * 20 + (exprCode === 4 ? -9 : 0), -18, 18);
+    const leftEyeX = 154 + gazeX;
+    const rightEyeX = 358 + gazeX;
+    const eyeY = 172 + gazeY;
+
+    // Warm coral cheek blush
+    const blushAlpha = (exprCode === 1 || exprCode === 2 || exprCode === 5) ? 0.45 : 0.27;
+    for (const bx of [96 + gazeX * 0.5, 416 + gazeX * 0.5]) {
+      const bg = faceCtx.createRadialGradient(bx, eyeY + 74, 2, bx, eyeY + 74, 42);
+      bg.addColorStop(0.0, `rgba(251, 113, 133, ${blushAlpha})`);
+      bg.addColorStop(1.0, 'rgba(251, 113, 133, 0.0)');
+      faceCtx.fillStyle = bg;
+      faceCtx.beginPath();
+      faceCtx.ellipse(bx, eyeY + 74, 42, 24, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+    }
+
+    const drawAnimeEye = (cx, cy, isLeft, ryScale = 1.0) => {
+      const rx = 52, ry = 63 * ryScale;
+      faceCtx.save();
+      // Outer warm cyan-gold luminescence
+      faceCtx.shadowColor = '#38bdf8';
+      faceCtx.shadowBlur = 18;
+      faceCtx.fillStyle = '#081024';
+      faceCtx.beginPath();
+      faceCtx.ellipse(cx, cy, rx + 5, ry + 5, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Luminous sapphire -> amber-gold iris gradient
+      const ig = faceCtx.createLinearGradient(cx, cy - ry, cx, cy + ry);
+      ig.addColorStop(0.0, '#0284c7');
+      ig.addColorStop(0.45, '#0ea5e9');
+      ig.addColorStop(0.78, '#f59e0b');
+      ig.addColorStop(1.0, '#fef08a');
+      faceCtx.fillStyle = ig;
+      faceCtx.beginPath();
+      faceCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Deep velvety pupil
+      faceCtx.shadowBlur = 0;
+      faceCtx.fillStyle = '#070b19';
+      faceCtx.beginPath();
+      faceCtx.ellipse(cx + gazeX * 0.14, cy + gazeY * 0.14, rx * 0.52, ry * 0.56, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Lower golden crescent inner rim glow
+      faceCtx.strokeStyle = 'rgba(254, 240, 138, 0.88)';
+      faceCtx.lineWidth = 5.0;
+      faceCtx.beginPath();
+      faceCtx.arc(cx, cy + 5, rx * 0.72, 0.18 * Math.PI, 0.82 * Math.PI);
+      faceCtx.stroke();
+
+      // Dual crisp starlight specular catchlights
+      faceCtx.fillStyle = '#ffffff';
+      faceCtx.beginPath();
+      faceCtx.ellipse(cx - 16, cy - 21 * ryScale, 13.5, 15.5 * ryScale, -0.25, 0, Math.PI * 2);
+      faceCtx.fill();
+      faceCtx.beginPath();
+      faceCtx.arc(cx + 18, cy + 16 * ryScale, 6.5, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Upper warm eyelash arch
+      faceCtx.strokeStyle = '#fff7ed';
+      faceCtx.lineWidth = 7.0;
+      faceCtx.lineCap = 'round';
+      faceCtx.beginPath();
+      const startA = isLeft ? Math.PI * 1.08 : Math.PI * 1.14;
+      const endA = isLeft ? Math.PI * 1.86 : Math.PI * 1.92;
+      faceCtx.ellipse(cx, cy - 2, rx + 2, ry + 2, 0, startA, endA);
+      faceCtx.stroke();
+      faceCtx.restore();
+    };
+
+    const drawHappyArc = (cx, cy) => {
+      faceCtx.save();
+      faceCtx.shadowColor = '#fbbf24';
+      faceCtx.shadowBlur = 18;
+      faceCtx.strokeStyle = '#fffbeb';
+      faceCtx.lineWidth = 13;
+      faceCtx.lineCap = 'round';
+      faceCtx.beginPath();
+      faceCtx.arc(cx, cy + 16, 40, Math.PI * 1.12, Math.PI * 1.88, false);
+      faceCtx.stroke();
+      faceCtx.restore();
+    };
+
+    const drawHeartEye = (cx, cy) => {
+      faceCtx.save();
+      faceCtx.translate(cx, cy + 6);
+      faceCtx.scale(1.16, 1.16);
+      faceCtx.shadowColor = '#fb7185';
+      faceCtx.shadowBlur = 18;
+      faceCtx.fillStyle = '#fda4af';
+      faceCtx.beginPath();
+      faceCtx.moveTo(0, 20);
+      faceCtx.bezierCurveTo(-38, -6, -40, -42, -17, -42);
+      faceCtx.bezierCurveTo(-4, -42, 0, -28, 0, -21);
+      faceCtx.bezierCurveTo(0, -28, 4, -42, 17, -42);
+      faceCtx.bezierCurveTo(40, -42, 38, -6, 0, 20);
+      faceCtx.closePath();
+      faceCtx.fill();
+      faceCtx.restore();
+    };
+
+    if (isBlinking) {
+      faceCtx.save();
+      faceCtx.strokeStyle = '#fff7ed';
+      faceCtx.shadowColor = '#38bdf8';
+      faceCtx.shadowBlur = 12;
+      faceCtx.lineWidth = 10;
+      faceCtx.lineCap = 'round';
+      for (const cx of [leftEyeX, rightEyeX]) {
+        faceCtx.beginPath();
+        faceCtx.arc(cx, eyeY - 6, 38, 0.15 * Math.PI, 0.85 * Math.PI);
+        faceCtx.stroke();
+      }
+      faceCtx.restore();
+    } else if (exprCode === 1) {
+      drawHappyArc(leftEyeX, eyeY);
+      drawHappyArc(rightEyeX, eyeY);
+    } else if (exprCode === 2) {
+      drawHeartEye(leftEyeX, eyeY);
+      drawHeartEye(rightEyeX, eyeY);
+    } else if (exprCode === 3) {
+      drawAnimeEye(leftEyeX, eyeY, true, 0.84);
+      drawAnimeEye(rightEyeX, eyeY, false, 0.84);
+    } else if (exprCode === 4) {
+      drawAnimeEye(leftEyeX, eyeY + 2, true, 0.90);
+      drawAnimeEye(rightEyeX, eyeY - 3, false, 1.04);
+    } else {
+      drawAnimeEye(leftEyeX, eyeY, true, 0.98);
+      drawAnimeEye(rightEyeX, eyeY, false, 0.98);
+    }
+
+    // Expressive eyebrows
+    faceCtx.save();
+    faceCtx.strokeStyle = '#fef3c7';
+    faceCtx.shadowColor = '#f59e0b';
+    faceCtx.shadowBlur = 10;
+    faceCtx.lineWidth = 7.5;
+    faceCtx.lineCap = 'round';
+    const drawBrow = (cx, yOff, tilt) => {
+      faceCtx.beginPath();
+      faceCtx.moveTo(cx - 30, eyeY - 68 + yOff + tilt * 12);
+      faceCtx.quadraticCurveTo(cx, eyeY - 82 + yOff, cx + 30, eyeY - 68 + yOff - tilt * 12);
+      faceCtx.stroke();
+    };
+    if (exprCode === 1 || exprCode === 2) {
+      drawBrow(leftEyeX, -8, 0.15);
+      drawBrow(rightEyeX, -8, -0.15);
+    } else if (exprCode === 3) {
+      drawBrow(leftEyeX, 8, -0.32);
+      drawBrow(rightEyeX, 8, 0.32);
+    } else if (exprCode === 4) {
+      drawBrow(leftEyeX, 4, -0.18);
+      drawBrow(rightEyeX, -14, -0.25);
+    } else if (exprCode === 5) {
+      drawBrow(leftEyeX, -2, 0.38);
+      drawBrow(rightEyeX, -2, -0.38);
+    } else {
+      drawBrow(leftEyeX, 0, 0.08);
+      drawBrow(rightEyeX, 0, -0.08);
+    }
+    faceCtx.restore();
+
+    // Speech-reactive animated character mouth
+    const mx = 256 + gazeX * 0.45;
+    const my = 282 + gazeY * 0.42;
+    faceCtx.save();
+    faceCtx.shadowColor = '#fb923c';
+    faceCtx.shadowBlur = 10;
+    faceCtx.strokeStyle = '#fff7ed';
+    faceCtx.lineWidth = 6.5;
+    faceCtx.lineCap = 'round';
+    faceCtx.lineJoin = 'round';
+
+    if (mouthOpen > 0.06) {
+      const mw = 22 + 12 * (1 - 0.25 * mouthOpen);
+      const mh = 8 + 26 * clamp(mouthOpen, 0, 1);
+      faceCtx.fillStyle = '#4c1d24';
+      faceCtx.beginPath();
+      faceCtx.moveTo(mx - mw, my - mh * 0.22);
+      faceCtx.quadraticCurveTo(mx, my - mh * 0.42, mx + mw, my - mh * 0.22);
+      faceCtx.bezierCurveTo(mx + mw * 0.95, my + mh, mx - mw * 0.95, my + mh, mx - mw, my - mh * 0.22);
+      faceCtx.closePath();
+      faceCtx.fill();
+      // Warm coral tongue highlight
+      faceCtx.save();
+      faceCtx.clip();
+      faceCtx.fillStyle = '#fb7185';
+      faceCtx.beginPath();
+      faceCtx.ellipse(mx, my + mh * 0.68, mw * 0.68, mh * 0.52, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+      faceCtx.restore();
+      faceCtx.stroke();
+    } else if (exprCode === 4) {
+      // Curious pondering little 'o' mouth
+      faceCtx.fillStyle = '#4c1d24';
+      faceCtx.beginPath();
+      faceCtx.ellipse(mx + 4, my + 2, 10, 12, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+      faceCtx.stroke();
+    } else if (exprCode === 1 || exprCode === 2) {
+      // Joyful open smile
+      faceCtx.fillStyle = '#4c1d24';
+      faceCtx.beginPath();
+      faceCtx.arc(mx, my - 4, 28, 0.08 * Math.PI, 0.92 * Math.PI, false);
+      faceCtx.quadraticCurveTo(mx, my + 2, mx - 27, my + 3);
+      faceCtx.closePath();
+      faceCtx.fill();
+      faceCtx.stroke();
+    } else {
+      // Signature warm Mirokaï gentle cat-like smile
+      faceCtx.beginPath();
+      faceCtx.moveTo(mx - 24, my - 2);
+      faceCtx.quadraticCurveTo(mx - 11, my + 11, mx, my + 3);
+      faceCtx.quadraticCurveTo(mx + 11, my + 11, mx + 24, my - 2);
+      faceCtx.stroke();
+    }
+    faceCtx.restore();
+
+    faceTexture.needsUpdate = true;
+  }
+
+  renderMirokaiFace(0, 0, 0, 0.05, 0);
+
+  const STAND_H = 0.0;
+  const SIT_H = -0.048;
+
+  const READY_JOINTS = {
+    ball_roll: 0,
+    ball_pitch: 0,
+    balance_pitch: 0,
+    balance_roll: 0,
+    skirt_z: 0,
+    torso_pitch: 0.04,
+    torso_roll: 0,
+    torso_yaw: 0,
+    head_0: 0,
+    head_1: 0.05,
+    head_2: 0,
+    ear_l_pitch: 0.06,
+    ear_l_flare: -0.06,
+    ear_r_pitch: 0.06,
+    ear_r_flare: 0.06,
+    right_arm_0: -0.22,
+    right_arm_1: -0.15,
+    right_arm_2: 0.06,
+    right_arm_3: -0.56,
+    right_arm_4: 0.0,
+    right_arm_5: -0.16,
+    right_arm_6: 0.0,
+    r_fingers: 0.22,
+    r_thumb: 0.18,
+    left_arm_0: -0.22,
+    left_arm_1: 0.15,
+    left_arm_2: -0.06,
+    left_arm_3: -0.56,
+    left_arm_4: 0.0,
+    left_arm_5: -0.16,
+    left_arm_6: 0.0,
+    l_fingers: 0.22,
+    l_thumb: 0.18,
+  };
+
+  const SIT_JOINTS = {
+    ...READY_JOINTS,
+    skirt_z: -0.048,
+    torso_pitch: 0.18,
+    head_1: 0.08,
+    ear_l_pitch: -0.12,
+    ear_l_flare: -0.26,
+    ear_r_pitch: -0.12,
+    ear_r_flare: 0.26,
+    right_arm_0: -0.38,
+    right_arm_1: -0.14,
+    right_arm_2: 0.24,
+    right_arm_3: -0.92,
+    left_arm_0: -0.38,
+    left_arm_1: 0.14,
+    left_arm_2: -0.24,
+    left_arm_3: -0.92,
+  };
+
+  const STOW = {
+    torso_pitch: 0.04,
+    torso_yaw: 0.0,
+    right_arm_0: -0.22,
+    right_arm_1: -0.15,
+    right_arm_2: 0.06,
+    right_arm_3: -0.56,
+    right_arm_4: 0.0,
+    right_arm_5: -0.16,
+    right_arm_6: 0.0,
+    left_arm_0: -0.22,
+    left_arm_1: 0.15,
+    left_arm_2: -0.06,
+    left_arm_3: -0.56,
+    left_arm_4: 0.0,
+    left_arm_5: -0.16,
+    left_arm_6: 0.0,
+  };
+
+  const defaults = {
+    h: STAND_H,
+    pitch: 0,
+    roll: 0,
+    hy: 0,
+    hp: -0.05,
+    grip: 0.25,
+    exprCode: 0,
+    ...READY_JOINTS,
+  };
+
+  let loaded = false;
+  let loadingPromise = null;
+  let bodyNodes = {};
+  let jointNodes = {};
+  let robotRoot = null;
+  let activeArm = 'right';
+  let ballPitchAngle = 0;
+  let ballRollAngle = 0;
+  let dynLeanPitch = 0;
+  let dynLeanRoll = 0;
+  let latestCur = { ...defaults };
+
+  function ensureLoaded() {
+    if (loadingPromise) return loadingPromise;
+    loadingPromise = fetchMjcfBundle(
+      THREE,
+      '/static/mirokai_assets.bin?v=1',
+      'MRKI',
+      (T) => {
+        const materials = {
+          miro_pearl_white: flashMat,
+          miro_space_indigo: new T.MeshStandardMaterial({
+            color: 0x1e2540,
+            roughness: 0.42,
+            metalness: 0.28,
+          }),
+          miro_copper_orange: new T.MeshPhysicalMaterial({
+            color: 0xea580c,
+            roughness: 0.34,
+            metalness: 0.16,
+            clearcoat: 0.35,
+            clearcoatRoughness: 0.28,
+          }),
+          miro_gold_trim: new T.MeshStandardMaterial({
+            color: 0xf59e0b,
+            roughness: 0.26,
+            metalness: 0.72,
+          }),
+          miro_visor_dark: new T.MeshPhysicalMaterial({
+            color: 0x060814,
+            roughness: 0.10,
+            metalness: 0.22,
+            clearcoat: 0.94,
+            clearcoatRoughness: 0.06,
+          }),
+          miro_ball_slate: new T.MeshStandardMaterial({
+            color: 0x262b38,
+            roughness: 0.62,
+            metalness: 0.18,
+          }),
+          miro_ball_tread: new T.MeshStandardMaterial({
+            color: 0x475569,
+            roughness: 0.50,
+            metalness: 0.32,
+          }),
+          miro_amber_led: new T.MeshStandardMaterial({
+            color: 0xfbbf24,
+            emissive: 0xf59e0b,
+            emissiveIntensity: 1.35,
+            roughness: 0.22,
+          }),
+          miro_rune_glow: runeGlowMat,
+        };
+        return { materials, defaultMat: flashMat, flashMat };
+      }
+    ).then((res) => {
+      robotRoot = res.robotRoot;
+      bodyNodes = res.bodyNodes;
+      jointNodes = res.jointNodes;
+      poseGroup.add(robotRoot);
+
+      // Conformally contour the 60 FPS 3D-Projected Face Screen onto head_visor_dark
+      // Exact superellipsoid front surface: center=[0.082, 0, 0.102], rx=0.050, ry=0.108, rz=0.082, n=0.82 (p=2/0.82)
+      if (bodyNodes.link_head) {
+        const screenGeo = new THREE.PlaneGeometry(0.168, 0.122, 28, 20);
+        const posAttr = screenGeo.attributes.position;
+        const pExp = 2.0 / 0.82;
+        for (let i = 0; i < posAttr.count; i++) {
+          const u = posAttr.getX(i);
+          const v = posAttr.getY(i);
+          const sRem = Math.max(
+            0,
+            1.0 - Math.pow(Math.abs(u) / 0.108, pExp) - Math.pow(Math.abs(v) / 0.082, pExp)
+          );
+          const curveZ = 0.050 * (Math.pow(sRem, 0.41) - 1.0);
+          posAttr.setZ(i, curveZ);
+        }
+        screenGeo.computeVertexNormals();
+        const screenMat = new THREE.MeshBasicMaterial({
+          map: faceTexture,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        });
+        const faceScreenMesh = new THREE.Mesh(screenGeo, screenMat);
+        faceScreenMesh.position.set(0.1348, 0.0, 0.102);
+        faceScreenMesh.rotation.order = 'ZYX';
+        faceScreenMesh.rotation.z = Math.PI / 2;
+        faceScreenMesh.rotation.x = Math.PI / 2;
+        bodyNodes.link_head.add(faceScreenMesh);
+
+        cone.position.set(0.136, 0, 0.102);
+        bodyNodes.link_head.add(cone);
+      }
+
+      if (bodyNodes.EE_BODY_R) {
+        bodyNodes.EE_BODY_R.add(gripPoint);
+        gripPoint.position.set(0, 0, -0.068);
+      }
+
+      loaded = true;
+      update({ cur: latestCur, t: 0, dt: 0.016, k: 1, walkAmt: 0, gaitPhase: 0, gait: null });
+      window.dispatchEvent(new CustomEvent('robot-twin:rig-loaded', { detail: { name: 'mirokai' } }));
+    }).catch((err) => {
+      console.error('[Real2Sim] Failed to load Mirokaï bundle:', err);
+    });
+    return loadingPromise;
+  }
+
+  function getEePosMj(arm, jointState) {
+    if (!loaded) return new THREE.Vector3(0.40, arm === 'left' ? 0.18 : -0.18, 0.64);
+    applyJointMapToHierarchy(THREE, jointNodes, jointState);
+    mujocoRoot.updateMatrixWorld(true);
+    const eeNode = bodyNodes[arm === 'left' ? 'EE_BODY_L' : 'EE_BODY_R'];
+    if (!eeNode) return new THREE.Vector3(0.40, arm === 'left' ? 0.18 : -0.18, 0.64);
+    const tipLocal = new THREE.Vector3(0, 0, -0.068);
+    tipLocal.applyMatrix4(eeNode.matrixWorld);
+    mujocoRoot.worldToLocal(tipLocal);
+    return tipLocal;
+  }
+
+  function preparePick(tx, ty, tz) {
+    activeArm = tz < -0.04 ? 'left' : 'right';
+    const eeNode = bodyNodes[activeArm === 'left' ? 'EE_BODY_L' : 'EE_BODY_R'];
+    if (eeNode) {
+      eeNode.add(gripPoint);
+      gripPoint.position.set(0, 0, -0.068);
+    }
+  }
+
+  function solveIkForTarget(tx, ty, tz) {
+    const targetMj = new THREE.Vector3(tx, -tz, ty);
+    const arm = activeArm || (tz < -0.04 ? 'left' : 'right');
+    const prefix = arm === 'left' ? 'left_arm_' : 'right_arm_';
+    const jNames = ['torso_yaw', ...[0, 1, 2, 3, 4, 5].map((i) => `${prefix}${i}`)];
+
+    if (!loaded) {
+      return {
+        exprCode: 3,
+        torso_pitch: 0.20,
+        [`${prefix}0`]: -0.72,
+        [`${prefix}1`]: arm === 'left' ? 0.16 : -0.16,
+        [`${prefix}3`]: -0.82,
+      };
+    }
+
+    const workJoints = {
+      ...READY_JOINTS,
+      ...latestCur,
+      balance_pitch: 0,
+      balance_roll: 0,
+      torso_pitch: 0.20,
+      torso_roll: 0,
+    };
+    const eps = 1e-3;
+    const lam = 0.065;
+
+    for (let iter = 0; iter < 16; iter++) {
+      const curPos = getEePosMj(arm, workJoints);
+      const err = new THREE.Vector3().subVectors(targetMj, curPos);
+      if (err.length() < 0.004) break;
+      if (err.length() > 0.08) err.setLength(0.08);
+
+      const J = [];
+      for (const jn of jNames) {
+        const orig = workJoints[jn] ?? 0;
+        workJoints[jn] = orig + eps;
+        const pPlus = getEePosMj(arm, workJoints);
+        workJoints[jn] = orig;
+        J.push([
+          (pPlus.x - curPos.x) / eps,
+          (pPlus.y - curPos.y) / eps,
+          (pPlus.z - curPos.z) / eps,
+        ]);
+      }
+
+      const A = [
+        [lam * lam, 0, 0],
+        [0, lam * lam, 0],
+        [0, 0, lam * lam],
+      ];
+      for (let j = 0; j < jNames.length; j++) {
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 3; c++) A[r][c] += J[j][r] * J[j][c];
+        }
+      }
+      const y = solve3x3(A, [err.x, err.y, err.z]);
+      for (let j = 0; j < jNames.length; j++) {
+        const jn = jNames[j];
+        const jInfo = jointNodes[jn];
+        const dq = J[j][0] * y[0] + J[j][1] * y[1] + J[j][2] * y[2];
+        const lo = jn === 'torso_yaw' ? -0.60 : (jInfo ? jInfo.range[0] : -Math.PI);
+        const hi = jn === 'torso_yaw' ? 0.60 : (jInfo ? jInfo.range[1] : Math.PI);
+        workJoints[jn] = clamp((workJoints[jn] ?? 0) + dq, lo, hi);
+      }
+    }
+
+    const out = {
+      torso_pitch: 0.20,
+      exprCode: 3,
+      ear_l_pitch: 0.24,
+      ear_r_pitch: 0.24,
+    };
+    for (const jn of jNames) out[jn] = workJoints[jn];
+    return out;
+  }
+
+  function readyPose() {
+    return {
+      exprCode: 0,
+      torso_pitch: 0.06,
+      torso_yaw: 0.0,
+      ear_l_pitch: 0.08,
+      ear_l_flare: -0.08,
+      ear_r_pitch: 0.08,
+      ear_r_flare: 0.08,
+      right_arm_0: -0.34,
+      right_arm_1: -0.16,
+      right_arm_2: 0.08,
+      right_arm_3: -0.74,
+      right_arm_4: 0.0,
+      right_arm_5: -0.20,
+      right_arm_6: 0.0,
+      left_arm_0: -0.34,
+      left_arm_1: 0.16,
+      left_arm_2: -0.08,
+      left_arm_3: -0.74,
+      left_arm_4: 0.0,
+      left_arm_5: -0.20,
+      left_arm_6: 0.0,
+    };
+  }
+
+  function carryPose() {
+    const prefix = activeArm === 'left' ? 'left_arm_' : 'right_arm_';
+    const sgn = activeArm === 'left' ? 1 : -1;
+    return {
+      ...readyPose(),
+      torso_pitch: 0.04,
+      exprCode: 1,
+      ear_l_pitch: 0.18,
+      ear_r_pitch: 0.18,
+      [`${prefix}0`]: -0.96,
+      [`${prefix}1`]: sgn * 0.18,
+      [`${prefix}2`]: -sgn * 0.26,
+      [`${prefix}3`]: -1.26,
+      [`${prefix}5`]: -0.08,
+    };
+  }
+
+  function update({ cur, t, dt, gait, talk }) {
+    latestCur = cur;
+    if (!loaded || !robotRoot) {
+      ensureLoaded();
+      return;
+    }
+
+    const rBall = 0.135;
+    let targetLeanPitch = 0;
+    let targetLeanRoll = 0;
+    if (gait) {
+      ballPitchAngle += (gait.vx / rBall) * dt;
+      ballRollAngle -= ((gait.vy + 0.14 * gait.vrot) / rBall) * dt;
+      targetLeanPitch = clamp(gait.vx * 0.18, -0.14, 0.16);
+      targetLeanRoll = clamp(-gait.vy * 0.14 - gait.vrot * 0.10, -0.14, 0.14);
+    } else {
+      // Subtle inverted-pendulum ballbot active self-balancing micro-sway
+      targetLeanPitch = Math.sin(t * 1.45) * 0.008 + Math.sin(t * 2.73 + 0.6) * 0.004;
+      targetLeanRoll = Math.sin(t * 1.18 + 1.2) * 0.007;
+    }
+    const kLean = 1 - Math.exp(-Math.max(0.001, dt) * 6.5);
+    dynLeanPitch += (targetLeanPitch - dynLeanPitch) * kLean;
+    dynLeanRoll += (targetLeanRoll - dynLeanRoll) * kLean;
+
+    const breathe = Math.sin(t * 2.05) * 0.012;
+    const tb = (talk && talk.blend > 0.001 && !gait) ? talk.blend : 0;
+    const te = tb ? talk.env : 0;
+    const ta = tb * ((talk && talk.armScale) ?? 1);
+    const tst = (talk && talk.style) || 'explain';
+
+    // Chest Rune-Heart core pulses softly in idle and glows vibrantly with speech prosody
+    runeGlowMat.emissiveIntensity = tb > 0.02
+      ? 1.45 + 1.55 * te + 0.55 * ((talk && talk.beat) || 0)
+      : 1.25 + 0.25 * Math.sin(t * 2.2);
+
+    const rawClose = clamp(1 - (cur.grip ?? 0.25), 0, 1);
+    const closeAmt = ta > 0 ? lerp(rawClose, 0.16, ta) : rawClose;
+    const fingerVal = lerp(-0.14, 0.96, closeAmt);
+    const thumbVal = lerp(-0.18, 0.84, closeAmt);
+
+    let headYaw = cur.hy ?? 0;
+    let headPitch = -(cur.hp ?? -0.05) - dynLeanPitch * 0.65;
+    let headRoll = (cur.head_2 ?? 0) - dynLeanRoll * 0.5;
+    let expr = Math.round(cur.exprCode ?? 0);
+
+    // Organic idle ear twitches
+    const earTwitchL = Math.sin(t * 1.62) * 0.025 + Math.pow(Math.max(0, Math.sin(t * 0.83)), 14) * 0.14;
+    const earTwitchR = Math.sin(t * 1.48 + 1.4) * 0.025 + Math.pow(Math.max(0, Math.sin(t * 0.71 + 2.1)), 14) * 0.14;
+    let earLP = (cur.ear_l_pitch ?? 0.06) + earTwitchL + (gait ? -clamp(gait.vx * 0.35, -0.1, 0.24) : 0);
+    let earLF = (cur.ear_l_flare ?? -0.06);
+    let earRP = (cur.ear_r_pitch ?? 0.06) + earTwitchR + (gait ? -clamp(gait.vx * 0.35, -0.1, 0.24) : 0);
+    let earRF = (cur.ear_r_flare ?? 0.06);
+
+    const frameJoints = {
+      ...cur,
+      ball_roll: ballRollAngle,
+      ball_pitch: ballPitchAngle,
+      balance_pitch: dynLeanPitch,
+      balance_roll: dynLeanRoll,
+      torso_pitch: (cur.torso_pitch ?? 0.04) + breathe,
+      head_0: headYaw,
+      head_1: headPitch,
+      head_2: headRoll,
+      ear_l_pitch: earLP,
+      ear_l_flare: earLF,
+      ear_r_pitch: earRP,
+      ear_r_flare: earRF,
+      r_fingers: fingerVal,
+      r_thumb: thumbVal,
+      l_fingers: fingerVal,
+      l_thumb: thumbVal,
+    };
+
+    let mouthOpen = 0;
+    if (tb > 0 && talk.R && talk.L) {
+      const gR = talk.R, gL = talk.L;
+      const beat = talk.beat || 0;
+      mouthOpen = clamp((te - 0.10) * 1.25, 0, 1) * tb;
+
+      if (expr === 0 && tb > 0.25) {
+        if (tst === 'affirm') expr = 1;
+        else if (tst === 'think') expr = 4;
+        else if (tst === 'empathy') expr = 5;
+      }
+
+      // Expressive fox-ear prosody & emotion choreography
+      if (tst === 'think') {
+        earRP = lerp(earRP, 0.28 + 0.08 * beat, tb);
+        earRF = lerp(earRF, 0.26, tb);
+        earLP = lerp(earLP, -0.16, tb);
+        earLF = lerp(earLF, -0.05, tb);
+      } else if (tst === 'empathy') {
+        earLP = lerp(earLP, -0.08 + 0.06 * beat, tb);
+        earLF = lerp(earLF, -0.34, tb);
+        earRP = lerp(earRP, -0.08 + 0.06 * beat, tb);
+        earRF = lerp(earRF, 0.34, tb);
+      } else if (tst === 'affirm' || tst === 'emphasize') {
+        earLP = lerp(earLP, 0.22 + 0.14 * beat, tb);
+        earLF = lerp(earLF, -0.14, tb);
+        earRP = lerp(earRP, 0.22 + 0.14 * beat, tb);
+        earRF = lerp(earRF, 0.14, tb);
+      } else {
+        earLP = lerp(earLP, 0.14 + 0.11 * beat, tb);
+        earLF = lerp(earLF, -0.10 - 0.04 * beat, tb);
+        earRP = lerp(earRP, 0.14 + 0.11 * beat, tb);
+        earRF = lerp(earRF, 0.10 + 0.04 * beat, tb);
+      }
+      frameJoints.ear_l_pitch = earLP;
+      frameJoints.ear_l_flare = earLF;
+      frameJoints.ear_r_pitch = earRP;
+      frameJoints.ear_r_flare = earRF;
+
+      headYaw += talk.headYaw;
+      headPitch += -talk.headPitch;
+      headRoll += talk.headRoll * 1.15;
+      frameJoints.head_0 = headYaw;
+      frameJoints.head_1 = headPitch;
+      frameJoints.head_2 = headRoll;
+      frameJoints.torso_pitch += talk.torsoLean * 0.9;
+      frameJoints.torso_roll = (frameJoints.torso_roll ?? 0) + talk.torsoRoll;
+      frameJoints.torso_yaw = (frameJoints.torso_yaw ?? 0) + talk.torsoYaw;
+
+      if (ta > 0) {
+        // Center-Center gesture space: right_arm_2 > 0 & left_arm_2 < 0 bring bent forearms cleanly inward
+        const r0 = -0.16 - 0.68 * gR.lift;
+        const r1 = -0.14 - 0.46 * gR.abd;
+        const r2 =  0.58 * gR.inward;
+        const r3 = -0.46 - 1.06 * gR.flex;
+        const r4 =  0.54 * gR.supinate;
+        const r5 = -0.14 + 0.26 * gR.wristPitch;
+
+        const l0 = -0.16 - 0.68 * gL.lift;
+        const l1 =  0.14 + 0.46 * gL.abd;
+        const l2 = -0.58 * gL.inward;
+        const l3 = -0.46 - 1.06 * gL.flex;
+        const l4 = -0.54 * gL.supinate;
+        const l5 = -0.14 + 0.26 * gL.wristPitch;
+
+        frameJoints.right_arm_0 = lerp(frameJoints.right_arm_0 ?? -0.22, r0, ta);
+        frameJoints.right_arm_1 = lerp(frameJoints.right_arm_1 ?? -0.15, r1, ta);
+        frameJoints.right_arm_2 = lerp(frameJoints.right_arm_2 ?? 0.06, r2, ta);
+        frameJoints.right_arm_3 = lerp(frameJoints.right_arm_3 ?? -0.56, r3, ta);
+        frameJoints.right_arm_4 = lerp(frameJoints.right_arm_4 ?? 0, r4, ta);
+        frameJoints.right_arm_5 = lerp(frameJoints.right_arm_5 ?? -0.16, r5, ta);
+        frameJoints.left_arm_0 = lerp(frameJoints.left_arm_0 ?? -0.22, l0, ta);
+        frameJoints.left_arm_1 = lerp(frameJoints.left_arm_1 ?? 0.15, l1, ta);
+        frameJoints.left_arm_2 = lerp(frameJoints.left_arm_2 ?? -0.06, l2, ta);
+        frameJoints.left_arm_3 = lerp(frameJoints.left_arm_3 ?? -0.56, l3, ta);
+        frameJoints.left_arm_4 = lerp(frameJoints.left_arm_4 ?? 0, l4, ta);
+        frameJoints.left_arm_5 = lerp(frameJoints.left_arm_5 ?? -0.16, l5, ta);
+
+        const rOpenCurl = lerp(0.42, 0.04, clamp(gR.open, 0, 1));
+        const lOpenCurl = lerp(0.42, 0.04, clamp(gL.open, 0, 1));
+        frameJoints.r_fingers = lerp(frameJoints.r_fingers, rOpenCurl, ta);
+        frameJoints.r_thumb = lerp(frameJoints.r_thumb, rOpenCurl * 0.75, ta);
+        frameJoints.l_fingers = lerp(frameJoints.l_fingers, lOpenCurl, ta);
+        frameJoints.l_thumb = lerp(frameJoints.l_thumb, lOpenCurl * 0.75, ta);
+      }
+    }
+
+    renderMirokaiFace(t, expr, headYaw, headPitch, mouthOpen);
+    applyJointMapToHierarchy(THREE, jointNodes, frameJoints);
+  }
+
+  return {
+    name: 'mirokai',
+    icon: '🦊',
+    label: 'Mirokaï (Enchanted Tools)',
+    spec: '28-DOF Ballbot + 60 FPS Anime Face + Fox Ears + Rune-Grip',
+    group,
+    gripPoint,
+    cone,
+    flashMat,
+    STAND_H,
+    SIT_H,
+    STOW,
+    ensureLoaded,
+    preparePick,
+    ik: solveIkForTarget,
+    ready: readyPose,
+    carry: carryPose,
+    approachH: 0.18,
+    graspH: 0.048,
+    table: { x: 0.52, top: 0.44, half: { x: 0.20, z: 0.36 } },
+    homeCam: new THREE.Vector3(1.66, 1.16, 1.48),
+    homeTarget: new THREE.Vector3(0.10, 0.60, 0),
+    defaults,
+    standEnter: (tgt) => {
+      Object.assign(tgt, READY_JOINTS, {
+        h: STAND_H,
+        skirt_z: 0.025,
+        hy: 0,
+        hp: -0.05,
+        exprCode: 1,
+        ear_l_pitch: 0.22,
+        ear_r_pitch: 0.22,
+      });
+    },
+    isUp: (tgt) => (tgt.skirt_z ?? 0) > 0.012,
+    downEnter: (tgt) => {
+      Object.assign(tgt, READY_JOINTS, { h: STAND_H, skirt_z: 0, hy: 0, hp: -0.05, exprCode: 0 });
+    },
+    sitEnter: (tgt) => {
+      Object.assign(tgt, SIT_JOINTS, { h: SIT_H, hy: 0, hp: -0.04, exprCode: 0 });
+    },
+    look: (tgt, dir, ang) => {
+      if (dir === 'left') tgt.hy = clamp((tgt.hy ?? 0) + ang, -1.1, 1.1);
+      else if (dir === 'right') tgt.hy = clamp((tgt.hy ?? 0) - ang, -1.1, 1.1);
+      else if (dir === 'up') tgt.hp = clamp((tgt.hp ?? -0.05) + ang, -0.55, 0.38);
+      else if (dir === 'down') tgt.hp = clamp((tgt.hp ?? -0.05) - ang, -0.55, 0.38);
+      else { tgt.hy = 0; tgt.hp = -0.05; }
+    },
+    detectEnter: (tgt, setArm) => {
+      tgt.hp = -0.32;
+      tgt.hy = 0;
+      tgt.exprCode = 3;
+      tgt.ear_l_pitch = 0.26;
+      tgt.ear_r_pitch = 0.26;
+      setArm(readyPose());
+    },
+    gestures: {
+      high_wave: (tgt, setArm, ctx) => [
+        [0.45, () => {
+          tgt.exprCode = 1;
+          tgt.grip = 0.92;
+          tgt.head_2 = 0.12;
+          tgt.ear_l_pitch = 0.26;
+          tgt.ear_r_pitch = 0.28;
+          tgt.ear_l_flare = -0.18;
+          tgt.ear_r_flare = 0.18;
+          setArm({
+            right_arm_0: -0.58,
+            right_arm_1: -0.88,
+            right_arm_2: -0.92,
+            right_arm_3: -1.68,
+            right_arm_5: 0.14,
+          });
+        }],
+        ...[0, 1, 2, 3, 4].map((i) => [0.25, () => {
+          const s = i % 2 ? 1 : -1;
+          tgt.right_arm_2 = -0.92 + s * 0.34;
+          tgt.right_arm_5 = s * 0.22;
+          tgt.hy = s * 0.08;
+          tgt.ear_l_flare = -0.18 - s * 0.08;
+          tgt.ear_r_flare = 0.18 - s * 0.08;
+        }]),
+        [0.65, () => {
+          tgt.hy = 0;
+          tgt.head_2 = 0;
+          tgt.exprCode = 0;
+          tgt.ear_l_pitch = 0.06;
+          tgt.ear_r_pitch = 0.06;
+          tgt.ear_l_flare = -0.06;
+          tgt.ear_r_flare = 0.06;
+          tgt.grip = 0.25;
+          ctx.restoreArm();
+          ctx.restorePosture();
+        }],
+      ],
+      shake_hand: (tgt, setArm, ctx) => [
+        [0.5, () => {
+          tgt.exprCode = 1;
+          tgt.grip = 0.85;
+          tgt.ear_l_pitch = 0.20;
+          tgt.ear_r_pitch = 0.20;
+          setArm({
+            torso_pitch: 0.22,
+            right_arm_0: -0.78,
+            right_arm_1: -0.08,
+            right_arm_2: 0.10,
+            right_arm_3: -1.02,
+          });
+        }],
+        ...[0, 1, 2, 3, 4].map((i) => [0.25, () => {
+          const pump = i % 2 ? 0.16 : -0.16;
+          tgt.right_arm_0 = -0.78 + pump;
+          tgt.right_arm_3 = -1.02 - pump;
+        }]),
+        [0.65, () => {
+          tgt.torso_pitch = 0.04;
+          tgt.exprCode = 0;
+          tgt.ear_l_pitch = 0.06;
+          tgt.ear_r_pitch = 0.06;
+          tgt.grip = 0.25;
+          ctx.restoreArm();
+          ctx.restorePosture();
+        }],
+      ],
+      heart: (tgt, setArm, ctx) => [
+        [0.55, () => {
+          tgt.exprCode = 2;
+          tgt.grip = 0.72;
+          tgt.head_2 = 0.09;
+          tgt.ear_l_pitch = 0.24;
+          tgt.ear_r_pitch = 0.24;
+          tgt.ear_l_flare = -0.28;
+          tgt.ear_r_flare = 0.28;
+          setArm({
+            right_arm_0: -1.18,
+            right_arm_1: -0.26,
+            right_arm_2: 0.88,
+            right_arm_3: -1.78,
+            right_arm_5: 0.42,
+            left_arm_0: -1.18,
+            left_arm_1: 0.26,
+            left_arm_2: -0.88,
+            left_arm_3: -1.78,
+            left_arm_5: 0.42,
+          });
+        }],
+        [1.25, () => { tgt.head_2 = -0.10; }],
+        [0.65, () => {
+          tgt.head_2 = 0;
+          tgt.exprCode = 0;
+          tgt.ear_l_pitch = 0.06;
+          tgt.ear_r_pitch = 0.06;
+          tgt.ear_l_flare = -0.06;
+          tgt.ear_r_flare = 0.06;
+          tgt.grip = 0.25;
+          ctx.restoreArm();
+          ctx.restorePosture();
+        }],
+      ],
+      clap: (tgt, setArm, ctx) => [
+        [0.4, () => {
+          tgt.exprCode = 1;
+          tgt.grip = 0.9;
+          tgt.ear_l_pitch = 0.24;
+          tgt.ear_r_pitch = 0.24;
+          setArm({
+            right_arm_0: -0.88,
+            right_arm_1: -0.18,
+            right_arm_2: 0.64,
+            right_arm_3: -1.34,
+            left_arm_0: -0.88,
+            left_arm_1: 0.18,
+            left_arm_2: -0.64,
+            left_arm_3: -1.34,
+          });
+        }],
+        ...[0, 1, 2, 3, 4, 5].map((i) => [0.22, () => {
+          const ab = i % 2 === 0 ? 0.28 : 0.09;
+          tgt.right_arm_1 = -ab;
+          tgt.left_arm_1 = ab;
+        }]),
+        [0.6, () => {
+          tgt.exprCode = 0;
+          tgt.ear_l_pitch = 0.06;
+          tgt.ear_r_pitch = 0.06;
+          tgt.grip = 0.25;
+          ctx.restoreArm();
+          ctx.restorePosture();
+        }],
+      ],
+    },
+    update,
+  };
+}
+
 export function buildReal2SimRigs(THREE) {
   return {
     unitree_r1: buildUnitreeR1Rig(THREE),
     rby1: buildRby1Rig(THREE),
     lg_cloid: buildLgCloidRig(THREE),
+    mirokai: buildMirokaiRig(THREE),
   };
 }

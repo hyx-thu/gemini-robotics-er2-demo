@@ -16,8 +16,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
-// [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD)
-import { buildReal2SimRigs } from './real2sim-rigs.js?v=5';
+// [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD, Enchanted Tools Mirokaï)
+import { buildReal2SimRigs } from './real2sim-rigs.js?v=6';
 
 const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
@@ -486,9 +486,9 @@ function init() {
   let ringUntil = 0;
 
   // ----------------------------------------------------------- rigs --------
-  // [INTERNAL-TEST-ONLY: Real2Sim] Include Unitree R1, Rainbow RB-Y1, and LG CLOiD rigs
+  // [INTERNAL-TEST-ONLY: Real2Sim] Include Unitree R1, Rainbow RB-Y1, LG CLOiD, and Enchanted Tools Mirokaï rigs
   const rigs = { dog: buildDog(), ...buildReal2SimRigs(THREE), humanoid: buildHumanoid() };
-  const RIG_ORDER = ['dog', 'unitree_r1', 'rby1', 'lg_cloid', 'humanoid'];
+  const RIG_ORDER = ['dog', 'unitree_r1', 'rby1', 'lg_cloid', 'mirokai', 'humanoid'];
   for (const r of Object.values(rigs)) { scene.add(r.group); r.group.visible = false; }
   let R = null;
   const cur = {}, tgt = {};
