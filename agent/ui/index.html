@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=48" />
+    <link rel="stylesheet" href="/static/style.css?v=49" />
   </head>
   <body>
     <div class="container">
@@ -212,20 +212,6 @@
 
         <div id="chat-sidebar" class="chat-sidebar">
           <div class="sidebar-header" style="padding: 10px; border-bottom: 1px solid var(--border-color); font-weight: bold;">Chat</div>
-          <details id="scenario-chat-guide" class="scenario-chat-guide hidden" open>
-            <summary class="scenario-chat-guide-head">
-              <span id="scenario-chat-guide-title" class="scenario-chat-guide-title">🏥 Cymbal Hospital · 10 Topics · 120 RAG Docs</span>
-              <span class="scenario-chat-guide-right">
-                <button type="button" id="scenario-chat-guide-cfg" class="scenario-chat-guide-cfg" title="Browse all 120 RAG entries &amp; configure scenario">Browse All ↗</button>
-                <span class="scenario-chat-guide-caret" aria-hidden="true">&#9662;</span>
-              </span>
-            </summary>
-            <div class="scenario-chat-guide-body">
-              <div id="scenario-chat-topic-chips" class="scenario-chat-topic-chips"></div>
-              <div id="scenario-chat-topic-summary" class="scenario-chat-topic-summary"></div>
-              <div id="scenario-chat-sample-list" class="scenario-chat-sample-list"></div>
-            </div>
-          </details>
           <div id="plan-panel" class="plan-panel hidden">
             <div class="plan-header">
               <span class="plan-title">📋 Plan</span>
@@ -511,8 +497,8 @@
     </div>
     <script src="/static/media-handler.js?v=7"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=59"></script>
+    <script src="/static/agent-ui.js?v=60"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
-    <script type="module" src="/static/robot-twin.js?v=22"></script>
+    <script type="module" src="/static/robot-twin.js?v=23"></script>
   </body>
 </html>

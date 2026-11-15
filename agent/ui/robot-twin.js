@@ -809,6 +809,22 @@ function init() {
   }
   const expandBtn = document.getElementById('twin-expand');
   const stageRow = document.getElementById('stage-row');
+  const twinSlot = document.getElementById('robot-twin-slot');
+  let inSlotTransition = false;
+  let settleResizeTimer = 0;
+  function finishSlotTransition() {
+    if (!inSlotTransition) return;
+    inSlotTransition = false;
+    clearTimeout(settleResizeTimer);
+    resize(true);
+  }
+  if (twinSlot) {
+    twinSlot.addEventListener('transitionend', (ev) => {
+      if (ev.target === twinSlot && (ev.propertyName === 'width' || ev.propertyName === 'height')) {
+        finishSlotTransition();
+      }
+    });
+  }
   function setExpanded(exp) {
     panel.classList.toggle('expanded', exp);
     if (stageRow) stageRow.classList.toggle('twin-split', exp);
@@ -817,6 +833,24 @@ function init() {
       expandBtn.title = exp ? 'Restore corner view (PiP)' : 'Expand 50/50 split view';
       expandBtn.setAttribute('aria-label', exp ? 'Restore corner view' : 'Expand 50/50 split view');
     }
+    inSlotTransition = true;
+    clearTimeout(settleResizeTimer);
+    if (exp && stageRow) {
+      // Pre-allocate full split framebuffer ONCE at t=0ms (rendered on the immediate rAF tick)
+      // so 0 WebGL buffer reallocations or synchronous main-thread stalls happen mid-transition.
+      const srW = stageRow.clientWidth, srH = stageRow.clientHeight;
+      if (srW > 0 && srH > 0) {
+        const isNarrow = window.innerWidth <= 960;
+        const slotW = isNarrow ? srW : Math.round(srW / 2 - 6);
+        const slotH = isNarrow ? Math.round(srH / 2 - 6) : srH;
+        const targetW = Math.max(1, slotW - 2);
+        const targetH = Math.max(1, slotH - 2);
+        renderer.setSize(targetW, targetH, false);
+        updateCameraAspect();
+      }
+    }
+    // Fallback in case prefers-reduced-motion or hidden tab skips transitionend
+    settleResizeTimer = window.setTimeout(finishSlotTransition, 650);
     if (exp) {
       // [INTERNAL-TEST-ONLY: Real2Sim] Preload all CAD bundles when expanded so switching is instant
       for (const r of Object.values(rigs)) {
@@ -824,7 +858,6 @@ function init() {
       }
       syncReal2SimBar();
     }
-    resize();
   }
   window.addEventListener('robot-twin:collapse', () => setExpanded(false));
   if (expandBtn) {
@@ -890,23 +923,41 @@ function init() {
   let t = 0, walkAmt = 0, gaitPhase = 0, idleAt = 0;
   function now() { return t; }
   const BASE_FOV = 40;
-  function resize() {
+  function updateCameraAspect() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (!w || !h) return;
+    if (!w || !h) return false;
     const aspect = w / h;
     // Preserve at least BASE_FOV horizontal field-of-view when the 50:50 split pane is portrait (aspect < 1)
     const targetFov = aspect >= 1
       ? BASE_FOV
       : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.max(0.55, aspect)));
-    const dpr = renderer.getPixelRatio();
-    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr) || Math.abs(camera.fov - targetFov) > 0.05) {
-      renderer.setSize(w, h, false);
+    if (Math.abs(camera.aspect - aspect) > 0.001 || Math.abs(camera.fov - targetFov) > 0.05) {
       camera.aspect = aspect;
       camera.fov = targetFov;
       camera.updateProjectionMatrix();
+      return true;
+    }
+    return false;
+  }
+  function resize(renderNow = false) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (inSlotTransition) {
+      updateCameraAspect();
+      return;
+    }
+    const dpr = renderer.getPixelRatio();
+    const sizeChanged = canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr);
+    if (sizeChanged) {
+      renderer.setSize(w, h, false);
+    }
+    const camChanged = updateCameraAspect();
+    if ((sizeChanged || camChanged) && renderNow) {
+      controls.update();
+      renderer.render(scene, camera);
     }
   }
-  new ResizeObserver(resize).observe(canvas);
+  new ResizeObserver(() => resize(true)).observe(canvas);
 
   function frame() {
     requestAnimationFrame(frame);

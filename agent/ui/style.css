@@ -3197,133 +3197,7 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   display: none;
 }
 
-/* Main Screen Chat Sidebar — Collapsible Scenario Topic Explorer */
-.scenario-chat-guide {
-  border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(180deg, rgba(26, 115, 232, 0.05) 0%, transparent 100%);
-  flex-shrink: 0;
-}
-.scenario-chat-guide.scenario-hospital {
-  background: linear-gradient(180deg, rgba(19, 115, 51, 0.06) 0%, transparent 100%);
-}
-.scenario-chat-guide.hidden {
-  display: none;
-}
-.scenario-chat-guide-head {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  user-select: none;
-}
-.scenario-chat-guide-head::-webkit-details-marker {
-  display: none;
-}
-.scenario-chat-guide-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.scenario-chat-guide-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.scenario-chat-guide-cfg {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.scenario-chat-guide-cfg:hover {
-  color: var(--text-primary);
-  border-color: #1a73e8;
-}
-.scenario-chat-guide-caret {
-  font-size: 11px;
-  color: var(--text-secondary);
-  transition: transform 0.16s ease;
-}
-.scenario-chat-guide:not([open]) .scenario-chat-guide-caret {
-  transform: rotate(-90deg);
-}
-.scenario-chat-guide-body {
-  padding: 0 10px 9px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: 310px;
-  overflow-y: auto;
-}
-.scenario-chat-guide-hint {
-  font-size: 10.8px;
-  color: var(--text-secondary);
-}
-.scenario-chat-topic-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.scenario-chat-topic-chip {
-  font-size: 10.8px;
-  font-weight: 600;
-  padding: 2.5px 7.5px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.13s ease;
-}
-.scenario-chat-topic-chip:hover {
-  color: var(--text-primary);
-  border-color: #1a73e8;
-}
-.scenario-chat-topic-chip.active {
-  background: rgba(26, 115, 232, 0.14);
-  border-color: #1a73e8;
-  color: #174ea6;
-}
-.scenario-chat-guide.scenario-hospital .scenario-chat-topic-chip.active {
-  background: rgba(19, 115, 51, 0.14);
-  border-color: #137333;
-  color: #0d652d;
-}
-.dark-theme .scenario-chat-topic-chip.active {
-  background: rgba(138, 180, 248, 0.2);
-  border-color: #8ab4f8;
-  color: #d2e3fc;
-}
-.dark-theme .scenario-chat-guide.scenario-hospital .scenario-chat-topic-chip.active {
-  background: rgba(129, 201, 149, 0.2);
-  border-color: #81c995;
-  color: #ceead6;
-}
-.scenario-chat-topic-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 10.8px;
-  color: var(--text-secondary);
-  line-height: 1.35;
-}
-.scenario-chat-summary-text {
-  min-width: 0;
-  flex: 1;
-}
+/* Scenario Grounded Sample Pagination, Provenance Badges & Out-of-KB Guardrails */
 .scenario-cycle-btn {
   flex-shrink: 0;
   font-size: 10.5px;
@@ -3353,7 +3227,6 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   color: #174ea6;
   flex-shrink: 0;
 }
-.scenario-chat-guide.scenario-hospital .sample-doc-id,
 .kb-hospital .kb-item-id {
   background: rgba(19, 115, 51, 0.12);
   color: #0d652d;
@@ -3364,7 +3237,6 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   background: rgba(138, 180, 248, 0.18);
   color: #8ab4f8;
 }
-.dark-theme .scenario-chat-guide.scenario-hospital .sample-doc-id,
 .dark-theme .kb-hospital .kb-item-id {
   background: rgba(129, 201, 149, 0.18);
   color: #81c995;
@@ -3404,38 +3276,9 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   border-radius: 5px;
   background: rgba(251, 188, 4, 0.12);
 }
-.scenario-chat-sample-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.scenario-chat-sample-btn {
-  text-align: left;
-  font-size: 11.2px;
-  line-height: 1.34;
-  padding: 4.5px 8px;
-  border-radius: 7px;
-  border: 1px dashed rgba(26, 115, 232, 0.34);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.13s ease;
-}
-.scenario-chat-sample-btn:hover {
-  border-style: solid;
-  border-color: #1a73e8;
-  background: rgba(26, 115, 232, 0.08);
-}
-.scenario-chat-guide.scenario-hospital .scenario-chat-sample-btn {
-  border-color: rgba(19, 115, 51, 0.34);
-}
-.scenario-chat-guide.scenario-hospital .scenario-chat-sample-btn:hover {
-  border-color: #137333;
-  background: rgba(19, 115, 51, 0.08);
-}
 
 /* =====================================================================
-   Layout v3: Stage Row (Bottom-Right PiP + 50:50 Split) & Slim Control Bar
+   Layout v3: Stage Row (Smooth 380ms Bottom-Right PiP <-> 50:50 Split)
    ===================================================================== */
 main,
 .app-section,
@@ -3448,75 +3291,54 @@ main,
 }
 .stage-row {
   position: relative;
-  display: flex;
+  display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
   min-width: 0;
+  --pip-size: clamp(168px, 20vh, 212px);
+  --stage-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 .stage-row > .video-container {
-  flex: 1 1 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   background: radial-gradient(ellipse at 50% 50%, #1a222e 0%, #0d1117 100%);
+  transition: width 0.38s var(--stage-ease),
+              height 0.38s var(--stage-ease);
+  will-change: width, height;
 }
 .stage-row > .video-container video,
 .stage-row > .video-container .robot-cam-img {
   background: transparent;
 }
 
-/* Default State: Floating PiP card in bottom-right corner of camera stage */
-.stage-row:not(.twin-split) > .robot-twin-slot {
+/* Default State: Floating PiP card anchored in bottom-right of camera stage */
+.stage-row > .robot-twin-slot {
   position: absolute;
   right: 14px;
   bottom: 14px;
-  width: clamp(168px, 20vh, 212px);
-  height: auto;
-  aspect-ratio: 1 / 1;
-  z-index: 18;
-  overflow: visible;
-}
-.stage-row:not(.twin-split) > .robot-twin-slot > .robot-twin {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
-  border: 1.5px solid rgba(255, 255, 255, 0.78);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(15, 23, 42, 0.12);
-}
-.dark-theme .stage-row:not(.twin-split) > .robot-twin-slot > .robot-twin {
-  border-color: rgba(138, 180, 248, 0.36);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
-}
-
-/* Expanded State: 50:50 Side-by-Side Equal-Height Split Stage */
-.stage-row.twin-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-}
-.stage-row.twin-split:has(> .robot-twin-slot.hidden),
-.stage-row.twin-split:has(> .robot-twin-slot > .robot-twin.hidden) {
-  grid-template-columns: minmax(0, 1fr);
-}
-.stage-row.twin-split > .robot-twin-slot {
-  position: relative;
-  right: auto;
-  bottom: auto;
-  width: 100%;
-  height: 100%;
+  width: var(--pip-size);
+  height: var(--pip-size);
   aspect-ratio: auto;
   min-width: 0;
   min-height: 0;
-  z-index: 15;
+  z-index: 18;
+  overflow: visible;
+  transition: width 0.38s var(--stage-ease),
+              height 0.38s var(--stage-ease),
+              right 0.38s var(--stage-ease),
+              bottom 0.38s var(--stage-ease);
+  will-change: width, height, right, bottom;
 }
-.stage-row.twin-split > .robot-twin-slot > .robot-twin,
-.stage-row.twin-split > .robot-twin-slot > .robot-twin.expanded {
+.stage-row > .robot-twin-slot > .robot-twin,
+.stage-row > .robot-twin-slot > .robot-twin.expanded {
   position: relative;
+  inset: auto;
   bottom: auto;
   right: auto;
   width: 100%;
@@ -3524,6 +3346,37 @@ main,
   max-width: none;
   max-height: none;
   aspect-ratio: auto;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(15, 23, 42, 0.12);
+  transition: border-radius 0.38s var(--stage-ease),
+              box-shadow 0.38s ease,
+              border-color 0.28s ease;
+}
+.dark-theme .stage-row:not(.twin-split) > .robot-twin-slot > .robot-twin {
+  border-color: rgba(138, 180, 248, 0.36);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* Expanded State: Smoothly interpolates into 50:50 Side-by-Side Split Stage */
+.stage-row.twin-split > .video-container {
+  width: calc(50% - 6px);
+  height: 100%;
+}
+.stage-row.twin-split:has(> .robot-twin-slot.hidden) > .video-container,
+.stage-row.twin-split:has(> .robot-twin-slot > .robot-twin.hidden) > .video-container {
+  width: 100%;
+  height: 100%;
+}
+.stage-row.twin-split > .robot-twin-slot {
+  right: 0px;
+  bottom: 0px;
+  width: calc(50% - 6px);
+  height: 100%;
+}
+.stage-row.twin-split > .robot-twin-slot > .robot-twin,
+.stage-row.twin-split > .robot-twin-slot > .robot-twin.expanded {
   border-radius: var(--card-radius);
   border: 1px solid var(--border-color);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.14);
@@ -3590,14 +3443,22 @@ main,
 }
 
 @media (max-width: 960px) {
+  .stage-row {
+    --pip-size: clamp(132px, 17vh, 168px);
+  }
   .stage-row:not(.twin-split) > .robot-twin-slot {
-    width: clamp(132px, 17vh, 168px);
     right: 10px;
     bottom: 10px;
   }
-  .stage-row.twin-split {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  .stage-row.twin-split > .video-container {
+    width: 100%;
+    height: calc(50% - 6px);
+  }
+  .stage-row.twin-split > .robot-twin-slot {
+    right: 0px;
+    bottom: 0px;
+    width: 100%;
+    height: calc(50% - 6px);
   }
   .lower-left {
     flex-wrap: wrap;
@@ -3608,6 +3469,14 @@ main,
   }
   .lower-left .controls-row {
     justify-content: space-between;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-row > .video-container,
+  .stage-row > .robot-twin-slot,
+  .stage-row > .robot-twin-slot > .robot-twin {
+    transition: none !important;
   }
 }
 

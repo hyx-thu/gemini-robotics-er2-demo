@@ -4006,8 +4006,6 @@ function renderRichToolCard(msg) {
 
 // --- Business Scenario, Role Persona & RAG Knowledge Base UI ---------------
 let selectedScenarioTopic = 'ALL';
-let selectedChatGuideTopic = '';
-let chatGuidePromptOffset = 0;
 let modalSampleOffset = 0;
 
 const SCENARIO_UI_PLACEHOLDERS = {
@@ -4132,7 +4130,6 @@ function updateScenarioHeaderBadge() {
   } else {
     txt.textContent = (sc && sc.badge && selectedScenarioId !== 'default') ? sc.badge : '🎭 Scenario';
   }
-  renderScenarioChatGuide();
 }
 
 function updateScenarioReconnectBanner() {
@@ -4166,126 +4163,6 @@ function _applyScenarioSamplePrompt(qText, closeModal = true) {
     settingsModal.classList.add('hidden');
   }
   textInput.focus();
-}
-
-function _shortTopicLabel(catName) {
-  const s = String(catName || '').trim();
-  const map = {
-    'Custom Knowledge': 'Custom RAG',
-    'Registration & Billing': 'Billing & Insurance',
-    'Lab & Phlebotomy': 'Blood Draw & Lab',
-    'Symptom Triage & Navigation': 'Triage & Floors',
-    'Radiology, Ultrasound & Endoscopy': 'MRI, CT & Endoscopy',
-    'Pharmacy & Prescriptions': 'Pharmacy & Refills',
-    'Maternity, Pediatrics & Vaccines': 'Maternity & Vaccines',
-    'Dental, Eye, ENT & Rehab': 'Dental, Eye & ENT',
-    'Inpatient, Surgery & Day Care': 'Inpatient & Surgery',
-    'Health Checkups & Medical Records': 'Checkups & Records',
-    '24/7 Emergency & Campus Amenities': '24/7 ER & Amenities',
-    'Lobby Routing & Smart Kiosks': 'Lobby & Smart STMs',
-    'Cards & Personal Accounts': 'Cards & Accounts',
-    'Savings, CDs & Sovereign Bonds': 'Deposits & CDs',
-    'Wealth Management & Bullion': 'Wealth & Gold',
-    'Cash, Coins & Foreign Exchange': 'Cash, Coins & FX',
-    'Loans, Mortgages & Credit Cards': 'Mortgages & Credit',
-    'Statements, Certificates & Credit': 'Statements & Visa',
-    'Utility, Tax & Municipal Pay': 'Utility, Tax & ETC',
-    'Corporate & SME Banking': 'Corporate & SME',
-    'Security, Accessibility & Special Care': 'Unfreeze, Vault & Care',
-  };
-  return map[s] || s;
-}
-
-function renderScenarioChatGuide() {
-  const guideEl = document.getElementById('scenario-chat-guide');
-  const titleEl = document.getElementById('scenario-chat-guide-title');
-  const chipsEl = document.getElementById('scenario-chat-topic-chips');
-  const sumEl = document.getElementById('scenario-chat-topic-summary');
-  const listEl = document.getElementById('scenario-chat-sample-list');
-  if (!guideEl || !titleEl || !chipsEl || !listEl) return;
-
-  const sc = scenarioCatalog.find(s => s.id === selectedScenarioId);
-  const customDocs = _parseCustomKbPreview(scenarioCustomKbMap[selectedScenarioId] || '', selectedScenarioId);
-  const topics = _resolveScenarioTopics(sc, customDocs);
-  const totalDocs = (sc ? (sc.documents ? sc.documents.length : (sc.doc_count || 0)) : 0) + customDocs.length;
-  const hasActiveRag = (selectedScenarioId !== 'default') || customDocs.length > 0;
-
-  guideEl.classList.remove('scenario-hospital', 'scenario-bank');
-  if (!sc || !hasActiveRag || !topics.length) {
-    guideEl.classList.add('hidden');
-    chipsEl.innerHTML = '';
-    listEl.innerHTML = '';
-    if (sumEl) sumEl.innerHTML = '';
-    return;
-  }
-
-  guideEl.classList.remove('hidden');
-  if (selectedScenarioId === 'cymbal_hospital') guideEl.classList.add('scenario-hospital');
-  if (selectedScenarioId === 'cymbal_bank') guideEl.classList.add('scenario-bank');
-
-  const headerLabel = (selectedScenarioId === 'default' && customDocs.length > 0)
-    ? '📖 Custom RAG'
-    : (sc.badge || sc.name);
-  titleEl.textContent = `${headerLabel} · ${topics.length} Topic Scope${topics.length === 1 ? '' : 's'} · ${totalDocs} RAG Doc${totalDocs === 1 ? '' : 's'}`;
-
-  if (!selectedChatGuideTopic || !topics.some(t => t.category === selectedChatGuideTopic)) {
-    selectedChatGuideTopic = topics[0].category;
-    chatGuidePromptOffset = 0;
-  }
-  const activeTopic = topics.find(t => t.category === selectedChatGuideTopic) || topics[0];
-
-  chipsEl.innerHTML = '';
-  topics.forEach((t) => {
-    const btn = _el(
-      'button',
-      'scenario-chat-topic-chip' + (t.category === activeTopic.category ? ' active' : ''),
-      `${t.icon || '📌'} ${_shortTopicLabel(t.category)}`
-    );
-    btn.type = 'button';
-    btn.dataset.topic = t.category;
-    btn.title = `${t.category} (${t.doc_count || (t.sample_prompts || []).length} RAG entries): ${t.summary || ''}`;
-    btn.onclick = () => {
-      if (selectedChatGuideTopic !== t.category) {
-        selectedChatGuideTopic = t.category;
-        chatGuidePromptOffset = 0;
-      }
-      renderScenarioChatGuide();
-    };
-    chipsEl.appendChild(btn);
-  });
-
-  const groundedList = (Array.isArray(activeTopic.grounded_prompts) && activeTopic.grounded_prompts.length)
-    ? activeTopic.grounded_prompts
-    : (activeTopic.sample_prompts || []).map(p => ({ doc_id: '', doc_title: '', prompt: p }));
-  const pageSize = 3;
-  const total = groundedList.length;
-  const alignedStart = total > 0 ? (Math.floor((chatGuidePromptOffset % total) / pageSize) * pageSize) : 0;
-  const shown = groundedList.slice(alignedStart, alignedStart + pageSize);
-  const end = alignedStart + shown.length;
-
-  if (sumEl) {
-    sumEl.innerHTML = '';
-    sumEl.appendChild(_el(
-      'span',
-      'scenario-chat-summary-text',
-      `${activeTopic.icon || '📌'} ${activeTopic.category} — ${activeTopic.summary || ''}`
-    ));
-    if (total > pageSize) {
-      const cycBtn = _el('button', 'scenario-cycle-btn', `🔄 ${alignedStart + 1}–${end} / ${total} · Next ▸`);
-      cycBtn.type = 'button';
-      cycBtn.title = `Cycle through all ${total} RAG-grounded questions in ${activeTopic.category}`;
-      cycBtn.onclick = () => {
-        chatGuidePromptOffset = (alignedStart + pageSize >= total) ? 0 : (alignedStart + pageSize);
-        renderScenarioChatGuide();
-      };
-      sumEl.appendChild(cycBtn);
-    }
-  }
-
-  listEl.innerHTML = '';
-  shown.forEach((gp) => {
-    listEl.appendChild(_buildGroundedSampleBtn(gp, 'scenario-chat-sample-btn', '💬', false));
-  });
 }
 
 function renderScenarioKbList() {
@@ -4626,8 +4503,6 @@ async function selectScenario(scenarioId) {
   localStorage.setItem('er2_scenario_id', selectedScenarioId);
   if (prevScenario !== selectedScenarioId) {
     selectedScenarioTopic = 'ALL';
-    selectedChatGuideTopic = '';
-    chatGuidePromptOffset = 0;
     modalSampleOffset = 0;
     const filterEl = document.getElementById('scenario-kb-filter');
     if (filterEl) filterEl.value = '';
@@ -4689,15 +4564,6 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
 {
   const badgeBtn = document.getElementById('scenarioBadgeBtn');
   if (badgeBtn) badgeBtn.onclick = openScenarioSettingsTab;
-
-  const chatGuideCfgBtn = document.getElementById('scenario-chat-guide-cfg');
-  if (chatGuideCfgBtn) {
-    chatGuideCfgBtn.onclick = (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      openScenarioSettingsTab();
-    };
-  }
 
   const filterEl = document.getElementById('scenario-kb-filter');
   if (filterEl) filterEl.addEventListener('input', renderScenarioKbList);

@@ -44,27 +44,27 @@ _KNOWLEDGE_FILE = os.path.join(
 _CATEGORY_ICONS: dict[str, str] = {
     "Custom Knowledge": "📝",
     # Cymbal Hospital (10 Medical Domains)
-    "Registration & Billing": "🪪",
-    "Lab & Phlebotomy": "🩸",
-    "Symptom Triage & Navigation": "🧭",
-    "Radiology, Ultrasound & Endoscopy": "☢️",
-    "Pharmacy & Prescriptions": "💊",
-    "Maternity, Pediatrics & Vaccines": "👶",
+    "Appointments & Billing": "🪪",
+    "Blood Draw & Lab Tests": "🩸",
+    "Triage & Floor Guide": "🧭",
+    "Imaging & Endoscopy": "☢️",
+    "Pharmacy & Medications": "💊",
+    "Maternity, Kids & Vaccines": "👶",
     "Dental, Eye, ENT & Rehab": "🦷",
-    "Inpatient, Surgery & Day Care": "🛏️",
-    "Health Checkups & Medical Records": "📋",
-    "24/7 Emergency & Campus Amenities": "🚑",
+    "Inpatient & Day Surgery": "🛏️",
+    "Checkups & Medical Records": "📋",
+    "Emergency & Visitor Services": "🚑",
     # Cymbal Bank (10 Banking Domains)
-    "Lobby Routing & Smart Kiosks": "🏛️",
-    "Cards & Personal Accounts": "💳",
-    "Savings, CDs & Sovereign Bonds": "🏦",
-    "Wealth Management & Bullion": "📈",
-    "Cash, Coins & Foreign Exchange": "💱",
-    "Loans, Mortgages & Credit Cards": "🏠",
-    "Statements, Certificates & Credit": "📄",
-    "Utility, Tax & Municipal Pay": "🧾",
-    "Corporate & SME Banking": "🏢",
-    "Security, Accessibility & Special Care": "🛡️",
+    "Lobby & Smart Kiosks": "🏛️",
+    "Cards & Accounts": "💳",
+    "Savings, CDs & Bonds": "🏦",
+    "Wealth, Funds & Gold": "📈",
+    "Cash & Foreign Exchange": "💱",
+    "Loans & Credit Cards": "🏠",
+    "Statements & Certificates": "📄",
+    "Bills, Tax & Fee Payments": "🧾",
+    "Business & Corporate Banking": "🏢",
+    "Security, Safe Boxes & Care": "🛡️",
 }
 
 # Colloquial bilingual synonym clusters so natural visitor phrasing (in either
@@ -470,14 +470,13 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
   if sid == "cymbal_hospital":
     desc = (
         f"Search the official {org} 120-entry outpatient triage & concierge RAG"
-        " knowledge base across 10 hospital domains: Registration & Billing,"
-        " Lab & Phlebotomy, Symptom Triage & Navigation, Radiology/Ultrasound &"
-        " Endoscopy, Pharmacy & Prescriptions, Maternity/Pediatrics & Vaccines,"
-        " Dental/Eye/ENT & Rehab, Inpatient/Surgery & Day Care, Health Checkups"
-        " & Medical Records, and 24/7 Emergency & Campus Amenities. Always call"
-        " this tool before answering any hospital policy, floor/window,"
-        " preparation, or fee question, and never invent facts outside returned"
-        " matches."
+        " knowledge base across 10 hospital domains: Appointments & Billing,"
+        " Blood Draw & Lab Tests, Triage & Floor Guide, Imaging & Endoscopy,"
+        " Pharmacy & Medications, Maternity/Kids & Vaccines, Dental/Eye/ENT &"
+        " Rehab, Inpatient & Day Surgery, Checkups & Medical Records, and"
+        " Emergency & Visitor Services. Always call this tool before answering"
+        " any hospital policy, floor/window, preparation, or fee question, and"
+        " never invent facts outside returned matches."
     )
     query_desc = (
         "The patient or visitor's question or keywords, e.g. 'international"
@@ -487,24 +486,22 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " interpreter'."
     )
     cat_desc = (
-        "Optional hospital category filter hint (e.g. 'Registration & Billing',"
-        " 'Lab & Phlebotomy', 'Symptom Triage & Navigation', 'Radiology,"
-        " Ultrasound & Endoscopy', 'Pharmacy & Prescriptions', 'Maternity,"
-        " Pediatrics & Vaccines', 'Dental, Eye, ENT & Rehab', 'Inpatient,"
-        " Surgery & Day Care', 'Health Checkups & Medical Records', '24/7"
-        " Emergency & Campus Amenities')."
+        "Optional hospital category filter hint (e.g. 'Appointments & Billing',"
+        " 'Blood Draw & Lab Tests', 'Triage & Floor Guide', 'Imaging &"
+        " Endoscopy', 'Pharmacy & Medications', 'Maternity, Kids & Vaccines',"
+        " 'Dental, Eye, ENT & Rehab', 'Inpatient & Day Surgery', 'Checkups &"
+        " Medical Records', 'Emergency & Visitor Services')."
     )
   elif sid == "cymbal_bank":
     desc = (
         f"Search the official {org} 120-entry retail, wealth & corporate lobby"
-        " RAG knowledge base across 10 banking domains: Lobby Routing & Smart"
-        " Kiosks, Cards & Personal Accounts, Savings/CDs & Sovereign Bonds,"
-        " Wealth Management & Bullion, Cash/Coins & Foreign Exchange,"
-        " Loans/Mortgages & Credit Cards, Statements/Certificates & Credit,"
-        " Utility/Tax & Municipal Pay, Corporate & SME Banking, and"
-        " Security/Accessibility & Special Care. Always call this tool before"
-        " answering any banking product, rate, threshold, document, or counter"
-        " routing question, and never invent facts outside returned matches."
+        " RAG knowledge base across 10 banking domains: Lobby & Smart Kiosks,"
+        " Cards & Accounts, Savings/CDs & Bonds, Wealth/Funds & Gold, Cash &"
+        " Foreign Exchange, Loans & Credit Cards, Statements & Certificates,"
+        " Bills/Tax & Fee Payments, Business & Corporate Banking, and"
+        " Security/Safe Boxes & Care. Always call this tool before answering"
+        " any banking product, rate, threshold, document, or counter routing"
+        " question, and never invent facts outside returned matches."
     )
     query_desc = (
         "The client's banking question or keywords, e.g. 'R2 fixed-income"
@@ -513,12 +510,11 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
         " 'safe deposit box rental', or 'unfreeze non-counter suspended card'."
     )
     cat_desc = (
-        "Optional banking category filter hint (e.g. 'Lobby Routing & Smart"
-        " Kiosks', 'Cards & Personal Accounts', 'Savings, CDs & Sovereign"
-        " Bonds', 'Wealth Management & Bullion', 'Cash, Coins & Foreign"
-        " Exchange', 'Loans, Mortgages & Credit Cards', 'Statements,"
-        " Certificates & Credit', 'Utility, Tax & Municipal Pay', 'Corporate &"
-        " SME Banking', 'Security, Accessibility & Special Care')."
+        "Optional banking category filter hint (e.g. 'Lobby & Smart Kiosks',"
+        " 'Cards & Accounts', 'Savings, CDs & Bonds', 'Wealth, Funds & Gold',"
+        " 'Cash & Foreign Exchange', 'Loans & Credit Cards', 'Statements &"
+        " Certificates', 'Bills, Tax & Fee Payments', 'Business & Corporate"
+        " Banking', 'Security, Safe Boxes & Care')."
     )
   else:
     desc = (
