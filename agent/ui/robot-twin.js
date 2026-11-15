@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 // [INTERNAL-TEST-ONLY: Real2Sim] Test-only CAD robot rigs (Unitree R1, Rainbow RB-Y1, LG CLOiD, Enchanted Tools Mirokaï)
-import { buildReal2SimRigs } from './real2sim-rigs.js?v=6';
+import { buildReal2SimRigs } from './real2sim-rigs.js?v=9';
 
 const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
@@ -439,7 +439,7 @@ function init() {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.minDistance = 1.2; controls.maxDistance = 7;
+  controls.minDistance = 0.65; controls.maxDistance = 7;
   controls.maxPolarAngle = Math.PI * 0.49; controls.enablePan = false;
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9bb0, 1.1));
@@ -447,6 +447,9 @@ function init() {
   sun.position.set(2.5, 4, -2);   // key light from the camera side sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5, near: 0.5, far: 10 });
   scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xfff6ee, 0.52);
+  fill.position.set(-2.0, 2.2, 2.4);
+  scene.add(fill);
   const world = new THREE.Group(); scene.add(world);
   const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.ShadowMaterial({ opacity: 0.18 }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
@@ -786,6 +789,14 @@ function init() {
   window.addEventListener('robot-twin:rig-loaded', (ev) => {
     const d = ev.detail || {};
     if (R && d.name === R.name && itemHeld) R.gripPoint.add(item);
+  });
+  // [INTERNAL-TEST-ONLY: Real2Sim] Camera & expression inspection hook for multi-angle verification
+  window.addEventListener('robot-twin:camera', (ev) => {
+    const d = ev.detail || {};
+    if (Array.isArray(d.pos) && d.pos.length === 3) camera.position.set(d.pos[0], d.pos[1], d.pos[2]);
+    if (Array.isArray(d.target) && d.target.length === 3) controls.target.set(d.target[0], d.target[1], d.target[2]);
+    if (d.pose && typeof d.pose === 'object') { Object.assign(tgt, d.pose); Object.assign(cur, d.pose); }
+    controls.update();
   });
   const resetBtn = document.getElementById('twin-reset');
   if (resetBtn) resetBtn.onclick = () => { camera.position.copy(R.homeCam); controls.target.copy(R.homeTarget); controls.update(); };
