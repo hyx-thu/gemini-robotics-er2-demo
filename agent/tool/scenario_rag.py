@@ -110,8 +110,19 @@ _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
     ("扫码减免停车费", "停车优惠", "减免停车费", "parking_validation", "parking_discount", "qr_parking_exit"),
     ("新能源充电桩", "充电桩", "汽车充电", "ev_charging", "electric_car_charger", "level_b2_green_zone"),
     ("地下停车场", "落客雨棚", "无障碍车位", "地铁直达", "免费接驳班车", "网约车室内等候", "找车机", "夜间护送上车", "汽车电瓶搭电", "parking_garage", "curbside_drop_off", "accessible_parking", "medical_center_station", "free_shuttle", "rideshare_lounge", "find_my_car", "night_escort", "jump_start"),
+    # Hospital — Safety, Privacy & Medical Question Handoff
     ("身体不舒服", "突然头晕", "头晕难受", "紧急求助", "24小时紧急入口", "feeling_unwell", "feeling_faint", "urgent_help", "urgent_entrance"),
-    ("医疗咨询", "医学问题", "看病挂哪个科", "挂哪个科", "检查准备要求", "空腹咨询", "吃药咨询", "用药问题", "转人工咨询", "health_question", "medication_question", "test_preparation", "licensed_staff_desk"),
+    (
+        "医疗咨询", "医疗服务", "医学咨询", "医学问题", "看病", "问诊", "诊断",
+        "看病挂哪个科", "挂哪个科", "挂号问诊", "检查准备要求", "空腹咨询",
+        "吃药咨询", "吃什么药", "开药", "买药", "用药问题",
+        "嗓子疼", "发烧", "感冒", "咳嗽", "头疼", "肚子疼",
+        "转人工咨询",
+        "medical_consultation", "medical_consultations", "medical_advice",
+        "medical_service", "health_question", "medication_question",
+        "test_preparation", "symptoms", "diagnose", "medicine", "medications",
+        "licensed_staff_desk",
+    ),
     # Bank — Lobby, Cards, Deposits & Wealth
     ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
     ("办卡", "开卡", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡", "外籍开户", "debit", "tier_i", "payroll", "expat"),
@@ -466,16 +477,16 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
 
   if sid == "cymbal_hospital":
     desc = (
-        f"Search the official {org} 120-entry non-medical visit guidance &"
-        " anxiety-relief RAG knowledge base across 10 hospitality domains:"
-        " Check-In & Visit Flow, Campus & Floor Wayfinding, Billing, Insurance"
-        " & Forms, Anxiety Relief & Calm Spaces, Waiting Comfort & Family Care,"
-        " Accessibility & Senior Support, Language & Guest Concierge, Dining,"
-        " Lounges & Amenities, Parking, Transit & Drop-Off, and Safety, Privacy"
-        " & Help Desks. Always call this tool before answering any check-in,"
-        " wayfinding, comfort lounge, accessibility, amenity, billing/forms, or"
-        " non-medical boundary question, and never invent facts outside"
-        " returned matches."
+        f"Search the official {org} 120-entry visit guidance, campus"
+        " wayfinding & comfort concierge RAG knowledge base across 10"
+        " hospitality domains: Check-In & Visit Flow, Campus & Floor"
+        " Wayfinding, Billing, Insurance & Forms, Anxiety Relief & Calm"
+        " Spaces, Waiting Comfort & Family Care, Accessibility & Senior"
+        " Support, Language & Guest Concierge, Dining, Lounges & Amenities,"
+        " Parking, Transit & Drop-Off, and Safety, Privacy & Help Desks."
+        " Always call this tool before answering any check-in, wayfinding,"
+        " comfort lounge, accessibility, amenity, billing/forms, or help-desk"
+        " question, and never invent facts outside returned matches."
     )
     query_desc = (
         "The visitor or family member's question or keywords, e.g."
@@ -948,6 +959,16 @@ def run_rag_tool(
   if not is_grounded:
     unmatched = _find_unmatched_query_terms(query, [], docs)
     latency_ms = int(round((time.monotonic() - t0) * 1000))
+    hosp_tail = (
+        " If—and ONLY if—the visitor specifically asked for a medical"
+        " consultation, symptom check, or medication advice, breezily say once"
+        " in a light, playful tone that you can't provide medical"
+        " consultations, and offer to help connect/book them with staff at"
+        " `welcome_desk_1f` and guide them to the right place; for any"
+        " non-medical topic, NEVER mention medical disclaimers."
+        if sc.get("id") == "cymbal_hospital"
+        else ""
+    )
     return {
         "scenario": sc.get("id", DEFAULT_SCENARIO_ID),
         "badge": sc.get("badge", ""),
@@ -971,6 +992,7 @@ def run_rag_tool(
             " that this specific service/topic is not in the current knowledge"
             " base, mention supported service categories if helpful, or refer"
             " them to the 1F staffed reception desk / official hotline."
+            + hosp_tail
         ),
     }
 
@@ -1029,10 +1051,11 @@ def run_rag_tool(
       "available_waypoints": list(sc.get("waypoints") or []),
       "instruction": (
           "STRICT_RAG_GROUNDING: Answer the visitor concisely in their own"
-          " language using ONLY facts explicitly stated in `matches` (state"
-          " exact floor/window/hours/thresholds/guidance steps in 1-3 short"
-          " spoken sentences; NEVER invent or extrapolate unmentioned"
-          " policies)."
+          " language (matching your scenario persona's warm, witty tone) using"
+          " ONLY facts explicitly stated in `matches` (state exact"
+          " floor/window/hours/thresholds/guidance steps in 1-3 short spoken"
+          " sentences; NEVER invent or extrapolate unmentioned policies, and"
+          " NEVER volunteer unasked medical disclaimers on non-medical topics)."
           + unmatched_note
           + " If the visitor wants to go there, offer to guide them or call"
           " navigate(waypoint=...)."

@@ -524,6 +524,55 @@ class ScenarioRagTest(unittest.TestCase):
         self.assertIn(expected_unmatched, res["unmatched_query_terms"])
         self.assertIn("do NOT appear in `matches`", res["instruction"])
 
+  def test_hospital_persona_playful_and_quiet_on_medical_unless_asked(self):
+    hosp = scenario_rag.get_scenario("cymbal_hospital")
+    persona = scenario_rag.build_scenario_persona_block("cymbal_hospital")
+    tool_decl = json.dumps(
+        scenario_rag.search_knowledge_base_tool("cymbal_hospital"),
+        ensure_ascii=False,
+    ).lower()
+
+    # Role, subtitle, and tool declaration must not prime 'non-medical PoC' disclaimers.
+    for meta_val in (hosp["subtitle"], hosp["role"], tool_decl):
+      low = meta_val.lower()
+      self.assertNotIn("non-medical", low)
+      self.assertNotIn("non-clinical", low)
+      self.assertNotIn("poc", low.split())
+
+    # Persona must specify playful/witty demeanor, quiet-by-default on medical disclaimers,
+    # and one-time light offer to book/connect with staff & guide to the place ONLY when asked.
+    p_low = persona.lower()
+    self.assertIn("playful", p_low)
+    self.assertIn("witty", p_low)
+    self.assertIn("never bring up medical disclaimers", p_low)
+    self.assertIn("only when a visitor specifically asks", p_low)
+    self.assertIn("welcome_desk_1f", p_low)
+
+    # All 119 ordinary Hospital RAG entries (everything except hosp_hlp_02) must have ZERO
+    # 'non-medical' / 'non-clinical' / 'medical advice' / 'medical consultation' disclaimers.
+    for doc in hosp["documents"]:
+      if doc["id"] == "hosp_hlp_02":
+        continue
+      blob = json.dumps(doc, ensure_ascii=False).lower()
+      for disclaimer_term in ("non-medical", "non-clinical", "medical advice", "medical consultation"):
+        self.assertNotIn(
+            disclaimer_term,
+            blob,
+            f"Unexpected disclaimer {disclaimer_term!r} in ordinary entry {doc['id']}",
+        )
+
+    # Specific medical-service questions in Chinese & English hit hosp_hlp_02 at Rank #1
+    # and return practical booking + wayfinding handoff content.
+    for med_q in (
+        "我嗓子疼发烧应该吃什么药？",
+        "请问感冒挂哪个科？能帮我做医疗咨询吗？",
+        "Do you provide medical consultations or medication advice?",
+    ):
+      res = scenario_rag.run_rag_tool({"query": med_q}, "cymbal_hospital")
+      self.assertTrue(res["grounded"], f"Expected hosp_hlp_02 match for {med_q!r}")
+      self.assertEqual(res["matches"][0]["id"], "hosp_hlp_02")
+      self.assertIn("welcome_desk_1f", res["matches"][0]["content"])
+
 
 if __name__ == "__main__":
   unittest.main()

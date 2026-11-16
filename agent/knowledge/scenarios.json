@@ -20,12 +20,12 @@
     {
       "id": "cymbal_hospital",
       "name": "Cymbal Hospital",
-      "subtitle": "Visit Guidance, Facility Concierge & Anxiety-Relief Robot (Non-Medical PoC)",
-      "label_zh": "Visit Guidance, Facility Concierge & Anxiety-Relief Robot (Non-Medical PoC)",
+      "subtitle": "Atrium Concierge: Visit Guidance, Wayfinding & Comfort",
+      "label_zh": "Atrium Concierge: Visit Guidance, Wayfinding & Comfort",
       "badge": "🏥 Cymbal Hospital",
       "organization": "Cymbal Hospital (International Smart Hospitality Campus)",
-      "role": "Visit Concierge & Emotional Comfort Guide Robot (Non-Medical PoC)",
-      "persona_prompt": "You are stationed in the 1F Central Atrium of **Cymbal Hospital (International Smart Hospitality Campus)** as the official **Visit Concierge & Emotional Comfort Guide Robot (Non-Medical PoC)**.\n- **Tone & Demeanor**: Warm, gentle, reassuring, patient, and crystal-clear. Greet arriving guests and families with a friendly wave (`make_gesture('high_wave')`) and pair spoken guidance or comforting words with natural co-speech body language (`talk_motion` with `empathy`, `affirm`, or `explain`). Always reply naturally in the exact language spoken by the visitor (e.g., English, Chinese, etc.).\n- **Strictly Non-Medical PoC Scope (CRITICAL)**: In this early-stage PoC, you **ONLY** provide:\n  1. **Visit & Service Guidance**: arrival check-in kiosks, queue numbers, appointment scheduling/rescheduling, floor/elevator/restroom wayfinding, billing & insurance paperwork counters, accessibility/wheelchair support, multilingual guest concierge, dining/Wi-Fi/charging lounges, and parking/shuttle directions.\n  2. **Anxiety Relief & Emotional Reassurance**: calming words for nervous first-time visitors, guided slow 4-4-4-4 box-breathing relaxation while waiting, directions to quiet pods and the 4F botanical healing garden, SMS/pager turn alerts so guests can step away stress-free, child-friendly comfort, and requesting a human hospitality volunteer.\n- **Zero Medical or Clinical Content Redline**: NEVER provide medical advice, symptom-to-department triage, clinical exam preparation rules, medication instructions, diagnoses, or clinical service details. Whenever a visitor mentions physical discomfort, health concerns, test preparation, or clinical questions, first offer calm emotional reassurance so they do not feel anxious, politely explain that as a non-medical visit concierge robot you do not provide health or clinical guidance, and immediately guide or escort them to licensed staff at the **1F Central Welcome & Information Desk (`welcome_desk_1f`)** (or the **1F East 24/7 Urgent Reception Entrance (`urgent_entrance_1f`)** if they feel unwell right now).\n- **Mandatory RAG Grounding (120 Non-Medical Entries across 10 Guidance & Comfort Domains)**: Always call `search_knowledge_base` first before answering any Cymbal Hospital check-in, wayfinding, billing/forms, anxiety-relief, family comfort, accessibility, guest concierge, dining/amenity, parking/shuttle, or help-desk question, and answer strictly from retrieved `matches` in 1–3 concise, reassuring spoken sentences.\n- **Strict Zero-Hallucination Rule**: NEVER invent, guess, or extrapolate any floor, counter, schedule, fee, or policy outside `search_knowledge_base` `matches`. If `grounded` is `false` or a detail is absent from `matches`, state clearly that it is not in the current concierge knowledge base and refer the visitor to `welcome_desk_1f` or the 24/7 concierge hotline `+1-800-555-2962`.\n- **Wayfinding & Tabletop Assistance**: When asked to lead the way, call `get_waypoints` / `navigate`; for tabletop handoffs of arrival passes, queue slips, or water cups, follow `update_plan` -> `detect` -> `pick` -> `place`.",
+      "role": "Atrium Visit & Comfort Concierge Robot",
+      "persona_prompt": "You are stationed in the 1F Central Atrium of **Cymbal Hospital (International Smart Hospitality Campus)** as the **Atrium Visit & Comfort Concierge Robot**.\n- **Playful, Witty & Warm Personality**: Speak like a nimble, upbeat, slightly cheeky-in-a-sweet-way smart robot buddy—lighthearted, charming, conversational, and reassuring, never stiff, bureaucratic, or preachy. Keep the exact English brand name **Cymbal Hospital** in all languages (never invent phonetic translations). Greet guests with a cheerful wave (`make_gesture('high_wave')`), pair spoken replies with expressive co-speech body language (`talk_motion` with `affirm`, `explain`, or `empathy`), keep replies brisk (1–3 lively spoken sentences), and always reply naturally in the visitor's exact language.\n- **Your Everyday Superpowers**: Arrival check-in & reception booking coordination, queue turn alerts, campus/floor/elevator wayfinding and autonomous escort, billing & insurance counters, calming 4-4-4-4 box-breathing & sunny garden lounges to melt away waiting jitters, family/accessibility perks, multilingual guest support, dining/Wi-Fi/charging, and parking/shuttle tips.\n- **Medical Questions — Quiet by Default, One Playful Redirect ONLY When Asked (CRITICAL)**:\n  - **If the visitor did NOT ask about medical services, NEVER bring up medical disclaimers!** During greetings, self-introductions ('who are you / what can you do?'), small talk, check-in, wayfinding, comfort/anxiety relief, dining, parking, or any non-medical topic, NEVER mention what you 'cannot' do, NEVER call yourself a 'non-medical robot', and NEVER repeat disclaimers across turns.\n  - **ONLY when a visitor specifically asks for a medical consultation, symptom/illness check, exam prep rules, or medication advice**: keep it short, witty, and one-and-done—playfully quip once that **you can't provide medical consultations (that's above a lobby robot's pay grade!), and immediately offer what you're great at: helping them book/connect with the right staff at the 1F Central Welcome Desk (`welcome_desk_1f`) and guiding them to the right place** (only mention `urgent_entrance_1f` if someone says they feel acutely faint or unwell right now). Say it once lightly and move on—never nag or repeat it!\n- **Mandatory RAG Grounding (120 Entries across 10 Hospitality & Comfort Domains)**: Always call `search_knowledge_base` first before answering any Cymbal Hospital check-in, wayfinding, billing/forms, anxiety-relief, family comfort, accessibility, guest concierge, dining/amenity, parking/shuttle, or help-desk question, and ground concrete facts (floors, counters, hours, fees) strictly in retrieved `matches`.\n- **Strict Zero-Hallucination Rule**: NEVER invent, guess, or extrapolate any floor, counter, schedule, fee, or policy outside `search_knowledge_base` `matches` (and never invent clinical advice). If `grounded` is `false` or a detail is absent from `matches`, breezily let the visitor know it isn't in your directory and offer to guide them to `welcome_desk_1f` or share the 24/7 concierge hotline `+1-800-555-2962`.\n- **Wayfinding & Tabletop Assistance**: When asked to lead the way, call `get_waypoints` / `navigate`; for tabletop handoffs of arrival passes, queue slips, or water cups, follow `update_plan` -> `detect` -> `pick` -> `place`.",
       "waypoints": [
         "welcome_desk_1f",
         "checkin_kiosks_1f",
@@ -231,19 +231,19 @@
         {
           "id": "hosp_chk_12",
           "category": "Check-In & Visit Flow",
-          "title": "Non-Medical PoC Concierge Scope & Warm Handoff to Staffed Information Desk",
-          "location": "1F Central Atrium Welcome & Information Desk",
+          "title": "Walk-In Desk Booking & Specialist Counter Escort",
+          "location": "1F Central Atrium Welcome Desk (Counters W1–W3)",
           "waypoint": "welcome_desk_1f",
           "keywords": [
-            "non-medical poc scope",
-            "concierge scope",
-            "warm handoff",
-            "what robot covers",
-            "staffed information desk"
+            "walk-in desk booking",
+            "book in person",
+            "schedule slot at desk",
+            "specialist counter escort",
+            "connect with reception staff"
           ],
-          "summary": "Our lobby concierge robot is dedicated exclusively to smooth visit check-in, campus wayfinding, facility convenience, and calming emotional support. To keep every visitor safe, the robot never provides health advice or clinical instructions—any health-related question is warmly handed off to licensed staff at the 1F Central Information Desk.",
-          "content": "[Check-In & Visit Flow — Non-Medical PoC Concierge Scope & Warm Handoff to Staffed Information Desk]\nLocation: 1F Central Atrium Welcome & Information Desk (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Our lobby concierge robot is dedicated exclusively to smooth visit check-in, campus wayfinding, facility convenience, and calming emotional support. To keep every visitor safe, the robot never provides health advice or clinical instructions—any health-related question is warmly handed off to licensed staff at the 1F Central Information Desk.",
-          "sample_question": "What is the Non-Medical PoC Concierge Scope and warm handoff policy to the Staffed Information Desk?"
+          "summary": "Arriving without a prior booking or unsure which reception counter handles your visit? Stop by 1F Welcome Counters W1–W3—staff check open same-day slots, coordinate your booking on the spot, and print your route pass while I escort you straight to the right counter or elevator hub.",
+          "content": "[Check-In & Visit Flow — Walk-In Desk Booking & Specialist Counter Escort]\nLocation: 1F Central Atrium Welcome Desk (Counters W1–W3) (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Arriving without a prior booking or unsure which reception counter handles your visit? Stop by 1F Welcome Counters W1–W3—staff check open same-day slots, coordinate your booking on the spot, and print your route pass while I escort you straight to the right counter or elevator hub.",
+          "sample_question": "How do walk-in visitors without a prior booking schedule a slot at the 1F Welcome Desk?"
         },
         {
           "id": "hosp_nav_01",
@@ -566,8 +566,8 @@
             "employer attendance",
             "school attendance"
           ],
-          "summary": "Need a non-clinical administrative certificate confirming only the date and arrival/departure times of your visit (or accompanying a family member) for workplace or school attendance? 1F Atrium Desk D1 stamps official Attendance Time-Slips on the spot with your check-in pass.",
-          "content": "[Billing, Insurance & Forms — Administrative Proof-of-Attendance & Visit Time-Stamp Slips]\nLocation: 1F Central Atrium Documentation Desk D1 (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Need a non-clinical administrative certificate confirming only the date and arrival/departure times of your visit (or accompanying a family member) for workplace or school attendance? 1F Atrium Desk D1 stamps official Attendance Time-Slips on the spot with your check-in pass.",
+          "summary": "Need a stamped administrative attendance certificate confirming only the date and arrival/departure times of your visit (or accompanying a family member) for workplace or school attendance? 1F Atrium Desk D1 stamps official Attendance Time-Slips on the spot with your check-in pass.",
+          "content": "[Billing, Insurance & Forms — Administrative Proof-of-Attendance & Visit Time-Stamp Slips]\nLocation: 1F Central Atrium Documentation Desk D1 (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Need a stamped administrative attendance certificate confirming only the date and arrival/departure times of your visit (or accompanying a family member) for workplace or school attendance? 1F Atrium Desk D1 stamps official Attendance Time-Slips on the spot with your check-in pass.",
           "sample_question": "Where can I get a stamped administrative proof-of-attendance slip showing my visit hours?"
         },
         {
@@ -675,7 +675,7 @@
         {
           "id": "hosp_anx_02",
           "category": "Anxiety Relief & Calm Spaces",
-          "title": "Guided 4-4-4-4 Box-Breathing Relaxation Pacing (Non-Medical Calm Exercise)",
+          "title": "Guided 4-4-4-4 Box-Breathing Relaxation Pacing",
           "location": "Available Anywhere with the Robot or in 1F Quiet Comfort Pods",
           "waypoint": "quiet_comfort_lounge_1f",
           "keywords": [
@@ -685,8 +685,8 @@
             "slow down heart",
             "relaxation pacing"
           ],
-          "summary": "For gentle, non-medical relaxation while waiting, try slow 4-4-4-4 box breathing together: inhale softly through your nose for 4 seconds, hold gently for 4 seconds, exhale slowly for 4 seconds, and rest your shoulders for 4 seconds. Repeating three slow cycles helps ease tense shoulders while you wait.",
-          "content": "[Anxiety Relief & Calm Spaces — Guided 4-4-4-4 Box-Breathing Relaxation Pacing (Non-Medical Calm Exercise)]\nLocation: Available Anywhere with the Robot or in 1F Quiet Comfort Pods (Waypoint: `quiet_comfort_lounge_1f`).\nConcierge Guide & Reassurance: For gentle, non-medical relaxation while waiting, try slow 4-4-4-4 box breathing together: inhale softly through your nose for 4 seconds, hold gently for 4 seconds, exhale slowly for 4 seconds, and rest your shoulders for 4 seconds. Repeating three slow cycles helps ease tense shoulders while you wait.",
+          "summary": "For a gentle calming pause while waiting, try slow 4-4-4-4 box breathing together: inhale softly through your nose for 4 seconds, hold gently for 4 seconds, exhale slowly for 4 seconds, and rest your shoulders for 4 seconds. Repeating three slow cycles helps ease tense shoulders while you wait.",
+          "content": "[Anxiety Relief & Calm Spaces — Guided 4-4-4-4 Box-Breathing Relaxation Pacing]\nLocation: Available Anywhere with the Robot or in 1F Quiet Comfort Pods (Waypoint: `quiet_comfort_lounge_1f`).\nConcierge Guide & Reassurance: For a gentle calming pause while waiting, try slow 4-4-4-4 box breathing together: inhale softly through your nose for 4 seconds, hold gently for 4 seconds, exhale slowly for 4 seconds, and rest your shoulders for 4 seconds. Repeating three slow cycles helps ease tense shoulders while you wait.",
           "sample_question": "Can you guide me through a gentle 4-4-4-4 box-breathing relaxation exercise while I wait?"
         },
         {
@@ -845,19 +845,19 @@
         {
           "id": "hosp_anx_12",
           "category": "Anxiety Relief & Calm Spaces",
-          "title": "Non-Clinical Listening & Spiritual/Reflective Support Coordinator",
+          "title": "Warm-Ear Listening & Spiritual/Reflective Support Suite (Room 110)",
           "location": "1F West Quiet Wing — Reflection & Hospitality Suite Room 110",
           "waypoint": "quiet_comfort_lounge_1f",
           "keywords": [
+            "warm-ear listener",
             "listening support",
-            "chaplaincy",
-            "reflective support",
-            "emotional comfort",
-            "talk to someone"
+            "chaplain",
+            "spiritual care",
+            "share worries privately"
           ],
-          "summary": "When visitors or family members simply wish to sit down in a private, judgment-free room and share worries with a compassionate non-clinical listener or interfaith hospitality chaplain, Room 110 in the 1F West Quiet Wing welcomes walk-ins Monday–Saturday 08:30–17:00.",
-          "content": "[Anxiety Relief & Calm Spaces — Non-Clinical Listening & Spiritual/Reflective Support Coordinator]\nLocation: 1F West Quiet Wing — Reflection & Hospitality Suite Room 110 (Waypoint: `quiet_comfort_lounge_1f`).\nConcierge Guide & Reassurance: When visitors or family members simply wish to sit down in a private, judgment-free room and share worries with a compassionate non-clinical listener or interfaith hospitality chaplain, Room 110 in the 1F West Quiet Wing welcomes walk-ins Monday–Saturday 08:30–17:00.",
-          "sample_question": "Is there a private room where visitors or families can talk with a compassionate non-clinical listener?"
+          "summary": "When visitors or family members simply wish to sit down in a private, judgment-free room and share worries with a compassionate hospitality listener or interfaith chaplain, Room 110 in the 1F West Quiet Wing welcomes walk-ins Monday–Saturday 08:30–17:00.",
+          "content": "[Anxiety Relief & Calm Spaces — Warm-Ear Listening & Spiritual/Reflective Support Suite (Room 110)]\nLocation: 1F West Quiet Wing — Reflection & Hospitality Suite Room 110 (Waypoint: `quiet_comfort_lounge_1f`).\nConcierge Guide & Reassurance: When visitors or family members simply wish to sit down in a private, judgment-free room and share worries with a compassionate hospitality listener or interfaith chaplain, Room 110 in the 1F West Quiet Wing welcomes walk-ins Monday–Saturday 08:30–17:00.",
+          "sample_question": "Is there a private room where visitors or families can talk with a compassionate hospitality listener?"
         },
         {
           "id": "hosp_fam_01",
@@ -1892,25 +1892,35 @@
             "24/7 urgent entrance",
             "call human staff"
           ],
-          "summary": "Please sit down and take a steady breath—you are safe and surrounded by caring staff. Because this concierge robot does not assess health conditions, please let a nearby Blue-Vest Ambassador know right away, press any Blue-Light Help Pillar, or head straight to the staffed 1F East 24/7 Urgent Reception Entrance (`urgent_entrance_1f`).",
-          "content": "[Safety, Privacy & Help Desks — Feeling Unwell Right Now? Immediate Human Staff Alert & 1F Urgent Entrance Guide]\nLocation: 1F East Wing — 24/7 Staffed Urgent Reception Entrance (Waypoint: `urgent_entrance_1f`).\nConcierge Guide & Reassurance: Please sit down and take a steady breath—you are safe and surrounded by caring staff. Because this concierge robot does not assess health conditions, please let a nearby Blue-Vest Ambassador know right away, press any Blue-Light Help Pillar, or head straight to the staffed 1F East 24/7 Urgent Reception Entrance (`urgent_entrance_1f`).",
+          "summary": "Please sit down right away and take a steady breath—you are safe and surrounded by caring staff. Let a nearby Blue-Vest Ambassador know immediately, press any Blue-Light Help Pillar, or let me guide you straight to the staffed 1F East 24/7 Urgent Reception Entrance (`urgent_entrance_1f`) for immediate human assistance.",
+          "content": "[Safety, Privacy & Help Desks — Feeling Unwell Right Now? Immediate Human Staff Alert & 1F Urgent Entrance Guide]\nLocation: 1F East Wing — 24/7 Staffed Urgent Reception Entrance (Waypoint: `urgent_entrance_1f`).\nConcierge Guide & Reassurance: Please sit down right away and take a steady breath—you are safe and surrounded by caring staff. Let a nearby Blue-Vest Ambassador know immediately, press any Blue-Light Help Pillar, or let me guide you straight to the staffed 1F East 24/7 Urgent Reception Entrance (`urgent_entrance_1f`) for immediate human assistance.",
           "sample_question": "What should I do if I or a family member suddenly feel unwell in the lobby right now?"
         },
         {
           "id": "hosp_hlp_02",
           "category": "Safety, Privacy & Help Desks",
-          "title": "Questions About Health, Test Prep, or Medications? Licensed Staff Information Desk",
-          "location": "1F Central Atrium — Staffed Nurse & Reception Information Desk",
+          "title": "Medical Consultation or Health Questions? Staff Booking & Wayfinding Desk",
+          "location": "1F Central Atrium — Staffed Welcome & Information Desk (Counters W1–W3)",
           "waypoint": "welcome_desk_1f",
           "keywords": [
+            "medical consultation",
+            "medical consultations",
+            "medical advice",
+            "medical service",
             "health question",
+            "health concerns",
             "medication question",
+            "medications",
+            "medicine",
+            "symptoms",
+            "diagnose",
             "test preparation",
-            "which department for illness",
+            "test prep",
+            "which department",
             "licensed staff desk"
           ],
-          "summary": "To ensure complete safety during this non-medical PoC, the concierge robot never gives medical advice, department selection for illnesses, exam preparation instructions, or medication guidance. Please step right over to our licensed staff at the 1F Central Information Desk (`welcome_desk_1f`), who will gladly answer personally.",
-          "content": "[Safety, Privacy & Help Desks — Questions About Health, Test Prep, or Medications? Licensed Staff Information Desk]\nLocation: 1F Central Atrium — Staffed Nurse & Reception Information Desk (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: To ensure complete safety during this non-medical PoC, the concierge robot never gives medical advice, department selection for illnesses, exam preparation instructions, or medication guidance. Please step right over to our licensed staff at the 1F Central Information Desk (`welcome_desk_1f`), who will gladly answer personally.",
+          "summary": "I cannot provide medical consultations, symptom checks, exam preparation rules, or medication advice—my superpower is helping you book with the right people and guiding you to the right place! Stop by our licensed team at the 1F Central Welcome & Information Desk (Counters W1–W3), and I can gladly lead you right over.",
+          "content": "[Safety, Privacy & Help Desks — Medical Consultation or Health Questions? Staff Booking & Wayfinding Desk]\nLocation: 1F Central Atrium — Staffed Welcome & Information Desk, Counters W1–W3 (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: I cannot provide medical consultations, symptom checks, exam preparation rules, or medication advice—what I do best is helping you connect with the right staff and finding the right place! Our licensed reception team at the 1F Central Welcome & Information Desk (`welcome_desk_1f`, Counters W1–W3) can book or adjust appointments, connect you with the right specialist desk, and confirm where to go, and I am always happy to escort you straight there.",
           "sample_question": "Where do I speak with licensed staff if I have a question about health concerns, test prep, or medications?"
         },
         {
@@ -2028,8 +2038,8 @@
             "caregiver support group",
             "room 108"
           ],
-          "summary": "Out-of-town families facing unexpected travel logistics, lodging hardships, or caregiver fatigue can visit the non-clinical Guest & Family Support Coordinators in 1F West Room 108 (Mon–Fri 08:30–17:00) for community transit and accommodation resources.",
-          "content": "[Safety, Privacy & Help Desks — Community Resource, Lodging Voucher & Family Support Desk (Room 108)]\nLocation: 1F Atrium West — Guest Support Suite Room 108 (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Out-of-town families facing unexpected travel logistics, lodging hardships, or caregiver fatigue can visit the non-clinical Guest & Family Support Coordinators in 1F West Room 108 (Mon–Fri 08:30–17:00) for community transit and accommodation resources.",
+          "summary": "Out-of-town families facing unexpected travel logistics, lodging hardships, or caregiver fatigue can visit our Guest & Family Support Coordinators in 1F West Room 108 (Mon–Fri 08:30–17:00) for community transit and accommodation resources.",
+          "content": "[Safety, Privacy & Help Desks — Community Resource, Lodging Voucher & Family Support Desk (Room 108)]\nLocation: 1F Atrium West — Guest Support Suite Room 108 (Waypoint: `welcome_desk_1f`).\nConcierge Guide & Reassurance: Out-of-town families facing unexpected travel logistics, lodging hardships, or caregiver fatigue can visit our Guest & Family Support Coordinators in 1F West Room 108 (Mon–Fri 08:30–17:00) for community transit and accommodation resources.",
           "sample_question": "Where is Room 108 for families seeking community lodging or caregiver support resources?"
         },
         {
