@@ -44,7 +44,9 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(items["cymbal_bank"]["doc_count"], 120)
     self.assertEqual(len(items["cymbal_hospital"]["topic_guide"]), 10)
     self.assertEqual(len(items["cymbal_bank"]["topic_guide"]), 10)
-    self.assertIn("blood_draw_center_1f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("welcome_desk_1f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("quiet_comfort_lounge_1f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("healing_garden_4f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("vip_wealth_lounge", items["cymbal_bank"]["waypoints"])
 
     # Every UI-facing scenario field, persona block, and tool schema must be 100% English (zero CJK).
@@ -54,10 +56,121 @@ class ScenarioRagTest(unittest.TestCase):
         f"Found unexpected CJK characters in scenario catalog: {_CJK_RE.findall(catalog_json)[:10]}",
     )
     for sid in ("default", "cymbal_hospital", "cymbal_bank"):
-      persona = scenario_rag.build_scenario_persona_block(sid, custom_kb="### Lobby Info\nOpen daily." if sid == "default" else "")
+      persona = scenario_rag.build_scenario_persona_block(
+          sid,
+          custom_kb="### Lobby Info\nOpen daily." if sid == "default" else "",
+      )
       tool_str = json.dumps(scenario_rag.search_knowledge_base_tool(sid), ensure_ascii=False)
       self.assertIsNone(_CJK_RE.search(persona), f"CJK found in persona for {sid}")
       self.assertIsNone(_CJK_RE.search(tool_str), f"CJK found in tool schema for {sid}")
+
+  def test_hospital_poc_strictly_non_medical_visit_and_comfort_only(self):
+    """Enforce zero clinical/medical treatment/prep content in Hospital PoC."""
+    hosp_sc = scenario_rag.get_scenario("cymbal_hospital")
+    expected_categories = [
+        "Check-In & Visit Flow",
+        "Campus & Floor Wayfinding",
+        "Billing, Insurance & Forms",
+        "Anxiety Relief & Calm Spaces",
+        "Waiting Comfort & Family Care",
+        "Accessibility & Senior Support",
+        "Language & Guest Concierge",
+        "Dining, Lounges & Amenities",
+        "Parking, Transit & Drop-Off",
+        "Safety, Privacy & Help Desks",
+    ]
+    actual_categories = [t["category"] for t in hosp_sc["topic_guide"]]
+    self.assertEqual(actual_categories, expected_categories)
+
+    hosp_bundle = (
+        json.dumps(hosp_sc, ensure_ascii=False).lower()
+        + " "
+        + json.dumps(scenario_rag.search_knowledge_base_tool("cymbal_hospital"), ensure_ascii=False).lower()
+        + " "
+        + scenario_rag.build_scenario_persona_block("cymbal_hospital").lower()
+    )
+    forbidden_clinical_terms = (
+        "phlebotomy",
+        "venipuncture",
+        "blood draw",
+        "fasting",
+        "urinalysis",
+        "urine",
+        "stool",
+        "sputum",
+        "swab",
+        "biopsy",
+        "pathology",
+        "mri",
+        "ultrasound",
+        "mammogram",
+        "endoscopy",
+        "colonoscopy",
+        "gastroscopy",
+        "sedation",
+        "anesthesia",
+        "contrast",
+        "xray",
+        "ecg",
+        "holter",
+        "vaccine",
+        "vaccination",
+        "immunization",
+        "rabies",
+        "tetanus",
+        "yellow fever",
+        "malaria",
+        "typhoid",
+        "hpv",
+        "shingles",
+        "prescription",
+        "compounding",
+        "infusion",
+        "biologics",
+        "insulin",
+        "metformin",
+        "antibiotic",
+        "antihistamine",
+        "anticoagulation",
+        "chemotherapy",
+        "extraction",
+        "cataract",
+        "dilated",
+        "acupuncture",
+        "cryotherapy",
+        "suture",
+        "picc",
+        "ostomy",
+        "tumor",
+        "stemi",
+        "stroke",
+        "fracture",
+        "laceration",
+        "vertigo",
+        "hypertension",
+        "asthma",
+        "arthritis",
+        "eczema",
+        "diabetes",
+        "superbill",
+        "icd-10",
+        "cpt",
+    )
+    for term in forbidden_clinical_terms:
+      self.assertIsNone(
+          re.search(rf"\b{re.escape(term)}\b", hosp_bundle),
+          f"Forbidden clinical/medical term {term!r} found in non-medical Hospital PoC bundle",
+      )
+
+    ui_js_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "ui",
+        "agent-ui.js",
+    )
+    with open(ui_js_path, "r", encoding="utf-8") as f:
+      ui_js = f.read().lower()
+    for ui_forbidden in ("mri titanium", "yellow fever", "pre-exam preparation"):
+      self.assertNotIn(ui_forbidden, ui_js)
 
   def test_default_mode_zero_overhead(self):
     self.assertFalse(scenario_rag.is_rag_active("default", ""))
@@ -97,36 +210,45 @@ class ScenarioRagTest(unittest.TestCase):
 
   def test_hospital_rag_queries_english_and_chinese(self):
     cases = [
-        ("Where do I pay my outpatient bill and use a self-service kiosk?", {"hosp_reg_01", "hosp_reg_03", "hosp_reg_06"}),
-        ("Do you offer cashless direct billing GOP for Cigna Global or Bupa international insurance?", {"hosp_reg_04"}),
-        ("Where can I print an itemized ICD-10 and CPT superbill for insurance reimbursement?", {"hosp_reg_06"}),
-        ("Where do I go for a blood draw and can I drink plain water during an 8-hour fast?", {"hosp_lab_02", "hosp_lab_01"}),
-        ("Where do I drop off a midstream urine specimen cup?", {"hosp_lab_05"}),
-        ("Can I undergo an MRI with a titanium dental implant or pacemaker?", {"hosp_img_01"}),
-        ("I feel dizzy when rolling over in bed—should I see Neurology or ENT?", {"hosp_tri_02"}),
-        ("Can compounded medications be delivered to my home or hotel by same-day courier?", {"hosp_phm_02"}),
-        ("Where is the outpatient biologics and IV iron infusion center?", {"hosp_phm_05"}),
-        ("Where can adults get the 9-valent HPV or shingles vaccine?", {"hosp_mpv_08"}),
-        ("Can I drive home myself after a dilated retinal eye exam?", {"hosp_der_03"}),
-        ("Do you offer integrative medical acupuncture or dry needling for migraines?", {"hosp_der_10"}),
-        ("What are the daily inpatient visiting hours and overnight support pass rules?", {"hosp_inp_04"}),
-        ("Do inpatient rooms offer Halal, Kosher, vegan, or diabetic meal options?", {"hosp_inp_06"}),
-        ("How do I request a Spanish, Arabic, or Mandarin medical interpreter?", {"hosp_inp_12"}),
-        ("How fast can I get my pre-employment or university physical report?", {"hosp_chk_02"}),
-        ("Where can I get a WHO Yellow Fever travel vaccine and malaria prophylaxis?", {"hosp_chk_04"}),
-        ("Where do I request an airline Fit-to-Fly certificate or FMLA medical leave form?", {"hosp_chk_07"}),
-        ("Where can I get a rabies vaccine after a cat scratch at midnight?", {"hosp_emg_03"}),
-        ("Is there a 24/7 multi-faith prayer and meditation room in the hospital?", {"hosp_emg_09"}),
-        ("Can I borrow an ASL sign-language video interpretation tablet at the lobby desk?", {"hosp_emg_10"}),
-        ("请问门诊去哪里自助缴费？支持国际商业保险 Cigna 直付吗？", {"hosp_reg_04", "hosp_reg_01"}),
-        ("去哪里打印带 ICD-10 诊断编码的英文保险理赔单 Superbill？", {"hosp_reg_06"}),
-        ("去哪里抽血化验？需要空腹几个小时？", {"hosp_lab_01", "hosp_lab_02"}),
-        ("特配药房的药可以当天冷链快递送到酒店或家里吗？", {"hosp_phm_02"}),
-        ("拔智齿周末可以约吗？需要注意什么？", {"hosp_der_01"}),
-        ("病房支持清真餐、犹太洁食或者糖尿病餐点餐吗？", {"hosp_inp_06"}),
-        ("怎么预约免费的医学口译员？支持阿拉伯语、西班牙语和中文吗？", {"hosp_inp_12"}),
-        ("出国旅行去哪里打黄热病疫苗领小黄本？", {"hosp_chk_04"}),
-        ("坐飞机需要的适航证明 Fit-to-Fly 和病假证明去哪里开？", {"hosp_chk_07"}),
+        ("How do I scan my QR booking pass at the self-service arrival check-in kiosks?", {"hosp_chk_02"}),
+        ("What happens if traffic makes me late or I miss my queue number?", {"hosp_chk_05"}),
+        ("Where is the priority fast-track check-in counter for seniors aged 65+ and expectant mothers?", {"hosp_chk_07"}),
+        ("Can you explain what facilities are on each floor from Level B1 to 6F?", {"hosp_nav_01"}),
+        ("How do the Ocean Blue, Forest Green, and Warm Amber floor stripes guide me?", {"hosp_nav_02"}),
+        ("Which elevator bank serves Basement Parking B1–B3 versus the 6F–18F Tower?", {"hosp_nav_03"}),
+        ("Do you offer cashless direct-billing GOP paperwork for Cigna, Bupa, or Allianz insurance?", {"hosp_bil_03"}),
+        ("Where can I get a stamped administrative proof-of-attendance slip showing my visit hours?", {"hosp_bil_07"}),
+        ("I feel really nervous about being in a hospital today—how can I settle in calmly?", {"hosp_anx_01"}),
+        ("Can you guide me through a slow 4-4-4-4 box-breathing relaxation exercise while I wait?", {"hosp_anx_02"}),
+        ("Is there a silent, dimmed-lighting Quiet Comfort Lounge away from busy lobby noise?", {"hosp_anx_03"}),
+        ("Where is the 4F Botanical Healing Atrium if I want natural sunlight and greenery?", {"hosp_anx_04", "hosp_nav_10"}),
+        ("Can I borrow a vibrating coaster pager so I will not miss my turn while walking in the garden?", {"hosp_anx_07"}),
+        ("I came alone today and feel overwhelmed—can a hospitality volunteer walk with me?", {"hosp_anx_08"}),
+        ("Where is the 3F Kids Storybook and Play Corner with coloring packs?", {"hosp_fam_02"}),
+        ("Where are the private lockable nursing and lactation suites with bottle warmers?", {"hosp_fam_04"}),
+        ("Is there a 24/7 multi-faith prayer, meditation, and quiet reflection room?", {"hosp_fam_09"}),
+        ("Where can I borrow a free UV-sanitized wheelchair or rollator with zero deposit?", {"hosp_acc_01"}),
+        ("Can I borrow a live ASL sign-language video interpretation tablet at the lobby desk?", {"hosp_acc_04"}),
+        ("Are certified guide dogs welcome inside public lounges, and where is the outdoor relief station?", {"hosp_acc_09"}),
+        ("How do I request complimentary visit interpretation in Spanish, Arabic, Mandarin, or Japanese?", {"hosp_lng_01"}),
+        ("Where can out-of-town visitors store suitcases in free day-luggage lockers?", {"hosp_lng_05"}),
+        ("Which counters in the B1 Garden Dining Court serve certified Halal, Kosher-sealed, and vegan meals?", {"hosp_amn_03", "hosp_lng_09"}),
+        ("How do I connect to the free Cymbal-Guest Wi-Fi without an SMS code or password?", {"hosp_amn_06"}),
+        ("How do I validate my check-in QR pass for the 3-hour discounted $4 visitor parking rate?", {"hosp_trn_02"}),
+        ("Where in the underground garage are the 24 EV charging bays located?", {"hosp_trn_03"}),
+        ("What should I do if a family member suddenly feels unwell in the lobby right now?", {"hosp_hlp_01"}),
+        ("Where do I speak with licensed staff if I have a question about health concerns, test prep, or medications?", {"hosp_hlp_02"}),
+        ("请问怎么在自助签到机扫码报到？", {"hosp_chk_02"}),
+        ("支持国际商业保险 Cigna 或 Bupa 免现金直付担保函吗？", {"hosp_bil_03"}),
+        ("我第一次来医院心里很紧张焦虑，有安静休息区或者深呼吸放松引导吗？", {"hosp_anx_01", "hosp_anx_02", "hosp_anx_03"}),
+        ("4楼植物中庭疗愈花园怎么走？怕过号可以借震动叫号器吗？", {"hosp_anx_07", "hosp_anx_04", "hosp_nav_10"}),
+        ("一个人独自来院有点慌，可以申请陪行志愿者陪我走吗？", {"hosp_anx_08"}),
+        ("去哪里免费借轮椅或助行器？需要交押金吗？", {"hosp_acc_01"}),
+        ("怎么预约西语、阿语或中文多语种口译引导？大件行李箱可以寄存吗？", {"hosp_lng_01", "hosp_lng_05"}),
+        ("B1花园餐厅有清真餐、犹太洁食和纯素餐窗口吗？", {"hosp_amn_03", "hosp_lng_09"}),
+        ("地下停车场扫码减免停车费怎么弄？B2层有新能源充电桩吗？", {"hosp_trn_02", "hosp_trn_03"}),
+        ("我现在突然头晕身体不舒服应该找谁求助？", {"hosp_hlp_01"}),
+        ("我想问看病挂哪个科或者吃药咨询和检查准备要求，应该去哪问人工？", {"hosp_hlp_02"}),
     ]
     for query, allowed_top_ids in cases:
       with self.subTest(query=query):
@@ -205,10 +327,10 @@ class ScenarioRagTest(unittest.TestCase):
 
   def test_custom_kb_parsing_and_retrieval(self):
     custom_md = (
-        "### International VIP Clinic\n"
-        "Located on 6F of the Outpatient Podium with dedicated English and Japanese medical interpreters; booking hotline +1-800-555-9999.\n\n"
+        "### Evening Acoustic Harp Hour\n"
+        "Soft live acoustic harp music plays in the 4F Botanical Healing Atrium every Friday 15:00–16:00; concierge hotline +1-800-555-9999.\n\n"
         "### Free Metro Shuttle Schedule\n"
-        "Complimentary wheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F Main Atrium."
+        "Complimentary wheelchair-accessible shuttle departs Metro Line 2 Exit A every 15 minutes straight to the 1F South Canopy."
     )
     chunks = scenario_rag.parse_custom_kb(custom_md, "cymbal_hospital")
     self.assertEqual(len(chunks), 2)
@@ -244,10 +366,10 @@ class ScenarioRagTest(unittest.TestCase):
       wp_res = await emb.execute_action("get_waypoints")
       self.assertEqual([w["name"] for w in wp_res["waypoints"]], wps)
       nav_res = await emb.execute_action(
-          "navigate", waypoint="blood_draw_center_1f"
+          "navigate", waypoint="quiet_comfort_lounge_1f"
       )
       self.assertEqual(nav_res["status"], "arrived")
-      self.assertEqual(nav_res["destination"], "blood_draw_center_1f")
+      self.assertEqual(nav_res["destination"], "quiet_comfort_lounge_1f")
 
       class _FakeBus:
 
@@ -290,7 +412,7 @@ class ScenarioRagTest(unittest.TestCase):
       await handler._execute_single_tool({
           "id": "call-rag-1",
           "name": "search_knowledge_base",
-          "args": {"query": "where do I get a blood draw"},
+          "args": {"query": "where is the quiet comfort lounge with dimmed lights"},
       })
       return bus, sm
 
@@ -298,13 +420,13 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(sm.frames_sent, 0)
     self.assertEqual(len(sm.messages), 1)
     fn_resp = sm.messages[0]["toolResponse"]["functionResponses"][0]["response"]
-    self.assertEqual(fn_resp["matches"][0]["id"], "hosp_lab_01")
+    self.assertEqual(fn_resp["matches"][0]["id"], "hosp_anx_03")
     tool_res_events = [
         ev.data for ev in bus.events
         if ev.type == tool_call_handler.event_bus.EventType.TOOL_RESULT
     ]
     self.assertTrue(tool_res_events)
-    self.assertEqual(tool_res_events[-1]["result"]["matches"][0]["id"], "hosp_lab_01")
+    self.assertEqual(tool_res_events[-1]["result"]["matches"][0]["id"], "hosp_anx_03")
 
   def test_server_scenarios_endpoints(self):
     app = server.create_app(server.ServerConfig(api_key="test-key"))
@@ -315,7 +437,7 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(r0.json()["active_scenario"], "default")
 
     # Default mode does NOT expose search_knowledge_base
-    cfg_default = client.get("/api/agent_config/spot?scenario=default").json()
+    cfg_default = client.get("/api/agent_config/robot?scenario=default").json()
     tool_names_default = [t["name"] for t in cfg_default["tools"]]
     self.assertNotIn("search_knowledge_base", tool_names_default)
     self.assertIn("talk_motion", tool_names_default)
@@ -332,7 +454,7 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertEqual(r1.json()["active_scenario"], "cymbal_bank")
     self.assertEqual(r1.json()["custom_doc_count"], 1)
 
-    cfg_bank = client.get("/api/agent_config/spot").json()
+    cfg_bank = client.get("/api/agent_config/robot").json()
     tool_names_bank = [t["name"] for t in cfg_bank["tools"]]
     self.assertIn("search_knowledge_base", tool_names_bank)
 
@@ -390,9 +512,9 @@ class ScenarioRagTest(unittest.TestCase):
         self.assertIn("NO_RAG_MATCH", res["instruction"])
 
     partial_cases = [
-        ("cymbal_hospital", "请问你们医院能给宠物狗打疫苗吗？", "宠物狗"),
-        ("cymbal_hospital", "Do you perform cosmetic facelift surgery at the clinic?", "facelift"),
-        ("cymbal_hospital", "Can I book airline hotel vacation packages at the desk?", "vacation"),
+        ("cymbal_hospital", "请问你们医院能给宠物狗办访客证吗？", "宠物狗"),
+        ("cymbal_hospital", "Do you offer luxury yacht charter at the underground parking garage?", "yacht"),
+        ("cymbal_hospital", "Can I book helicopter sightseeing tours at the partner hotel desk?", "helicopter"),
         ("cymbal_bank", "Can I open a cryptocurrency debit card at a Smart Teller Machine?", "cryptocurrency"),
     ]
     for sid, query, expected_unmatched in partial_cases:

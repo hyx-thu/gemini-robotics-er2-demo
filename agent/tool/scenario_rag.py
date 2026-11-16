@@ -1,7 +1,8 @@
 """Scenario Persona & Hybrid RAG Knowledge Base for Embodied Service Robots.
 
-Provides selectable industry scenarios (e.g. Cymbal Hospital outpatient triage
-concierge, Cymbal Bank flagship branch lobby manager), scenario-specific
+Provides selectable industry scenarios (e.g. Cymbal Hospital non-medical visit
+guidance & anxiety-relief concierge, Cymbal Bank flagship branch lobby manager),
+scenario-specific
 navigation waypoints, concise persona prompt blocks, programmatic RAG-grounded
 topic synthesis (`build_topic_guide_from_documents`), and a fast hybrid RAG
 retriever (`search_knowledge_base`) combining:
@@ -43,17 +44,17 @@ _KNOWLEDGE_FILE = os.path.join(
 # Visual icons per category (topic metadata is 100% derived from `documents`).
 _CATEGORY_ICONS: dict[str, str] = {
     "Custom Knowledge": "📝",
-    # Cymbal Hospital (10 Medical Domains)
-    "Appointments & Billing": "🪪",
-    "Blood Draw & Lab Tests": "🩸",
-    "Triage & Floor Guide": "🧭",
-    "Imaging & Endoscopy": "☢️",
-    "Pharmacy & Medications": "💊",
-    "Maternity, Kids & Vaccines": "👶",
-    "Dental, Eye, ENT & Rehab": "🦷",
-    "Inpatient & Day Surgery": "🛏️",
-    "Checkups & Medical Records": "📋",
-    "Emergency & Visitor Services": "🚑",
+    # Cymbal Hospital (10 Non-Medical Visit Guidance & Comfort Domains)
+    "Check-In & Visit Flow": "🪪",
+    "Campus & Floor Wayfinding": "🧭",
+    "Billing, Insurance & Forms": "🧾",
+    "Anxiety Relief & Calm Spaces": "🌿",
+    "Waiting Comfort & Family Care": "🛋️",
+    "Accessibility & Senior Support": "♿",
+    "Language & Guest Concierge": "🌐",
+    "Dining, Lounges & Amenities": "☕",
+    "Parking, Transit & Drop-Off": "🚌",
+    "Safety, Privacy & Help Desks": "🛡️",
     # Cymbal Bank (10 Banking Domains)
     "Lobby & Smart Kiosks": "🏛️",
     "Cards & Accounts": "💳",
@@ -72,50 +73,45 @@ _CATEGORY_ICONS: dict[str, str] = {
 # Kept fine-grained per sub-topic so 120-doc per-scenario catalogs distinguish
 # sibling policies cleanly.
 _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
-    # Hospital — Registration, Billing & International Insurance
-    ("缴费", "交费", "交钱", "付钱", "付款", "买单", "门诊缴费", "收费窗口", "pay", "payment", "billing", "cashier", "outpatient_bill", "kiosk", "apple_pay", "hsa"),
-    ("发票", "电子发票", "收据", "费用清单", "报销清单", "报销明细", "打发票", "superbill", "icd_10", "cpt", "invoice", "receipt", "itemized", "reimbursement"),
-    ("刷医保", "医保", "医保卡", "政府医保", "公费医疗", "院外报销", "自付额", "medicare", "public_health_plan", "out_of_network", "deductible", "eligibility"),
-    ("商保", "商业保险", "国际保险", "直付", "免现金直付", "高端医疗", "担保函", "commercial_insurance", "direct_billing", "gop", "bupa", "cigna", "allianz", "aetna", "unitedhealthcare", "axa"),
-    ("挂号", "预约", "预约挂号", "专家号", "加号", "放号", "当日号", "初诊", "建卡", "病历号", "护照挂号", "appointment", "booking", "scheduling", "specialist", "mrn", "new_patient", "passport"),
-    ("签到", "报到", "过号", "迟到", "回诊", "看结果", "复诊", "missed_turn", "check_in", "late_arrival", "return_visit"),
-    ("退号", "取消预约", "改约", "退费", "退款", "refund", "cancel", "reschedule"),
-    ("慢病管理", "慢性病报销", "年度封顶", "工伤", "车祸", "交通事故", "chronic_care_plan", "out_of_pocket_maximum", "workers_comp", "motor_vehicle_accident"),
-    # Hospital — Lab & Phlebotomy
-    ("抽血", "采血", "验血", "查血", "化验", "抽血窗口", "blood_draw", "phlebotomy", "venipuncture", "adult"),
-    ("空腹", "禁食", "喝水", "几个小时", "肝功", "肾功", "血脂", "fasting", "hours", "water", "lipid", "liver"),
-    ("儿童抽血", "小孩抽血", "指尖血", "末梢血", "血常规", "fingerstick", "pediatric_blood_draw", "cbc"),
-    ("糖耐", "糖耐量", "喝糖水", "妊娠糖尿病", "胰岛素释放", "ogtt", "glucose_tolerance"),
-    ("尿检", "验尿", "尿常规", "中段尿", "24小时尿", "urine", "urinalysis", "midstream"),
-    ("大便", "便常规", "潜血", "便潜血", "留样", "标本", "stool", "fecal", "occult", "fit_test", "specimen"),
-    ("痰培养", "咽拭子", "流感拭子", "支原体", "链球菌", "sputum", "throat_swab", "influenza_swab", "strep_swab"),
-    # Hospital — Triage, Imaging & Endoscopy
-    ("几楼", "在哪", "楼层", "怎么走", "科室分布", "导航", "带路", "floor", "directory", "department", "escort"),
-    ("头晕", "眩晕", "天旋地转", "耳石症", "偏头痛", "dizziness", "dizzy", "vertigo", "bppv", "neurology"),
-    ("胸闷", "胸痛", "心慌", "肚子疼", "胃痛", "反酸", "咳嗽", "发烧", "高烧", "发热", "皮疹", "扭伤", "triage", "symptom", "chest", "stomachache", "cough", "fever", "pulmonology", "rash", "sprain"),
-    ("核磁", "核磁共振", "金属", "种植牙核磁", "起搏器", "幽闭", "mri", "titanium", "pacemaker", "metal"),
-    ("增强ct", "造影剂", "二甲双胍", "拍片", "胸片", "辐射", "心电图", "动态心电", "ct", "contrast", "metformin", "xray", "holter", "ecg"),
-    ("彩超", "b超", "超声", "憋尿", "空腹超声", "骨密度", "钼靶", "ultrasound", "bladder", "dexa", "mammogram"),
-    ("胃镜", "肠镜", "胃肠镜", "无痛胃镜", "无痛肠镜", "静脉镇静", "内镜", "清肠", "呼气试验", "幽门螺杆菌", "endoscopy", "egd", "gastroscopy", "colonoscopy", "iv_sedation", "urea_breath"),
-    # Hospital — Pharmacy, Maternity/Peds, Specialties, Inpatient, Travel/Checkup & Emergency
-    ("取药", "拿药", "药房", "自动药房", "用药咨询", "药物相互作用", "pharmacy", "dispensary", "medication", "prescription", "polypharmacy"),
-    ("特配药", "院内制剂", "儿童调味药", "送药", "送药上门", "寄回家", "快递到家", "送到酒店", "compounding", "flavored_suspension", "home_delivery", "hotel_delivery", "medication_courier", "courier"),
-    ("胰岛素", "冷链", "冰袋", "冷藏药", "慢病长处方", "长处方", "开三个月", "输液", "生物制剂", "静脉补铁", "打点滴", "靶向药", "预授权", "insulin", "ice_pack", "90_day_supply", "infusion_center", "biologics_infusion", "iv_iron", "prior_authorization"),
-    ("产检", "建档", "孕早期", "助产士", "参观产房", "四维", "大排畸", "无创", "胎心监护", "分娩", "宫缩", "破水", "prenatal_intake", "midwife", "maternity_tour", "nt_scan", "20_week_anatomy_scan", "nipt", "nst", "labor"),
-    ("儿科", "小孩看病", "雾化", "儿保", "生长发育", "骨龄", "哺乳室", "母婴室", "产后复查", "盆底肌", "通乳", "pediatrics", "nebulizer", "well_child", "bone_age", "lactation", "postpartum", "pelvic_floor"),
-    ("疫苗", "打疫苗", "儿童疫苗", "预防接种", "黄卡", "九价", "宫颈癌疫苗", "带状疱疹", "流感疫苗", "宫颈筛查", "vaccine", "immunization", "yellow_card", "hpv", "shingles", "flu", "pap_test"),
-    ("牙科", "口腔", "拔牙", "智齿", "阻生齿", "洗牙", "补牙", "根管", "种牙", "dental", "wisdom", "tooth", "extraction", "scaling"),
-    ("眼科", "散瞳", "眼底", "近视", "配镜", "角膜塑形镜", "白内障", "青光眼", "干眼", "ophthalmology", "dilated", "retinal", "myopia", "ortho_k", "cataract"),
-    ("耳鼻喉", "耳鸣", "突聋", "听力", "鼻窦炎", "鼻炎", "流鼻血", "鱼刺", "卡鱼刺", "咽喉异物", "打呼噜", "睡眠监测", "ent", "tinnitus", "audiometry", "sinusitis", "nosebleed", "fishbone", "foreign_body", "snoring", "sleep_apnea"),
-    ("康复", "理疗", "运动康复", "冲击波", "针灸", "干针", "整合医学", "肌筋膜", "失眠", "心理门诊", "冷冻祛疣", "激光祛疤", "换药", "拆线", "picc", "physical_therapy", "physiotherapy", "acupuncture", "dry_needling", "integrative_medicine", "insomnia", "wart_cryotherapy", "suture_removal", "wound_care"),
-    ("住院", "入院", "出院", "床旁结算", "送药到床", "探视", "陪护", "私人陪护", "注册护士", "日间手术", "inpatient", "admission", "discharge", "meds_to_beds", "visiting_hours", "cna", "private_duty_sitter", "day_surgery"),
-    ("住院餐", "病房点餐", "营养餐", "糖尿病餐", "清真", "清真餐", "犹太洁食", "素食", "无麸质", "halal", "kosher", "vegan", "gluten_free", "diabetic_diet", "low_sodium", "inpatient_meals"),
-    ("国际医疗", "国际部", "医学翻译", "医疗口译", "口译", "翻译", "多语种", "英语陪诊", "西语翻译", "阿语翻译", "日语翻译", "医疗签证", "特需套房", "international_patient", "medical_interpreter", "spanish_interpreter", "arabic_interpreter", "medical_visa", "deluxe_suite"),
-    ("体检", "年度体检", "高管体检", "入职体检", "留学体检", "签证体检", "驾照体检", "视力体检", "运动体检", "早癌筛查", "executive_physical", "pre_employment_physical", "visa_medical", "driver_medical", "sports_clearance"),
-    ("旅行门诊", "国际旅行", "旅行疫苗", "出国疫苗", "黄热病", "黄皮书", "伤寒", "疟疾", "高原反应", "travel_clinic", "travel_vaccine", "yellow_fever", "icvp", "typhoid", "malaria_pills", "altitude_sickness"),
-    ("病历", "病假条", "请假条", "医疗证明", "适航证明", "乘机证明", "复印病历", "出生证明", "新生儿护照", "病理切片", "工作能力评估", "sick_note", "work_excuse", "fmla", "fit_to_fly", "medical_records", "hipaa_release", "birth_certificate", "pathology_slide", "functional_capacity"),
-    ("急诊", "急救", "分级分诊", "胸痛急救", "卒中", "创伤", "狗咬", "猫抓", "蝙蝠", "狂犬", "狂犬疫苗", "免疫球蛋白", "破伤风", "emergency", "esi_triage", "stemi", "stroke", "rabies_vaccine", "hrig", "tetanus_shot", "bite", "scratch"),
-    ("轮椅", "助行器", "停车", "停车费", "充电桩", "食堂", "餐厅", "轻食", "咖啡", "班车", "地铁", "祈祷室", "礼拜室", "冥想室", "静思室", "行李寄存", "手语", "盲文", "无障碍", "社工", "慈善救助", "失物招领", "丢护照", "wheelchair", "parking_validation", "ev_charging", "cafeteria", "healthy_deli", "free_shuttle", "metro", "prayer_room", "meditation_room", "luggage_locker", "sign_language", "asl_interpreter", "braille", "social_worker", "lost_and_found"),
+    # Hospital (Non-Medical PoC) — Check-In, Wayfinding, Billing & Forms (fine-grained per sub-topic)
+    ("自助签到", "签到机", "报到机", "扫码报到", "扫码签到", "二维码签到", "arrival_kiosk", "qr_pass", "kiosk_check_in", "self_service_kiosk"),
+    ("首次来访", "第一次来登记", "访客证", "临时通行证", "护照登记", "first_time_registration", "new_visitor_profile", "guest_badge"),
+    ("预约来访", "提前预约", "改期", "改约", "免费取消", "取消预约", "advance_booking", "reschedule_visit", "cancel_booking"),
+    ("迟到", "堵车晚了", "过号", "错过叫号", "重新排号", "running_late", "missed_turn", "missed_queue_number", "late_arrival_grace"),
+    ("叫号屏幕", "短信提醒", "排队提醒", "queue_screen", "sms_turn_alert", "privacy_name_masking"),
+    ("优先窗口", "老人优先", "孕妇优先", "绿色通道", "priority_fast_track", "seniors_65", "expectant_mothers"),
+    ("没有智能手机", "大字导引单", "纸质路线单", "large_font_slip", "no_smartphone", "paper_route_card"),
+    ("楼层分布", "楼层导览", "在几楼", "地面彩条", "蓝色地标", "绿色地标", "橙色地标", "电梯分区", "连廊", "室内天桥", "蓝色求助柱", "floor_directory", "color_coded_stripes", "elevator_bank", "skybridge", "intercom_pillar"),
+    ("卫生间", "洗手间", "无障碍厕所", "家庭卫生间", "restroom", "washroom", "family_restroom"),
+    ("带路", "机器人领路", "领我去", "robot_escort", "lead_the_way", "autonomous_escort"),
+    ("自助缴费", "结算", "付款", "收费窗口", "现金缴费", "contactless_checkout", "cashier_window", "self_checkout_kiosk"),
+    ("商业保险", "国际保险", "商保直付", "免现金直付", "担保函", "direct_billing", "gop", "commercial_insurance", "cigna", "bupa", "allianz"),
+    ("发票", "收据", "报销单据", "退费", "退款", "到访时间证明", "陪护出勤条", "档案复印", "official_receipt", "itemized_invoice", "refund", "proof_of_attendance", "archive_office"),
+    # Hospital (Non-Medical PoC) — Anxiety Relief & Calm Spaces (fine-grained per sub-topic)
+    ("心里很紧张", "特别紧张", "焦虑", "害怕", "缓解焦虑", "情绪安抚", "feeling_nervous", "first_visit_anxiety", "settle_in_calmly", "reassurance"),
+    ("深呼吸", "方盒呼吸", "呼吸放松", "放松引导", "box_breathing", "breathing_exercise", "relaxation_pacing"),
+    ("安静休息区", "静音候诊室", "安静等候", "调暗灯光", "quiet_comfort_lounge", "silent_waiting_room", "dimmed_lighting"),
+    ("疗愈花园", "植物中庭", "4f", "晒太阳", "botanical_atrium", "healing_garden", "greenery_walk"),
+    ("震动叫号器", "取餐牌叫号", "怕过号", "vibrating_pager", "coaster_pager", "afraid_of_missing_turn", "buzzing_pager"),
+    ("一个人独自来院", "独自来院", "陪行志愿者", "蓝丝巾志愿者", "陪我走", "visiting_alone", "solo_visitor", "volunteer_companion"),
+    ("降噪耳机", "自然白噪音", "洋甘菊茶", "热花草茶", "低刺激舱", "借毛毯", "披肩", "倾听室", "noise_canceling_headphones", "chamomile_tea", "sensory_pod", "warm_blanket", "listening_support"),
+    # Hospital (Non-Medical PoC) — Family, Accessibility, Language, Dining, Parking & Safety
+    ("儿童游乐角", "绘本角", "涂色卡", "小朋友害怕", "勇敢贴纸", "母婴室", "哺乳室", "温奶器", "借婴儿车", "kids_play_corner", "brave_explorer_sticker", "nursing_room", "lactation_suite", "baby_stroller_loan"),
+    ("探视时间", "住院探访", "家属躺椅休息室", "祈祷室", "冥想室", "静思室", "夜间陪护证", "visiting_hours", "caregiver_lounge", "prayer_room", "meditation_room", "overnight_companion"),
+    ("借轮椅", "免费轮椅", "助行器", "免押金轮椅", "wheelchair", "borrow_wheelchair", "rollator", "free_mobility_aid"),
+    ("老人下车接应", "慢速行走", "走廊休息椅", "curbside_greeting", "slow_walking_pace", "rest_benches"),
+    ("手语翻译平板", "手语服务", "助听环路", "扩音器", "盲道", "盲文", "老花镜", "导盲犬", "向日葵挂绳", "sign_language", "asl", "hearing_loop", "braille", "reading_glasses", "guide_dog", "sunflower_lanyard"),
+    ("多语种口译", "多语种翻译", "口译引导", "西语", "阿语", "日语翻译", "interpreter", "language_assistance", "spanish_interpreter", "arabic_interpreter"),
+    ("行李寄存", "大件行李箱", "存行李箱", "luggage_locker", "suitcase_storage", "bag_storage"),
+    ("自助机切换语言", "国际宾客休息室", "周边合作酒店", "机场接送", "借雨伞", "失物招领", "丢手机", "kiosk_language", "international_guest_lounge", "partner_hotel", "airport_transfer", "umbrella_loan", "lost_and_found"),
+    ("b1花园餐厅", "b1餐厅", "花园餐厅", "食堂", "一楼咖啡厅", "b1_cafeteria", "garden_dining_court", "atrium_cafe"),
+    ("清真餐", "犹太洁食", "纯素餐", "低盐汤", "halal_counter", "kosher_sealed_meal", "plant_based_vegan", "low_sodium_soup"),
+    ("便利店", "45度温水", "饮水机", "免费wifi", "手机充电柜", "充电宝", "微波炉热饭", "笔记本电脑办公", "锦鲤池步道", "24_7_convenience_shop", "warm_water_dispenser", "guest_wifi", "phone_charging", "microwave", "laptop_nook", "koi_pond"),
+    ("扫码减免停车费", "停车优惠", "减免停车费", "parking_validation", "parking_discount", "qr_parking_exit"),
+    ("新能源充电桩", "充电桩", "汽车充电", "ev_charging", "electric_car_charger", "level_b2_green_zone"),
+    ("地下停车场", "落客雨棚", "无障碍车位", "地铁直达", "免费接驳班车", "网约车室内等候", "找车机", "夜间护送上车", "汽车电瓶搭电", "parking_garage", "curbside_drop_off", "accessible_parking", "medical_center_station", "free_shuttle", "rideshare_lounge", "find_my_car", "night_escort", "jump_start"),
+    ("身体不舒服", "突然头晕", "头晕难受", "紧急求助", "24小时紧急入口", "feeling_unwell", "feeling_faint", "urgent_help", "urgent_entrance"),
+    ("医疗咨询", "医学问题", "看病挂哪个科", "挂哪个科", "检查准备要求", "空腹咨询", "吃药咨询", "用药问题", "转人工咨询", "health_question", "medication_question", "test_preparation", "licensed_staff_desk"),
     # Bank — Lobby, Cards, Deposits & Wealth
     ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
     ("办卡", "开卡", "储蓄卡", "借记卡", "一类卡", "二类卡", "工资卡", "社保卡", "外籍开户", "debit", "tier_i", "payroll", "expat"),
@@ -163,7 +159,8 @@ _GENERIC_FRAMING_TOKENS = frozenset({
     "use", "offer", "provide", "available", "support", "handle",
     "service", "services", "rule", "rules", "policy", "policies",
     "process", "procedure", "guide", "info", "information", "detail",
-    "details", "question", "help", "ask", "know", "explain", "about",
+    "details", "question", "questions", "help", "ask", "know", "explain",
+    "speak", "talk", "concern", "concerns", "about",
     "here", "today", "now", "state", "regarding", "knowledge", "base",
     "package", "packages", "perform", "plan", "plans",
 })
@@ -469,28 +466,32 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
 
   if sid == "cymbal_hospital":
     desc = (
-        f"Search the official {org} 120-entry outpatient triage & concierge RAG"
-        " knowledge base across 10 hospital domains: Appointments & Billing,"
-        " Blood Draw & Lab Tests, Triage & Floor Guide, Imaging & Endoscopy,"
-        " Pharmacy & Medications, Maternity/Kids & Vaccines, Dental/Eye/ENT &"
-        " Rehab, Inpatient & Day Surgery, Checkups & Medical Records, and"
-        " Emergency & Visitor Services. Always call this tool before answering"
-        " any hospital policy, floor/window, preparation, or fee question, and"
-        " never invent facts outside returned matches."
+        f"Search the official {org} 120-entry non-medical visit guidance &"
+        " anxiety-relief RAG knowledge base across 10 hospitality domains:"
+        " Check-In & Visit Flow, Campus & Floor Wayfinding, Billing, Insurance"
+        " & Forms, Anxiety Relief & Calm Spaces, Waiting Comfort & Family Care,"
+        " Accessibility & Senior Support, Language & Guest Concierge, Dining,"
+        " Lounges & Amenities, Parking, Transit & Drop-Off, and Safety, Privacy"
+        " & Help Desks. Always call this tool before answering any check-in,"
+        " wayfinding, comfort lounge, accessibility, amenity, billing/forms, or"
+        " non-medical boundary question, and never invent facts outside"
+        " returned matches."
     )
     query_desc = (
-        "The patient or visitor's question or keywords, e.g. 'international"
-        " insurance cashless direct billing GOP', 'blood draw fasting water"
-        " rule', 'MRI titanium dental implant safety', 'WHO Yellow Fever travel"
-        " vaccine', 'Fit-to-Fly medical certificate', or '15-language medical"
-        " interpreter'."
+        "The visitor or family member's question or keywords, e.g."
+        " 'self-service arrival check-in kiosk QR pass', '4-4-4-4 box"
+        " breathing anxiety relief', '1F Quiet Comfort Lounge or 4F Botanical"
+        " Healing Atrium', 'free UV-sanitized wheelchair', 'cashless direct"
+        " billing GOP paperwork', or '3-hour discounted visitor parking"
+        " validation'."
     )
     cat_desc = (
-        "Optional hospital category filter hint (e.g. 'Appointments & Billing',"
-        " 'Blood Draw & Lab Tests', 'Triage & Floor Guide', 'Imaging &"
-        " Endoscopy', 'Pharmacy & Medications', 'Maternity, Kids & Vaccines',"
-        " 'Dental, Eye, ENT & Rehab', 'Inpatient & Day Surgery', 'Checkups &"
-        " Medical Records', 'Emergency & Visitor Services')."
+        "Optional hospital hospitality category filter hint (e.g. 'Check-In &"
+        " Visit Flow', 'Campus & Floor Wayfinding', 'Billing, Insurance &"
+        " Forms', 'Anxiety Relief & Calm Spaces', 'Waiting Comfort & Family"
+        " Care', 'Accessibility & Senior Support', 'Language & Guest"
+        " Concierge', 'Dining, Lounges & Amenities', 'Parking, Transit &"
+        " Drop-Off', 'Safety, Privacy & Help Desks')."
     )
   elif sid == "cymbal_bank":
     desc = (
@@ -1029,8 +1030,9 @@ def run_rag_tool(
       "instruction": (
           "STRICT_RAG_GROUNDING: Answer the visitor concisely in their own"
           " language using ONLY facts explicitly stated in `matches` (state"
-          " exact floor/window/hours/thresholds/prep rules in 1-3 short spoken"
-          " sentences; NEVER invent or extrapolate unmentioned policies)."
+          " exact floor/window/hours/thresholds/guidance steps in 1-3 short"
+          " spoken sentences; NEVER invent or extrapolate unmentioned"
+          " policies)."
           + unmatched_note
           + " If the visitor wants to go there, offer to guide them or call"
           " navigate(waypoint=...)."

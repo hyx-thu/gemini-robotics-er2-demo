@@ -3952,9 +3952,9 @@ let modalSampleOffset = 0;
 
 const SCENARIO_UI_PLACEHOLDERS = {
   cymbal_hospital: {
-    filter: '🔍 Search 120 hospital RAG entries (e.g., direct billing, fasting, MRI titanium, Yellow Fever, Halal meal, interpreter)...',
-    persona: 'e.g. You are the multilingual concierge robot in the 5F International Patient Center of Cymbal Hospital. Greet patients warmly and remind them of pre-exam preparation steps...',
-    kb: '### International Patient Services Extension\nLocated on 5F West with certified English, Spanish, Mandarin & Arabic medical interpreters (+1-800-555-2962 ext. 8).\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Medical Center Station every 15 minutes straight to the 1F Main Atrium.',
+    filter: '🔍 Search 120 hospital guidance & comfort entries (e.g., QR check-in, quiet lounge, box breathing, wheelchair, interpreter, parking)...',
+    persona: 'e.g. You are the gentle visit concierge & anxiety-relief guide robot in the 1F Atrium of Cymbal Hospital (non-medical PoC). Welcome visitors warmly, help with wayfinding, and ease waiting stress...',
+    kb: '### 4F Evening Acoustic Harp Hour\nSoft live acoustic harp music plays in the 4F Botanical Healing Atrium every Wednesday & Friday from 15:00–16:00 to help waiting visitors unwind.\n\n### Free Metro Accessibility Shuttle\nWheelchair-accessible shuttle departs Medical Center Station every 15 minutes straight to the 1F South Canopy.',
   },
   cymbal_bank: {
     filter: '🔍 Search 120 banking RAG entries (e.g., R2 wealth, Large CD, 100k cash, SWIFT wire, mortgage, safe deposit box)...',
