@@ -553,10 +553,23 @@ video {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 30%, #f8fafd 0%, #e3e8ef 100%);
+  background: radial-gradient(ellipse at 50% 26%, #f6f9fe 0%, #dbe5f3 100%);
+  transition: background 0.35s ease;
+}
+body[data-scenario="cymbal_hospital"] .robot-twin {
+  background: radial-gradient(ellipse at 50% 26%, #f3fbf8 0%, #d3eae2 100%);
+}
+body[data-scenario="cymbal_bank"] .robot-twin {
+  background: radial-gradient(ellipse at 50% 26%, #fcf9f2 0%, #e7dbc6 100%);
 }
 .dark-theme .robot-twin {
-  background: radial-gradient(ellipse at 50% 30%, #2a2f37 0%, #15181d 100%);
+  background: radial-gradient(ellipse at 50% 26%, #253041 0%, #131821 100%);
+}
+.dark-theme[data-scenario="cymbal_hospital"] .robot-twin {
+  background: radial-gradient(ellipse at 50% 26%, #1d332f 0%, #101c1a 100%);
+}
+.dark-theme[data-scenario="cymbal_bank"] .robot-twin {
+  background: radial-gradient(ellipse at 50% 26%, #31291e 0%, #17130e 100%);
 }
 #robot-twin-canvas {
   position: absolute;

@@ -23,6 +23,7 @@ const canvas = document.getElementById('robot-twin-canvas');
 const panel = document.getElementById('robot-twin');
 
 const C_BODY = 0xeef1f5, C_DARK = 0x3c4043, C_ACCENT = 0x4285f4, C_JOINT = 0x5f6368;
+const FLOOR_RADIUS = 5.4, FLOOR_PERIOD = 2.20;
 const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.08, ...o });
 const glow = (c) => new THREE.MeshStandardMaterial({ color: 0x8ab4f8, emissive: c, emissiveIntensity: 0.9 });
 
@@ -442,19 +443,112 @@ function init() {
   controls.minDistance = 0.65; controls.maxDistance = 7;
   controls.maxPolarAngle = Math.PI * 0.49; controls.enablePan = false;
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9bb0, 1.1));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(2.5, 4, -2);   // key light from the camera side sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5, near: 0.5, far: 10 });
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x8a9bb0, 1.12);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.58);
+  sun.position.set(2.5, 4, -2);   // key light from the camera side
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.bias = -0.0005;
+  Object.assign(sun.shadow.camera, { left: -2.6, right: 2.6, top: 2.6, bottom: -2.6, near: 0.5, far: 10 });
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xfff6ee, 0.52);
+  const fill = new THREE.DirectionalLight(0xfff6ee, 0.54);
   fill.position.set(-2.0, 2.2, 2.4);
   scene.add(fill);
   const world = new THREE.Group(); scene.add(world);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.ShadowMaterial({ opacity: 0.18 }));
-  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-  const grid = new THREE.GridHelper(12, 24, 0x8ab4f8, 0x9aa0a6);
-  grid.material.transparent = true; grid.material.opacity = 0.35; world.add(grid);
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4);
+  const floorAlphaTex = makeFloorAlphaTexture();
+  let floorTex = null;
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    alphaMap: floorAlphaTex,
+    transparent: true,
+    roughness: 0.78,
+    metalness: 0.04,
+  });
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(FLOOR_RADIUS, 72), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  floor.renderOrder = -2;
+  world.add(floor);
+
+  // Subtle live ground velocity ring + streaming chevrons (visible only during locomotion).
+  const motionGuide = buildMotionGuide();
+  scene.add(motionGuide.group);
+
+  // Scenario-aware 3D perimeter lobby environment (Default / Hospital Atrium / Bank Lobby).
+  const envGroup = new THREE.Group();
+  world.add(envGroup);
+  const pos = new THREE.Vector2();
+  let envBaseYaw = 0;
+  let envBays = [];
+  let envDisposables = [];
+  let activeScenario = '';
+  let isDarkTheme = document.body.classList.contains('dark-theme');
+  const titleEl = panel.querySelector('.twin-title');
+
+  function applyScenarioEnvironment(nextScenario, nextDark, force = false) {
+    const scen = (nextScenario === 'cymbal_hospital' || nextScenario === 'cymbal_bank') ? nextScenario : 'default';
+    const dark = Boolean(nextDark);
+    if (!force && scen === activeScenario && dark === isDarkTheme && floorTex) return;
+    activeScenario = scen;
+    isDarkTheme = dark;
+
+    // Update lighting warmth per venue & theme
+    if (scen === 'cymbal_hospital') {
+      hemi.color.setHex(dark ? 0xbce6dd : 0xf6fffd);
+      hemi.groundColor.setHex(dark ? 0x162b27 : 0x90b8ad);
+      hemi.intensity = dark ? 0.96 : 1.16;
+      fill.color.setHex(0xeefbf8);
+    } else if (scen === 'cymbal_bank') {
+      hemi.color.setHex(dark ? 0xf2dfc0 : 0xfffaf0);
+      hemi.groundColor.setHex(dark ? 0x261f16 : 0xb39f80);
+      hemi.intensity = dark ? 0.96 : 1.15;
+      fill.color.setHex(0xfff2dc);
+    } else {
+      hemi.color.setHex(dark ? 0xcfdff5 : 0xffffff);
+      hemi.groundColor.setHex(dark ? 0x1b2433 : 0x8a9bb0);
+      hemi.intensity = dark ? 0.95 : 1.12;
+      fill.color.setHex(0xfff6ee);
+    }
+    sun.intensity = dark ? 1.25 : 1.58;
+
+    // Swap crisp repeating colored floor texture while preserving current locomotion UV offset
+    const prevTex = floorTex;
+    floorTex = makeScenarioFloorTexture(scen, dark, maxAniso);
+    floorTex.offset.set(pos.x / FLOOR_PERIOD, -pos.y / FLOOR_PERIOD);
+    floorMat.map = floorTex;
+    floorMat.needsUpdate = true;
+    if (prevTex) prevTex.dispose();
+
+    // Accent color on ground locomotion ring
+    const accentHex = scen === 'cymbal_hospital' ? 0x0d9488 : scen === 'cymbal_bank' ? 0xc89b3c : 0x3b82f6;
+    motionGuide.setAccent(accentHex);
+
+    // Rebuild 3D perimeter architectural props cleanly
+    while (envGroup.children.length) envGroup.remove(envGroup.children[0]);
+    for (const d of envDisposables) { if (d && typeof d.dispose === 'function') d.dispose(); }
+    envDisposables = [];
+    const built = buildScenarioEnvironment(scen, dark);
+    envGroup.add(built.root);
+    envBays = built.bays;
+    envDisposables = built.disposables;
+
+    if (titleEl) {
+      titleEl.textContent = scen === 'cymbal_hospital' ? '3D Twin · Hospital Atrium'
+                          : scen === 'cymbal_bank'     ? '3D Twin · Bank Lobby'
+                          :                              '3D Twin';
+    }
+  }
+
+  const initScenario = window.__activeScenarioId
+    || document.body.getAttribute('data-scenario')
+    || localStorage.getItem('er2_scenario_id')
+    || 'default';
+  if (!document.body.getAttribute('data-scenario')) {
+    document.body.setAttribute('data-scenario', initScenario);
+  }
+  applyScenarioEnvironment(initScenario, isDarkTheme, true);
 
   // Table (manipulation zone). Hidden until detect / pick / place happen.
   const table = new THREE.Group(); scene.add(table);
@@ -496,7 +590,6 @@ function init() {
   let R = null;
   const cur = {}, tgt = {};
   let armStowed = true, sitting = false, gait = null, heading = 0, scanUntil = 0, flash = null;
-  const pos = new THREE.Vector2();
   let queue = [], step = null, pendingTarget = null;
   const TALK_STYLES = new Set(['explain', 'affirm', 'think', 'emphasize', 'empathy']);
   const coSpeech = createCoSpeechController();
@@ -553,6 +646,11 @@ function init() {
     }
     if (wasHeld) { armStowed = false; setArm(R.carry()); tgt.grip = 0.25; Object.assign(cur, tgt); grabItem(); }
     if (!keepView) { camera.position.copy(R.homeCam); controls.target.copy(R.homeTarget); controls.update(); }
+    if (R.homeCam && R.homeTarget) {
+      const backAng = Math.atan2(R.homeTarget.z - R.homeCam.z, R.homeTarget.x - R.homeCam.x);
+      envBaseYaw = THREE.MathUtils.degToRad(140) - backAng;
+      envGroup.rotation.y = envBaseYaw;
+    }
     localStorage.setItem('twin_rig', R.name);
     const sw = document.getElementById('twin-switch');
     if (sw) { sw.textContent = R.icon; sw.title = `Robot: ${R.label || R.name} — click to switch`; }
@@ -780,12 +878,26 @@ function init() {
   });
   window.addEventListener('robot-twin:reset', () => {
     clearQueue(); clearTalkState(); talkState.blend = 0; talkState.env = 0;
-    gait = null; itemHeld = false; scene.add(item); item.visible = false;
+    gait = null; pos.set(0, 0); heading = 0; walkAmt = 0;
+    if (floorTex) floorTex.offset.set(0, 0);
+    itemHeld = false; scene.add(item); item.visible = false;
     pendingTarget = null; dropTo = null; ring.material.opacity = 0; hideTable();
     sitting = false; armStowed = true; Object.assign(tgt, R.defaults);
     if (actionEl) { actionEl.textContent = 'Idle'; actionEl.classList.remove('active'); }
     if (statusEl) statusEl.classList.add('hidden');
   });
+  window.addEventListener('robot-twin:scenario', (ev) => {
+    const next = (ev.detail && ev.detail.scenarioId) || 'default';
+    applyScenarioEnvironment(next, document.body.classList.contains('dark-theme'));
+  });
+  window.addEventListener('robot-twin:theme', () => {
+    applyScenarioEnvironment(activeScenario || 'default', document.body.classList.contains('dark-theme'));
+  });
+  new MutationObserver(() => {
+    const nextDark = document.body.classList.contains('dark-theme');
+    const nextScen = document.body.getAttribute('data-scenario') || activeScenario || 'default';
+    applyScenarioEnvironment(nextScen, nextDark);
+  }).observe(document.body, { attributes: true, attributeFilter: ['class', 'data-scenario'] });
   window.addEventListener('robot-twin:rig-loaded', (ev) => {
     const d = ev.detail || {};
     if (R && d.name === R.name && itemHeld) R.gripPoint.add(item);
@@ -986,17 +1098,49 @@ function init() {
     }
 
     let walking = 0;
+    let bodyVelAngle = 0;
+    let bodySpeed = 0;
     if (gait) {
       heading += gait.vrot * dt;
       const fx = Math.cos(heading), fz = -Math.sin(heading);
       pos.x += (gait.vx * fx + gait.vy * fz) * dt;
       pos.y += (gait.vx * fz - gait.vy * fx) * dt;
+      bodySpeed = Math.hypot(gait.vx, gait.vy);
+      if (bodySpeed > 0.01) bodyVelAngle = Math.atan2(gait.vy, gait.vx);
       walking = 1;
     }
     world.rotation.y = -heading;
-    grid.position.set(-(pos.x % 0.5), 0, -(pos.y % 0.5));
+    if (floorTex) floorTex.offset.set(pos.x / FLOOR_PERIOD, -pos.y / FLOOR_PERIOD);
     walkAmt += ((walking ? 1 : 0) - walkAmt) * k;
     gaitPhase += dt * (R.name === 'dog' ? 9 : 6.5) * walkAmt;
+    motionGuide.update(t, dt, walkAmt, gait, bodyVelAngle, bodySpeed);
+
+    // Auto-cull perimeter architectural bays on the camera-facing foreground side so sightlines stay 100% open
+    const camDx = camera.position.x - controls.target.x;
+    const camDz = camera.position.z - controls.target.z;
+    const camHoriz = Math.hypot(camDx, camDz) || 1;
+    const cxN = camDx / camHoriz, czN = camDz / camHoriz;
+    const totalEnvYaw = -heading + envBaseYaw;
+    const cosW = Math.cos(totalEnvYaw), sinW = Math.sin(totalEnvYaw);
+    let visibleBays = 0;
+    for (const bay of envBays) {
+      const wx = bay.dirX * cosW + bay.dirZ * sinW;
+      const wz = -bay.dirX * sinW + bay.dirZ * cosW;
+      const dotCam = wx * cxN + wz * czN;
+      bay.group.visible = dotCam < 0.24;
+      if (bay.group.visible) visibleBays++;
+    }
+    window.__twinEnvState = {
+      scenario: activeScenario,
+      dark: isDarkTheme,
+      posX: pos.x,
+      posZ: pos.y,
+      heading,
+      offsetU: floorTex ? floorTex.offset.x : 0,
+      offsetV: floorTex ? floorTex.offset.y : 0,
+      walkAmt,
+      visibleBays,
+    };
 
     // Co-speech head & upper-limb overlay (strictly yields to any physical action).
     const speech = typeof window.__getRobotSpeechState === 'function'
@@ -1497,6 +1641,636 @@ function roundedBox(w, h, d, r) {
   g.rotateX(-Math.PI / 2);
   g.center();
   return g;
+}
+
+// ------------------------------------ scenario floor & lobby environments --
+function applySRGB(tex) {
+  if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeFloorAlphaTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 18, 128, 128, 127);
+  g.addColorStop(0.0, '#ffffff');
+  g.addColorStop(0.64, '#ffffff');
+  g.addColorStop(0.84, '#b8b8b8');
+  g.addColorStop(0.96, '#282828');
+  g.addColorStop(1.0, '#000000');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function makeScenarioFloorTexture(scenarioId, dark, maxAniso = 4) {
+  const S = 1024;
+  const N = 4; // 4x4 tiles per 2.20m repeat => 0.55m per tile
+  const tile = S / N;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+
+  let tileA, tileB, grout, subLine, tickColor;
+  if (scenarioId === 'cymbal_hospital') {
+    tileA = dark ? '#19322d' : '#c8e6dc';
+    tileB = dark ? '#24433c' : '#f1f8f5';
+    grout = dark ? '#3f6e64' : '#8cb9ae';
+    subLine = dark ? 'rgba(130, 205, 188, 0.14)' : 'rgba(72, 138, 124, 0.16)';
+    tickColor = dark ? '#5eead4' : '#0d9488';
+  } else if (scenarioId === 'cymbal_bank') {
+    tileA = dark ? '#272017' : '#ddd0b8';
+    tileB = dark ? '#352c1f' : '#f6f0e4';
+    grout = dark ? '#6e5a3a' : '#b29b75';
+    subLine = dark ? 'rgba(214, 178, 108, 0.14)' : 'rgba(168, 135, 76, 0.18)';
+    tickColor = dark ? '#e0b85c' : '#b88928';
+  } else {
+    tileA = dark ? '#1c293a' : '#d1e1f4';
+    tileB = dark ? '#27384f' : '#eef4fb';
+    grout = dark ? '#4a6486' : '#96b1d0';
+    subLine = dark ? 'rgba(138, 180, 248, 0.16)' : 'rgba(74, 122, 192, 0.18)';
+    tickColor = dark ? '#7ab4ff' : '#3b82f6';
+  }
+
+  // 1. Alternating 4x4 two-tone architectural tiles + subtle inner highlight bevel
+  for (let row = 0; row < N; row++) {
+    for (let col = 0; col < N; col++) {
+      const x = col * tile, y = row * tile;
+      const isA = (row + col) % 2 === 0;
+      ctx.fillStyle = isA ? tileA : tileB;
+      ctx.fillRect(x, y, tile, tile);
+
+      // Subtle inner tile sheen so motion across each 0.55m tile is unmistakable
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 5, y + 5, tile - 10, tile - 10);
+
+      if (scenarioId === 'cymbal_hospital') {
+        // Gentle terrazzo mineral flecks
+        const seedBase = row * 17 + col * 31;
+        for (let i = 0; i < 14; i++) {
+          const fx = x + 22 + ((seedBase * 53 + i * 97) % (tile - 44));
+          const fy = y + 22 + ((seedBase * 71 + i * 61) % (tile - 44));
+          const r = 2 + (i % 3);
+          ctx.fillStyle = (i % 2 === 0)
+            ? (dark ? 'rgba(148, 226, 213, 0.14)' : 'rgba(20, 148, 132, 0.14)')
+            : (dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(180, 155, 120, 0.14)');
+          ctx.beginPath();
+          ctx.arc(fx, fy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (scenarioId === 'cymbal_bank') {
+        // Delicate diagonal Calacatta/travertine stone veining
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + 4, y + 4, tile - 8, tile - 8);
+        ctx.clip();
+        ctx.strokeStyle = dark ? 'rgba(224, 195, 142, 0.08)' : 'rgba(162, 138, 98, 0.15)';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(x - 10, y + ((row * 57 + col * 83) % 140) + 40);
+        ctx.bezierCurveTo(x + tile * 0.35, y + tile * 0.25, x + tile * 0.65, y + tile * 0.72, x + tile + 12, y + tile * 0.52);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // 2. Half-tile precision reference hairlines
+  ctx.strokeStyle = subLine;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < N; i++) {
+    const mid = i * tile + tile * 0.5;
+    ctx.beginPath(); ctx.moveTo(mid, 0); ctx.lineTo(mid, S); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(S, mid); ctx.stroke();
+  }
+
+  // 3. Venue-signature floor inlay motifs (1 per 2.20m repeat so it feels architectural, not busy)
+  if (scenarioId === 'cymbal_hospital') {
+    // 3-color Hospital Wayfinding Floor Stripes (Ocean Blue, Forest Green, Warm Amber — matches hosp_nav_02)
+    const bandY = Math.round(tile * 2.74);
+    const stripes = [
+      { dy: -16, color: dark ? 'rgba(59, 130, 246, 0.82)' : 'rgba(37, 99, 235, 0.85)' },
+      { dy: 0,   color: dark ? 'rgba(16, 185, 129, 0.82)' : 'rgba(5, 150, 105, 0.85)' },
+      { dy: 16,  color: dark ? 'rgba(245, 158, 11, 0.82)' : 'rgba(217, 119, 6, 0.85)' },
+    ];
+    ctx.fillStyle = dark ? 'rgba(15, 28, 25, 0.55)' : 'rgba(255, 255, 255, 0.72)';
+    ctx.fillRect(0, bandY - 26, S, 52);
+    for (const st of stripes) {
+      ctx.fillStyle = st.color;
+      ctx.fillRect(0, bandY + st.dy - 4, S, 8);
+    }
+    // Subtle forward chevron markers along the wayfinding strip
+    ctx.fillStyle = dark ? 'rgba(240, 253, 250, 0.55)' : 'rgba(255, 255, 255, 0.90)';
+    for (let cx = 128; cx < S; cx += 256) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 7, bandY - 5);
+      ctx.lineTo(cx + 5, bandY);
+      ctx.lineTo(cx - 7, bandY + 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else if (scenarioId === 'cymbal_bank') {
+    // Grand brushed-brass lobby border inlay every 2.20m
+    const brass = dark ? 'rgba(212, 170, 78, 0.62)' : 'rgba(186, 142, 46, 0.68)';
+    ctx.strokeStyle = brass;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(18, 18, S - 36, S - 36);
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(28, 28, S - 56, S - 56);
+  }
+
+  // 4. Primary tile grout seams + crisp intersection markers
+  ctx.strokeStyle = grout;
+  ctx.lineWidth = 3.2;
+  for (let i = 0; i <= N; i++) {
+    const p = Math.min(S - 1.5, Math.max(1.5, i * tile));
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, S); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(S, p); ctx.stroke();
+  }
+
+  // Corner micro-accents (diamonds for Bank, crosshairs for Studio/Hospital)
+  for (let row = 0; row <= N; row++) {
+    for (let col = 0; col <= N; col++) {
+      const ix = col * tile, iy = row * tile;
+      if (scenarioId === 'cymbal_bank') {
+        ctx.fillStyle = tickColor;
+        ctx.beginPath();
+        ctx.moveTo(ix, iy - 9); ctx.lineTo(ix + 9, iy);
+        ctx.lineTo(ix, iy + 9); ctx.lineTo(ix - 9, iy);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = tickColor;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(ix - 9, iy); ctx.lineTo(ix + 9, iy);
+        ctx.moveTo(ix, iy - 9); ctx.lineTo(ix, iy + 9);
+        ctx.stroke();
+      }
+    }
+  }
+
+  const tex = applySRGB(new THREE.CanvasTexture(c));
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const rep = (2 * FLOOR_RADIUS) / FLOOR_PERIOD;
+  tex.repeat.set(rep, rep);
+  tex.anisotropy = maxAniso;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function buildMotionGuide() {
+  const group = new THREE.Group();
+  group.position.y = 0.004;
+  group.visible = false;
+
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x3b82f6, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
+  });
+  const baseRing = new THREE.Mesh(new THREE.RingGeometry(0.41, 0.445, 56), ringMat);
+  baseRing.rotation.x = -Math.PI / 2;
+  group.add(baseRing);
+
+  // Dashed outer rotation ring (rotates visibly when robot turns via vrot)
+  const yawGroup = new THREE.Group();
+  group.add(yawGroup);
+  const tickMats = [];
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i / 12) * Math.PI * 2;
+    const tm = new THREE.MeshBasicMaterial({
+      color: 0x3b82f6, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
+    });
+    tickMats.push(tm);
+    const arc = new THREE.Mesh(new THREE.RingGeometry(0.485, 0.508, 8, 1, a0, Math.PI / 14), tm);
+    arc.rotation.x = -Math.PI / 2;
+    yawGroup.add(arc);
+  }
+
+  // Forward-streaming directional stride chevrons along instantaneous velocity vector
+  const dirGroup = new THREE.Group();
+  group.add(dirGroup);
+  const chevShape = new THREE.Shape();
+  chevShape.moveTo(-0.045, -0.075);
+  chevShape.lineTo(0.055, 0);
+  chevShape.lineTo(-0.045, 0.075);
+  chevShape.lineTo(-0.015, 0.075);
+  chevShape.lineTo(0.085, 0);
+  chevShape.lineTo(-0.015, -0.075);
+  chevShape.closePath();
+  const chevGeo = new THREE.ShapeGeometry(chevShape);
+  chevGeo.rotateX(-Math.PI / 2);
+
+  const chevrons = [];
+  for (let i = 0; i < 3; i++) {
+    const cm = new THREE.MeshBasicMaterial({
+      color: 0x3b82f6, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
+    });
+    const m = new THREE.Mesh(chevGeo, cm);
+    dirGroup.add(m);
+    chevrons.push(m);
+  }
+
+  let yawAccum = 0;
+  let lastAngle = 0;
+  return {
+    group,
+    setAccent(hex) {
+      ringMat.color.setHex(hex);
+      for (const tm of tickMats) tm.color.setHex(hex);
+      for (const ch of chevrons) ch.material.color.setHex(hex);
+    },
+    update(t, dt, walkAmt, gait, bodyVelAngle, bodySpeed) {
+      if (walkAmt < 0.015) {
+        group.visible = false;
+        return;
+      }
+      group.visible = true;
+      ringMat.opacity = 0.42 * walkAmt;
+      const vrot = gait ? (gait.vrot || 0) : 0;
+      yawAccum -= vrot * dt * 2.2;
+      yawGroup.rotation.y = yawAccum;
+      const rotBoost = Math.min(1, Math.abs(vrot) * 2.5);
+      for (let i = 0; i < tickMats.length; i++) {
+        tickMats[i].opacity = (0.24 + 0.34 * rotBoost) * walkAmt;
+      }
+
+      if (bodySpeed > 0.02) lastAngle = bodyVelAngle;
+      dirGroup.rotation.y = lastAngle;
+      const showTrans = gait ? (bodySpeed > 0.02 ? 1 : 0.25) : 0.4;
+      for (let i = 0; i < chevrons.length; i++) {
+        const u = ((t * 1.65 + i / 3) % 1);
+        chevrons[i].position.set(0.28 + u * 0.46, 0.001, 0);
+        const fade = Math.sin(u * Math.PI);
+        chevrons[i].material.opacity = 0.68 * fade * walkAmt * showTrans;
+      }
+    },
+  };
+}
+
+function makeFasciaSignTexture(scenarioId, dark) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 176;
+  const ctx = c.getContext('2d');
+
+  if (scenarioId === 'cymbal_hospital') {
+    ctx.fillStyle = dark ? '#16312d' : '#f7fcfb';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = dark ? '#2dd4bf' : '#0d9488';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(8, 8, c.width - 16, c.height - 16);
+
+    // Warm concierge badge (rounded teal square + welcoming star/compass)
+    ctx.fillStyle = '#0d9488';
+    ctx.beginPath();
+    ctx.roundRect(42, 34, 108, 108, 22);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(96, 52); ctx.lineTo(108, 76); ctx.lineTo(132, 88);
+    ctx.lineTo(108, 100); ctx.lineTo(96, 124); ctx.lineTo(84, 100);
+    ctx.lineTo(60, 88); ctx.lineTo(84, 76);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = dark ? '#ecfdf5' : '#0f3d38';
+    ctx.font = '700 50px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('CYMBAL HOSPITAL', 180, 90);
+    ctx.fillStyle = dark ? '#99f6e4' : '#0f766e';
+    ctx.font = '600 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('1F WELCOME ATRIUM  ·  VISITOR CONCIERGE & WAYFINDING', 182, 134);
+
+    // 3 wayfinding color dots on right
+    const dots = ['#2563eb', '#059669', '#d97706'];
+    dots.forEach((col, idx) => {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(918 + idx * 28, 62, 9, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  } else {
+    // Cymbal Bank Flagship Lobby crest fascia
+    ctx.fillStyle = dark ? '#131f36' : '#162744';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = '#d4af53';
+    ctx.lineWidth = 7;
+    ctx.strokeRect(10, 10, c.width - 20, c.height - 20);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, c.width - 40, c.height - 40);
+
+    // Gold diamond crest
+    ctx.fillStyle = '#d4af53';
+    ctx.beginPath();
+    ctx.moveTo(96, 38); ctx.lineTo(142, 88); ctx.lineTo(96, 138); ctx.lineTo(50, 88);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#162744';
+    ctx.beginPath();
+    ctx.moveTo(96, 58); ctx.lineTo(122, 88); ctx.lineTo(96, 118); ctx.lineTo(70, 88);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#f6df9e';
+    ctx.font = '700 52px Georgia, "Times New Roman", serif';
+    ctx.fillText('CYMBAL BANK', 176, 92);
+    ctx.fillStyle = '#e5cfa0';
+    ctx.font = '600 25px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('FLAGSHIP LOBBY  ·  VIP CONCIERGE & SMART TELLER', 178, 134);
+  }
+
+  const tex = applySRGB(new THREE.CanvasTexture(c));
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function makeKioskScreenTexture(kind) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 320;
+  const ctx = c.getContext('2d');
+  if (kind === 'hospital') {
+    const g = ctx.createLinearGradient(0, 0, 0, 320);
+    g.addColorStop(0, '#0d9488');
+    g.addColorStop(1, '#0284c7');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 320);
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.roundRect(22, 26, 212, 64, 12);
+    ctx.fill();
+    ctx.fillStyle = '#0f766e';
+    ctx.font = '700 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CHECK-IN', 128, 68);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(28, 116, 200, 44);
+    ctx.fillRect(28, 174, 200, 44);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 21px sans-serif';
+    ctx.fillText('QR / ID Scan', 128, 145);
+    ctx.fillText('Queue Ticket', 128, 203);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, 320);
+    g.addColorStop(0, '#162847');
+    g.addColorStop(1, '#0f1c33');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 320);
+    ctx.strokeStyle = '#d4af53';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(10, 10, 236, 300);
+    ctx.fillStyle = '#f6df9e';
+    ctx.font = '700 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('STM', 128, 72);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '600 19px sans-serif';
+    ctx.fillText('Smart Teller', 128, 104);
+    ctx.fillStyle = 'rgba(212, 175, 83, 0.22)';
+    ctx.fillRect(28, 134, 200, 44);
+    ctx.fillRect(28, 192, 200, 44);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '600 19px sans-serif';
+    ctx.fillText('Cards & FX', 128, 162);
+    ctx.fillText('VIP Queue', 128, 220);
+  }
+  const tex = applySRGB(new THREE.CanvasTexture(c));
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function buildScenarioEnvironment(scenarioId, dark) {
+  const root = new THREE.Group();
+  const bays = [];
+  const disposables = [];
+  const track = (obj) => { disposables.push(obj); return obj; };
+  const mStd = (color, opts = {}) => track(new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.08, ...opts }));
+  const addMesh = (parent, geo, material, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    track(geo);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.position.set(x, y, z);
+    if (rx || ry || rz) mesh.rotation.set(rx, ry, rz);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+
+  function createBay(angleDeg, radius) {
+    const rad = THREE.MathUtils.degToRad(angleDeg);
+    const dirX = Math.cos(rad), dirZ = Math.sin(rad);
+    const g = new THREE.Group();
+    g.position.set(dirX * radius, 0, dirZ * radius);
+    g.lookAt(0, 0, 0);
+    root.add(g);
+    bays.push({ group: g, dirX, dirZ });
+    return g;
+  }
+
+  function addPlanter(parent, x, z, potMat, leafMatA, leafMatB, scale = 1) {
+    const p = new THREE.Group();
+    p.position.set(x, 0, z);
+    p.scale.setScalar(scale);
+    parent.add(p);
+    addMesh(p, new THREE.CylinderGeometry(0.14, 0.115, 0.25, 20), potMat, 0, 0.125, 0);
+    addMesh(p, new THREE.CylinderGeometry(0.125, 0.125, 0.02, 16), mStd(0x4b3b2c, { roughness: 0.9 }), 0, 0.245, 0);
+    addMesh(p, new THREE.CylinderGeometry(0.016, 0.022, 0.26, 10), mStd(0x6d533d, { roughness: 0.85 }), 0, 0.34, 0);
+    addMesh(p, new THREE.SphereGeometry(0.145, 16, 12), leafMatA, 0, 0.49, 0);
+    addMesh(p, new THREE.SphereGeometry(0.105, 14, 10), leafMatB, -0.08, 0.42, 0.05);
+    addMesh(p, new THREE.SphereGeometry(0.10, 14, 10), leafMatB, 0.085, 0.44, -0.04);
+  }
+
+  if (scenarioId === 'default') {
+    // Minimalist studio reference rings + subtle perimeter horizon ticks
+    const ringMatA = track(new THREE.MeshBasicMaterial({
+      color: dark ? 0x60a5fa : 0x3b82f6, transparent: true, opacity: dark ? 0.20 : 0.22, side: THREE.DoubleSide, depthWrite: false,
+    }));
+    const r1 = addMesh(root, new THREE.RingGeometry(1.48, 1.505, 72), ringMatA, 0, 0.002, 0, -Math.PI / 2, 0, 0);
+    r1.renderOrder = -1;
+    const ringMatB = track(new THREE.MeshBasicMaterial({
+      color: dark ? 0x475569 : 0x94a3b8, transparent: true, opacity: dark ? 0.22 : 0.26, side: THREE.DoubleSide, depthWrite: false,
+    }));
+    const r2 = addMesh(root, new THREE.RingGeometry(2.58, 2.61, 80), ringMatB, 0, 0.002, 0, -Math.PI / 2, 0, 0);
+    r2.renderOrder = -1;
+    return { root, bays, disposables };
+  }
+
+  if (scenarioId === 'cymbal_hospital') {
+    const plinthMat = mStd(dark ? 0x213834 : 0xe4f0ec, { roughness: 0.72 });
+    const coveMat = mStd(0x14b8a6, { emissive: 0x0d9488, emissiveIntensity: dark ? 0.55 : 0.32, roughness: 0.35 });
+    const frameMat = mStd(dark ? 0xcbd5e1 : 0xf8fafc, { roughness: 0.42, metalness: 0.15 });
+    const oakMat = mStd(dark ? 0x9a7550 : 0xcfa77b, { roughness: 0.58, metalness: 0.04 });
+    const whiteDeskMat = mStd(dark ? 0xdbe7e4 : 0xffffff, { roughness: 0.45 });
+    const glassMat = track(new THREE.MeshStandardMaterial({
+      color: dark ? 0x5eead4 : 0xd6f3ee,
+      emissive: dark ? 0x115e59 : 0xb8ebe2,
+      emissiveIntensity: dark ? 0.32 : 0.22,
+      transparent: true,
+      opacity: dark ? 0.36 : 0.52,
+      roughness: 0.18,
+      metalness: 0.12,
+      side: THREE.DoubleSide,
+    }));
+    const potMat = mStd(dark ? 0x475b57 : 0xeae5dc, { roughness: 0.75 });
+    const leafA = mStd(dark ? 0x2f6f5e : 0x4d937d, { roughness: 0.78 });
+    const leafB = mStd(dark ? 0x3e8873 : 0x68ae96, { roughness: 0.76 });
+
+    // Hero Bay (140 deg — auto-aligned dead-center behind active rig's default camera)
+    const hero = createBay(140, 2.82);
+    addMesh(hero, new THREE.BoxGeometry(3.08, 0.045, 0.74), plinthMat, 0, 0.0225, 0);
+    addMesh(hero, new THREE.BoxGeometry(3.06, 0.014, 0.02), coveMat, 0, 0.044, 0.365);
+
+    // Sunlit atrium glass curtain bays + mullions + oak top header (elevated to clear tall humanoids)
+    addMesh(hero, new THREE.BoxGeometry(2.98, 1.38, 0.024), glassMat, 0, 0.735, -0.25);
+    for (const mx of [-1.48, -0.74, 0, 0.74, 1.48]) {
+      addMesh(hero, new THREE.BoxGeometry(0.045, 1.46, 0.055), frameMat, mx, 0.775, -0.25);
+    }
+    addMesh(hero, new THREE.BoxGeometry(3.04, 0.058, 0.078), oakMat, 0, 1.50, -0.25);
+    addMesh(hero, new THREE.BoxGeometry(3.04, 0.04, 0.06), frameMat, 0, 0.74, -0.25);
+
+    // Fascia signboard ("CYMBAL HOSPITAL · 1F WELCOME ATRIUM")
+    const signTex = track(makeFasciaSignTexture('cymbal_hospital', dark));
+    const signMat = track(new THREE.MeshBasicMaterial({ map: signTex }));
+    addMesh(hero, new THREE.BoxGeometry(1.74, 0.26, 0.04), frameMat, 0, 1.35, -0.215);
+    addMesh(hero, new THREE.PlaneGeometry(1.68, 0.23), signMat, 0, 1.35, -0.192);
+
+    // Curved-edge White & Oak Concierge Desk (screen-left/center)
+    const desk = new THREE.Group();
+    desk.position.set(-0.36, 0.045, 0.06);
+    hero.add(desk);
+    addMesh(desk, roundedBox(1.04, 0.50, 0.30, 0.08), whiteDeskMat, 0, 0.25, 0);
+    addMesh(desk, roundedBox(1.10, 0.042, 0.36, 0.08), oakMat, 0, 0.515, 0.01);
+    addMesh(desk, new THREE.BoxGeometry(0.92, 0.055, 0.012), coveMat, 0, 0.10, 0.152);
+    // Small concierge display monitor
+    addMesh(desk, new THREE.BoxGeometry(0.20, 0.13, 0.016), frameMat, -0.18, 0.60, -0.02, -0.18, 0, 0);
+
+    // 2 Self-Service Check-In Kiosks (screen-right)
+    const kioskTex = track(makeKioskScreenTexture('hospital'));
+    const kioskScreenMat = track(new THREE.MeshBasicMaterial({ map: kioskTex }));
+    for (const kx of [0.56, 0.94]) {
+      const k = new THREE.Group();
+      k.position.set(kx, 0.045, 0.06);
+      hero.add(k);
+      addMesh(k, new THREE.BoxGeometry(0.22, 0.03, 0.22), frameMat, 0, 0.015, 0);
+      addMesh(k, roundedBox(0.18, 0.68, 0.12, 0.03), whiteDeskMat, 0, 0.355, 0);
+      addMesh(k, new THREE.BoxGeometry(0.21, 0.25, 0.03), frameMat, 0, 0.74, 0.02, -0.26, 0, 0);
+      addMesh(k, new THREE.PlaneGeometry(0.18, 0.22), kioskScreenMat, 0, 0.744, 0.038, -0.26, 0, 0);
+    }
+
+    // Flanking indoor healing greenery planters (Anxiety Relief & Calm Spaces)
+    addPlanter(hero, -1.16, 0.10, potMat, leafA, leafB, 1.02);
+    addPlanter(hero, 1.30, 0.10, potMat, leafA, leafB, 0.96);
+
+    // 3 Wing Bays around perimeter for seamless 360° atrium continuity during turns
+    for (const ang of [50, 230, 320]) {
+      const wing = createBay(ang, 2.78);
+      addMesh(wing, new THREE.BoxGeometry(2.10, 0.04, 0.56), plinthMat, 0, 0.02, 0);
+      addMesh(wing, new THREE.BoxGeometry(2.00, 0.92, 0.02), glassMat, 0, 0.50, -0.20);
+      for (const mx of [-1.0, 0, 1.0]) {
+        addMesh(wing, new THREE.BoxGeometry(0.04, 0.96, 0.05), frameMat, mx, 0.50, -0.20);
+      }
+      addMesh(wing, new THREE.BoxGeometry(2.06, 0.045, 0.065), oakMat, 0, 0.98, -0.20);
+      // Calm wooden visitor bench + greenery planter
+      addMesh(wing, roundedBox(0.88, 0.05, 0.28, 0.04), oakMat, -0.18, 0.28, 0.05);
+      addMesh(wing, new THREE.BoxGeometry(0.06, 0.22, 0.22), frameMat, -0.50, 0.15, 0.05);
+      addMesh(wing, new THREE.BoxGeometry(0.06, 0.22, 0.22), frameMat, 0.14, 0.15, 0.05);
+      addPlanter(wing, 0.68, 0.06, potMat, leafA, leafB, 0.88);
+    }
+
+    return { root, bays, disposables };
+  }
+
+  // cymbal_bank — Flagship Marble, Walnut & Brushed-Brass Lobby
+  const marblePlinth = mStd(dark ? 0x2c241b : 0xede3d2, { roughness: 0.52, metalness: 0.06 });
+  const limestoneWall = mStd(dark ? 0x352c21 : 0xf5efe3, { roughness: 0.62, metalness: 0.04 });
+  const pilasterMat = mStd(dark ? 0x43382a : 0xfaf6ee, { roughness: 0.48, metalness: 0.06 });
+  const brassMat = mStd(0xd4af53, { roughness: 0.30, metalness: 0.68, emissive: 0x6b5318, emissiveIntensity: dark ? 0.25 : 0.10 });
+  const walnutMat = mStd(dark ? 0x3b2818 : 0x4e3522, { roughness: 0.52, metalness: 0.08 });
+  const navyMat = mStd(dark ? 0x13223d : 0x182b4c, { roughness: 0.42, metalness: 0.22 });
+  const glassDivider = track(new THREE.MeshStandardMaterial({
+    color: 0xe6f0fa, transparent: true, opacity: 0.38, roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide,
+  }));
+  const cordMat = mStd(0x7f1d1d, { roughness: 0.65 });
+  const potBronze = mStd(0x4a3d2c, { roughness: 0.45, metalness: 0.35 });
+  const leafDark = mStd(dark ? 0x28543c : 0x36694c, { roughness: 0.75 });
+  const leafMid = mStd(dark ? 0x356b4d : 0x4b8462, { roughness: 0.75 });
+
+  const hero = createBay(140, 2.82);
+  addMesh(hero, new THREE.BoxGeometry(3.08, 0.045, 0.74), marblePlinth, 0, 0.0225, 0);
+  addMesh(hero, new THREE.BoxGeometry(3.08, 0.015, 0.022), brassMat, 0, 0.044, 0.365);
+
+  // Classical-modern limestone wall + 5 pilasters with brushed-brass capitals & bases (elevated for tall humanoids)
+  addMesh(hero, new THREE.BoxGeometry(3.00, 1.42, 0.04), limestoneWall, 0, 0.755, -0.26);
+  for (const px of [-1.46, -0.73, 0, 0.73, 1.46]) {
+    addMesh(hero, new THREE.BoxGeometry(0.11, 1.44, 0.09), pilasterMat, px, 0.765, -0.24);
+    addMesh(hero, new THREE.BoxGeometry(0.14, 0.045, 0.11), brassMat, px, 1.47, -0.24);
+    addMesh(hero, new THREE.BoxGeometry(0.14, 0.045, 0.11), brassMat, px, 0.068, -0.24);
+  }
+  addMesh(hero, new THREE.BoxGeometry(3.10, 0.06, 0.12), pilasterMat, 0, 1.52, -0.24);
+  addMesh(hero, new THREE.BoxGeometry(3.10, 0.02, 0.13), brassMat, 0, 1.485, -0.24);
+
+  // Navy & Gold Crest Fascia ("CYMBAL BANK · FLAGSHIP LOBBY")
+  const bankSignTex = track(makeFasciaSignTexture('cymbal_bank', dark));
+  const bankSignMat = track(new THREE.MeshBasicMaterial({ map: bankSignTex }));
+  addMesh(hero, new THREE.BoxGeometry(1.76, 0.26, 0.045), brassMat, 0, 1.36, -0.195);
+  addMesh(hero, new THREE.PlaneGeometry(1.70, 0.23), bankSignMat, 0, 1.36, -0.17);
+
+  // Walnut, Calacatta Marble & Brass VIP Teller / Concierge Counter
+  const counter = new THREE.Group();
+  counter.position.set(-0.36, 0.045, 0.06);
+  hero.add(counter);
+  addMesh(counter, roundedBox(1.06, 0.50, 0.30, 0.05), walnutMat, 0, 0.25, 0);
+  addMesh(counter, new THREE.BoxGeometry(1.02, 0.022, 0.31), brassMat, 0, 0.38, 0);
+  addMesh(counter, new THREE.BoxGeometry(1.02, 0.022, 0.31), brassMat, 0, 0.12, 0);
+  addMesh(counter, roundedBox(1.12, 0.045, 0.36, 0.05), pilasterMat, 0, 0.52, 0.01);
+  // Low frosted teller glass partition + brass posts
+  addMesh(counter, new THREE.BoxGeometry(0.86, 0.15, 0.012), glassDivider, 0, 0.62, 0.06);
+  for (const gx of [-0.42, 0, 0.42]) {
+    addMesh(counter, new THREE.CylinderGeometry(0.01, 0.01, 0.16, 10), brassMat, gx, 0.62, 0.06);
+  }
+
+  // 2 Smart Teller Machine (STM) Kiosks (navy & gold)
+  const stmTex = track(makeKioskScreenTexture('bank'));
+  const stmScreenMat = track(new THREE.MeshBasicMaterial({ map: stmTex }));
+  for (const kx of [0.56, 0.94]) {
+    const k = new THREE.Group();
+    k.position.set(kx, 0.045, 0.06);
+    hero.add(k);
+    addMesh(k, new THREE.BoxGeometry(0.24, 0.032, 0.24), brassMat, 0, 0.016, 0);
+    addMesh(k, roundedBox(0.20, 0.72, 0.14, 0.03), navyMat, 0, 0.375, 0);
+    addMesh(k, new THREE.BoxGeometry(0.22, 0.26, 0.032), brassMat, 0, 0.77, 0.02, -0.24, 0, 0);
+    addMesh(k, new THREE.PlaneGeometry(0.185, 0.225), stmScreenMat, 0, 0.774, 0.039, -0.24, 0, 0);
+  }
+
+  // VIP Brass Stanchions with Velvet Rope (left) + Sculpted Bronze Planter (right)
+  for (const sx of [-1.28, -1.00]) {
+    addMesh(hero, new THREE.CylinderGeometry(0.055, 0.06, 0.02, 16), brassMat, sx, 0.055, 0.16);
+    addMesh(hero, new THREE.CylinderGeometry(0.012, 0.012, 0.46, 12), brassMat, sx, 0.29, 0.16);
+    addMesh(hero, new THREE.SphereGeometry(0.024, 12, 10), brassMat, sx, 0.53, 0.16);
+  }
+  addMesh(hero, new THREE.CylinderGeometry(0.011, 0.011, 0.28, 10), cordMat, -1.14, 0.44, 0.16, 0, 0, Math.PI / 2);
+  addPlanter(hero, 1.30, 0.10, potBronze, leafDark, leafMid, 0.98);
+
+  // 3 Wing Bays around perimeter for 360° bank colonnade continuity
+  for (const ang of [50, 230, 320]) {
+    const wing = createBay(ang, 2.78);
+    addMesh(wing, new THREE.BoxGeometry(2.10, 0.04, 0.56), marblePlinth, 0, 0.02, 0);
+    addMesh(wing, new THREE.BoxGeometry(2.02, 0.96, 0.035), limestoneWall, 0, 0.50, -0.21);
+    for (const px of [-0.98, 0, 0.98]) {
+      addMesh(wing, new THREE.BoxGeometry(0.09, 0.98, 0.08), pilasterMat, px, 0.51, -0.19);
+      addMesh(wing, new THREE.BoxGeometry(0.115, 0.038, 0.095), brassMat, px, 0.99, -0.19);
+    }
+    addMesh(wing, new THREE.BoxGeometry(2.08, 0.05, 0.10), pilasterMat, 0, 1.02, -0.19);
+    // Cognac leather & brass executive waiting bench + planter
+    addMesh(wing, roundedBox(0.90, 0.07, 0.28, 0.04), walnutMat, -0.18, 0.29, 0.05);
+    addMesh(wing, new THREE.BoxGeometry(0.045, 0.22, 0.22), brassMat, -0.50, 0.15, 0.05);
+    addMesh(wing, new THREE.BoxGeometry(0.045, 0.22, 0.22), brassMat, 0.14, 0.15, 0.05);
+    addPlanter(wing, 0.68, 0.06, potBronze, leafDark, leafMid, 0.86);
+  }
+
+  return { root, bays, disposables };
 }
 
 // Entry point last: module-level consts above must be initialised first.

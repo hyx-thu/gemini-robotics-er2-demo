@@ -3504,6 +3504,7 @@ function applyTheme(theme) {
   const tbtn = document.getElementById('themeToggleBtn');
   if (tbtn) tbtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
   themeRadios.forEach(r => { r.checked = r.value === theme; });
+  window.dispatchEvent(new CustomEvent('robot-twin:theme', { detail: { theme } }));
 }
 
 // Header light/dark toggle (same storage as the Settings radios).
@@ -4439,6 +4440,13 @@ function _flashScenarioStatus(msg) {
   el._timer = setTimeout(() => { el.textContent = ''; }, 2600);
 }
 
+function syncTwinScenario(scenarioId) {
+  const id = scenarioId || 'default';
+  window.__activeScenarioId = id;
+  document.body.setAttribute('data-scenario', id);
+  window.dispatchEvent(new CustomEvent('robot-twin:scenario', { detail: { scenarioId: id } }));
+}
+
 async function selectScenario(scenarioId) {
   const prevScenario = selectedScenarioId;
   selectedScenarioId = scenarioId || 'default';
@@ -4451,6 +4459,7 @@ async function selectScenario(scenarioId) {
   }
   updateScenarioHeaderBadge();
   renderScenarioPanel();
+  syncTwinScenario(selectedScenarioId);
   try {
     const resp = await fetch('/api/scenarios', {
       method: 'POST',
@@ -4498,6 +4507,7 @@ async function loadScenariosCatalog(syncSavedChoice = false) {
     }
     updateScenarioHeaderBadge();
     renderScenarioPanel();
+    syncTwinScenario(selectedScenarioId);
   } catch (e) {
     console.warn('Failed to load scenarios catalog:', e);
   }
