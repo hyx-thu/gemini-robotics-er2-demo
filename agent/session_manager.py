@@ -465,6 +465,12 @@ class SessionManager:
     self.user_language: str | None = None
     self.user_language_name: str | None = None
     self._last_user_input_time = 0.0
+    # Ongoing conversation continuity state (survives sliding-window context
+    # compression and socket reconnects so the robot never re-greets mid-chat).
+    self.user_turn_count: int = 0
+    self._last_counted_utterance_id: int | None = None
+    self._greeted_in_session: bool = False
+    self._recent_user_turns: list[str] = []
 
   def set_recording(self, enabled: bool) -> dict[str, Any]:
     """Start/stop recording this session to the private dataset bucket."""
@@ -533,6 +539,57 @@ class SessionManager:
         " tick is English for system reasons, not because the user switched)."
     )
 
+  def note_user_utterance(
+      self,
+      text: str,
+      utterance_id: int | None = None,
+      is_replace: bool = False,
+  ) -> None:
+    """Record a genuine user utterance for cross-compression continuity."""
+    clean = re.sub(r"\s+", " ", (text or "").strip())
+    if (
+        not clean
+        or clean == "🎤 正在识别语音…"
+        or clean.startswith(("[HEARTBEAT]", "[ROBOT", "[SYSTEM", "[USER COMMAND]"))
+    ):
+      return
+    snippet = clean[:90]
+    if utterance_id is not None:
+      if utterance_id != self._last_counted_utterance_id:
+        self._last_counted_utterance_id = utterance_id
+        self.user_turn_count += 1
+        self._recent_user_turns.append(snippet)
+      elif self._recent_user_turns:
+        self._recent_user_turns[-1] = snippet
+      else:
+        self._recent_user_turns.append(snippet)
+    else:
+      if is_replace and self._recent_user_turns:
+        self._recent_user_turns[-1] = snippet
+      else:
+        self.user_turn_count += 1
+        self._recent_user_turns.append(snippet)
+    if len(self._recent_user_turns) > 3:
+      self._recent_user_turns = self._recent_user_turns[-3:]
+
+  def conversation_continuity_line(self) -> str:
+    """Compact state anchor keeping ongoing conversation natural post-compression."""
+    if not self._greeted_in_session and self.user_turn_count <= 1:
+      return ""
+    recent = "; ".join(self._recent_user_turns[-3:])
+    recent_clause = (
+        f" Recent user topics: [{recent}]." if recent else ""
+    )
+    return (
+        "\n[CONVERSATION STATE] Ongoing mid-session conversation (already"
+        f" greeted earlier; user_turns={self.user_turn_count}).{recent_clause}"
+        " Do NOT say 'Hello', 'Hi', 'Hey', 'Welcome to...', or re-introduce"
+        " yourself on follow-up turns, and do NOT call"
+        " make_gesture('high_wave') unless the user explicitly greets you,"
+        " asks who you are, asks you to wave, or says goodbye. Stay stationary"
+        " unless the user explicitly asks you to move or guide/escort them."
+    )
+
   def _get_heartbeat_text(self) -> str:
     if self.heartbeat_text:
       base = self.heartbeat_text
@@ -547,7 +604,11 @@ class SessionManager:
     context = handler.heartbeat_context() if handler is not None else ""
     if context:
       base = f"{base}\n{context}"
-    return base + self._language_lock_line()
+    return (
+        base
+        + self.conversation_continuity_line()
+        + self._language_lock_line()
+    )
 
   # ---- Realtime video throttle (TPM quota) ---------------------------------
 
@@ -847,8 +908,10 @@ class SessionManager:
     if getattr(self, "heartbeat_only_when_task_active", False):
       trigger, target = 48000, 32000
     else:
-      # 40K/28K tripped 1011 (per-minute quota) about once a minute on ER.
-      trigger, target = 24000, 16000
+      # 40K/28K tripped 1011 (per-minute quota) about once a minute on ER;
+      # 28K/20K stays well under quota while keeping ~6K tokens of chat history
+      # beyond the ~14K system instruction + scenario RAG tool schemas.
+      trigger, target = 28000, 20000
     trigger = int(os.environ.get("COMPRESSION_TRIGGER_TOKENS", trigger))
     target = int(os.environ.get("COMPRESSION_TARGET_TOKENS", target))
     setup_dict["setup"]["contextWindowCompression"] = {
@@ -1229,14 +1292,21 @@ class SessionManager:
     )
 
     async def _track_user_language(event: event_bus.Event):
-      """Track user language across all session modes (including heartbeat_enabled=False)."""
+      """Track user language & turn continuity across all session modes."""
       if event.type == event_bus.EventType.USER_TRANSCRIPT:
+        uid = None
+        is_replace = False
         if isinstance(event.data, dict):
           full_txt = event.data.get("full_text") or event.data.get("text") or ""
+          uid = event.data.get("utterance_id")
+          is_replace = bool(event.data.get("replace"))
         else:
           full_txt = str(event.data or "")
         if full_txt.strip() and full_txt.strip() != "🎤 正在识别语音…":
           self.note_user_language(full_txt)
+          self.note_user_utterance(
+              full_txt, utterance_id=uid, is_replace=is_replace
+          )
       elif event.type == event_bus.EventType.TEXT_INPUT:
         txt = str(event.data or "").strip()
         if (
@@ -1244,13 +1314,24 @@ class SessionManager:
             and not txt.startswith("[HEARTBEAT]")
             and not txt.startswith("[ROBOT")
             and not txt.startswith("[SYSTEM")
+            and not txt.startswith("[USER COMMAND]")
         ):
           self.note_user_language(txt)
+          self.note_user_utterance(txt)
+      elif event.type == event_bus.EventType.GEMINI_TEXT:
+        txt = (
+            event.data.get("text", "")
+            if isinstance(event.data, dict)
+            else str(event.data or "")
+        )
+        if txt.strip() and self.user_turn_count >= 1:
+          self._greeted_in_session = True
 
     self.bus.subscribe(
         [
             event_bus.EventType.USER_TRANSCRIPT,
             event_bus.EventType.TEXT_INPUT,
+            event_bus.EventType.GEMINI_TEXT,
         ],
         _track_user_language,
     )

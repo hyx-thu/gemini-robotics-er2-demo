@@ -756,6 +756,206 @@ class WatchdogHandlerTest(unittest.IsolatedAsyncioTestCase):
         "user is speaking Mandarin Chinese", resp_race["reply_language_rule"]
     )
 
+  async def test_locomotion_blocked_during_qa_and_allowed_on_explicit_command(self):
+    qa_questions = [
+        "Where should I go to pay my bill and use insurance?",
+        "I feel nervous, is there a quiet room?",
+        "Is there somewhere I can borrow a wheelchair?",
+        "I got a cough. Well, where should I go?",
+        "How do I go to the 4th floor healing garden?",
+        "4楼疗愈花园怎么走？",
+        "去哪里免费借轮椅？",
+    ]
+    for q in qa_questions:
+      with self.subTest(question=q):
+        self.embodiment.calls.clear()
+        self.session.ui_notifications.clear()
+        await self._user_says(q)
+        nav_resp = await self._call(
+            "navigate", {"waypoint": "billing_insurance_1f"}
+        )
+        self.assertFalse(nav_resp["executed"])
+        self.assertEqual("stayed_in_place", nav_resp["status"])
+        drive_resp = await self._call(
+            "drive", {"v_x": 0.3, "v_y": 0.0, "v_rot": 0.0, "duration": 1.0}
+        )
+        self.assertFalse(drive_resp["executed"])
+        self.assertEqual("stayed_in_place", drive_resp["status"])
+        plan_resp = await self._call(
+            "update_plan",
+            {
+                "goal": "Walk to billing",
+                "steps": [
+                    "stow() - stow arm",
+                    "navigate('billing_insurance_1f') - walk",
+                ],
+                "current_step": 0,
+                "status": "planning",
+            },
+        )
+        self.assertFalse(plan_resp["executed"])
+        self.assertEqual("ignored", plan_resp["status"])
+        self.assertEqual([], self.embodiment.calls)
+        self.assertEqual([], self.session.ui_notifications)
+
+    explicit_commands = [
+        ("Can you guide me to the welcome desk?", "navigate", {"waypoint": "welcome_desk_1f"}),
+        ("Take me to the elevator", "navigate", {"waypoint": "elevator_hub_central"}),
+        ("Go to the front desk and pick up a pen", "navigate", {"waypoint": "welcome_desk_1f"}),
+        ("带我去4楼疗愈花园", "navigate", {"waypoint": "healing_garden_4f"}),
+        ("往前走两步", "drive", {"v_x": 0.3, "v_y": 0.0, "v_rot": 0.0, "duration": 1.0}),
+        ("案内して", "navigate", {"waypoint": "welcome_desk_1f"}),
+        ("Llévame al mostrador", "navigate", {"waypoint": "welcome_desk_1f"}),
+    ]
+    for cmd, tool_name, tool_args in explicit_commands:
+      with self.subTest(command=cmd):
+        self.embodiment.calls.clear()
+        self.session._heartbeat_sent_count = 3
+        await self._user_says(cmd)
+        resp = await self._call(tool_name, tool_args)
+        self.assertNotEqual("stayed_in_place", resp.get("status"))
+        self.assertEqual(1, len(self.embodiment.calls))
+        self.assertEqual(tool_name, self.embodiment.calls[0][0])
+
+    # After standalone navigate completes, a later heartbeat tick must NOT wander off.
+    self.embodiment.calls.clear()
+    self.session._heartbeat_sent_count = 4
+    hb_nav = await self._call("navigate", {"waypoint": "quiet_comfort_lounge_1f"})
+    self.assertFalse(hb_nav["executed"])
+    self.assertEqual("stayed_in_place", hb_nav["status"])
+    self.assertEqual([], self.embodiment.calls)
+
+  async def test_escort_offer_plus_short_affirmative_unlocks_locomotion(self):
+    eb = tool_call_handler.event_bus
+    await self._user_says("Where can I borrow a wheelchair?")
+    # Streamed assistant chunks offering to guide the visitor.
+    for chunk in (
+        "Wheelchairs are at the 1F Atrium Mobility Desk.",
+        "Would you like me to",
+        "guide you right over?",
+    ):
+      await self.handler._record_assistant_text(
+          eb.Event(
+              type=eb.EventType.GEMINI_TEXT,
+              source=eb.EventSource.ASSISTANT,
+              data={"text": chunk},
+          )
+      )
+    await self._user_says("Yes, please!")
+    resp = await self._call("navigate", {"waypoint": "wheelchair_concierge_1f"})
+    self.assertEqual([("navigate", {"waypoint": "wheelchair_concierge_1f"})], self.embodiment.calls)
+    self.assertNotEqual("stayed_in_place", resp.get("status"))
+
+    # Next turn asks a new question -> escort authorization is cleared.
+    self.embodiment.calls.clear()
+    await self._user_says("What time does the cafe close?")
+    resp2 = await self._call("navigate", {"waypoint": "garden_cafe_b1"})
+    self.assertFalse(resp2["executed"])
+    self.assertEqual([], self.embodiment.calls)
+
+    # Even after an escort offer, an explicit polite refusal stays stationary.
+    await self.handler._record_assistant_text(
+        eb.Event(
+            type=eb.EventType.GEMINI_TEXT,
+            source=eb.EventSource.ASSISTANT,
+            data={"text": "需要我带您去B1花园餐厅吗？"},
+        )
+    )
+    await self._user_says("不用带我去，说一下就行")
+    resp3 = await self._call("navigate", {"waypoint": "garden_cafe_b1"})
+    self.assertFalse(resp3["executed"])
+    self.assertEqual([], self.embodiment.calls)
+
+  async def test_utterance_id_isolation_and_single_greeting_continuity(self):
+    eb = tool_call_handler.event_bus
+    self.handler._enable_send_message_to_user = True
+    # Turn 1: Visitor says Hello -> wave executes once, greeting spoken.
+    await self.handler._record_user_instruction(
+        eb.Event(
+            type=eb.EventType.USER_TRANSCRIPT,
+            source=eb.EventSource.USER,
+            data={"text": "Hello", "full_text": "Hello there", "utterance_id": 1},
+        )
+    )
+    w1 = await self._call("make_gesture", {"gesture": "high_wave"})
+    self.assertNotEqual("skipped", w1.get("status"))
+    self.assertEqual([("make_gesture", {"gesture": "high_wave"})], self.embodiment.calls)
+    await self.handler._record_assistant_text(
+        eb.Event(
+            type=eb.EventType.GEMINI_TEXT,
+            source=eb.EventSource.ASSISTANT,
+            data={"text": "Hello! Welcome to Cymbal Hospital!"},
+        )
+    )
+
+    # Turn 2: Explicit escort command -> Turn 2 executes navigate, skips redundant wave.
+    self.embodiment.calls.clear()
+    await self.handler._record_user_instruction(
+        eb.Event(
+            type=eb.EventType.USER_TRANSCRIPT,
+            source=eb.EventSource.USER,
+            data={
+                "text": "Take me to the welcome desk",
+                "full_text": "Take me to the welcome desk",
+                "utterance_id": 2,
+            },
+        )
+    )
+    self.assertEqual("Take me to the welcome desk", self.handler._user_transcript)
+    w2 = await self._call("make_gesture", {"gesture": "high_wave"})
+    self.assertFalse(w2["executed"])
+    self.assertEqual("skipped", w2["status"])
+    n2 = await self._call("navigate", {"waypoint": "welcome_desk_1f"})
+    self.assertIn("conversation_continuity_rule", n2)
+    self.assertEqual([("navigate", {"waypoint": "welcome_desk_1f"})], self.embodiment.calls)
+
+    # Turn 3: Ordinary Q&A -> Turn 2's "Take me" does NOT leak into Turn 3,
+    # navigate is blocked, redundant wave is skipped, and accidental mid-session
+    # greeting prefix in send_message is stripped cleanly.
+    self.embodiment.calls.clear()
+    await self.handler._record_user_instruction(
+        eb.Event(
+            type=eb.EventType.USER_TRANSCRIPT,
+            source=eb.EventSource.USER,
+            data={
+                "text": "Where can I drop my luggage?",
+                "full_text": "Where can I drop my luggage?",
+                "utterance_id": 3,
+            },
+        )
+    )
+    self.assertEqual("Where can I drop my luggage?", self.handler._user_transcript)
+    n3 = await self._call("navigate", {"waypoint": "welcome_desk_1f"})
+    self.assertFalse(n3["executed"])
+    self.assertEqual("stayed_in_place", n3["status"])
+    sm_resp = await self._call(
+        "send_message",
+        {
+            "target": "user",
+            "message": (
+                "Hello there! Welcome to Cymbal Hospital! I'm your Atrium Visit"
+                " & Comfort Concierge Robot. Free luggage lockers are at 1F East."
+            ),
+        },
+    )
+    self.assertEqual(
+        "Message delivered to user: Free luggage lockers are at 1F East.",
+        sm_resp["result"],
+    )
+
+    # Turn 4: Visitor says Goodbye -> farewell wave IS allowed!
+    self.embodiment.calls.clear()
+    await self.handler._record_user_instruction(
+        eb.Event(
+            type=eb.EventType.USER_TRANSCRIPT,
+            source=eb.EventSource.USER,
+            data={"text": "再见！", "full_text": "再见！", "utterance_id": 4},
+        )
+    )
+    w4 = await self._call("make_gesture", {"gesture": "high_wave"})
+    self.assertNotEqual("skipped", w4.get("status"))
+    self.assertEqual([("make_gesture", {"gesture": "high_wave"})], self.embodiment.calls)
+
 
 if __name__ == "__main__":
   unittest.main()

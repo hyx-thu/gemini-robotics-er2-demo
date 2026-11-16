@@ -846,11 +846,17 @@ function init() {
     const fn = actions[name];
     if (!fn) return;
     const res = (result && typeof result === 'object') ? result : {};
+    if (res.executed === false) {
+      if (res.error && res.status !== 'stayed_in_place' && res.status !== 'skipped') {
+        flashColor(0xea4335, 0.8);
+      }
+      return;
+    }
+    if (res.error || res.status === 'rejected' || res.status === 'error') { flashColor(0xea4335, 0.8); return; }
     if (name !== 'talk_motion') {
       clearTalkState();
       if (!step && queue.length === 0) setActionLabel(name, args || {});
     }
-    if (res.error || res.status === 'rejected' || res.status === 'error') { flashColor(0xea4335, 0.8); return; }
     fn(args || {}, res);
   });
   window.addEventListener('robot-twin:speech-text', () => {

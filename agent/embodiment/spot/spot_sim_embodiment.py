@@ -75,7 +75,9 @@ _VERIFY = (
 
 _HEARTBEAT_TEXT = (
     "[HEARTBEAT] If no task is active, call 'ack' exactly once and end your"
-    " turn; you will receive another heartbeat shortly. If a task is active:"
+    " turn (NEVER start a new navigate, drive, or update_plan task on a"
+    " heartbeat); you will receive another heartbeat shortly. If a task is"
+    " active:"
     " look at the latest camera frame and perform this 3-way check on the"
     " current step's target (see [TARGET] below): (1) HAND/ARM IN PICK PROCESS"
     " OR ACTION COMPLETED: any hand seen doing it - robot gripper or human"

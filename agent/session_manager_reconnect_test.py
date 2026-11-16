@@ -305,6 +305,28 @@ class StreamRecoveryTest(unittest.IsolatedAsyncioTestCase):
     )
     self.assertTrue(sm._ever_setup_complete)  # pylint: disable=protected-access
 
+  async def test_conversation_continuity_line_tracks_utterances_across_compression(self):
+    sm, _ = await _make_manager(["ok"], self)
+    # Initially before Turn 1 finishes, no mid-session continuity line is injected.
+    self.assertEqual("", sm.conversation_continuity_line())
+    # Chunked updates of utterance_id=1 count as a single user turn.
+    sm.note_user_utterance("Hello", utterance_id=1)
+    sm.note_user_utterance("Hello there", utterance_id=1)
+    self.assertEqual(1, sm.user_turn_count)
+    self.assertEqual(["Hello there"], sm._recent_user_turns)  # pylint: disable=protected-access
+
+    # Once Turn 1 has been greeted or Turn 2 arrives, heartbeats carry [CONVERSATION STATE].
+    sm._greeted_in_session = True  # pylint: disable=protected-access
+    sm.note_user_utterance("Where can I pay my bill?", utterance_id=2)
+    self.assertEqual(2, sm.user_turn_count)
+    line = sm.conversation_continuity_line()
+    self.assertIn("[CONVERSATION STATE]", line)
+    self.assertIn("user_turns=2", line)
+    self.assertIn("Where can I pay my bill?", line)
+    self.assertIn("Do NOT say 'Hello'", line)
+    hb_text = sm._get_heartbeat_text()  # pylint: disable=protected-access
+    self.assertIn("[CONVERSATION STATE]", hb_text)
+
 
 if __name__ == "__main__":
   unittest.main()

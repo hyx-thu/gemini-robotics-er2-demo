@@ -2043,16 +2043,23 @@ function handleJsonMessage(msg) {
           renderPlan(accepted);
         }
       } else {
-        onToolCompletedForPlan(msg);
-        if (msg.name !== 'talk_motion') {
-          recordToolVisual(msg);
+        const resObj = (msg.result && typeof msg.result === 'object') ? msg.result : null;
+        const quietlySuppressed = Boolean(
+          resObj && resObj.executed === false &&
+          (resObj.status === 'stayed_in_place' || resObj.status === 'skipped' || resObj.status === 'ignored')
+        );
+        if (!quietlySuppressed) {
+          onToolCompletedForPlan(msg);
+          if (msg.name !== 'talk_motion') {
+            recordToolVisual(msg);
+          }
+          renderRichToolCard(msg);
+          // 3D robot twin + animated camera FX (pick/place/detect).
+          window.dispatchEvent(new CustomEvent('robot-twin:tool', {
+            detail: { name: msg.name, args: msg.args || {}, result: msg.result },
+          }));
+          startToolFx(msg);
         }
-        renderRichToolCard(msg);
-        // 3D robot twin + animated camera FX (pick/place/detect).
-        window.dispatchEvent(new CustomEvent('robot-twin:tool', {
-          detail: { name: msg.name, args: msg.args || {}, result: msg.result },
-        }));
-        startToolFx(msg);
       }
 
       if (msg.name === 'run_instruction') {

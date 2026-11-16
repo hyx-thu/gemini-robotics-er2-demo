@@ -120,8 +120,9 @@ _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
         "转人工咨询",
         "medical_consultation", "medical_consultations", "medical_advice",
         "medical_service", "health_question", "medication_question",
-        "test_preparation", "symptoms", "diagnose", "medicine", "medications",
-        "licensed_staff_desk",
+        "test_preparation", "symptoms", "symptom", "diagnose", "medicine",
+        "medications", "cough", "coughing", "fever", "cold", "sore_throat",
+        "headache", "stomachache", "illness", "sick", "licensed_staff_desk",
     ),
     # Bank — Lobby, Cards, Deposits & Wealth
     ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
@@ -461,10 +462,23 @@ def build_scenario_persona_block(
   if wp_line:
     parts.append(wp_line)
   parts.append(
-      "- Do NOT call `update_plan` for `search_knowledge_base` Q&A"
-      " (`update_plan` is strictly reserved for physical multi-step arm"
-      " pick/place manipulation); NEVER call `search_knowledge_base` on"
-      " `[HEARTBEAT]` prompts."
+      "- **Greet Once Only — Natural Mid-Conversation Continuity**: Greet and"
+      " wave (`make_gesture('high_wave')`) ONLY ONCE on the very first turn of"
+      " the session (or when the visitor explicitly greets you, asks who you"
+      " are, or says goodbye). On all follow-up turns, jump straight into"
+      " answering naturally—NEVER repeat `'Hello'`, `'Hi'`, `'Welcome to...'`,"
+      " or self-introductions mid-conversation."
+  )
+  parts.append(
+      "- **Stay Stationary During Q&A — Move ONLY When Explicitly Asked**: When"
+      " a visitor asks an informational or location question (e.g. `'where"
+      " is...?'`, `'how do I pay?'`, `'is there a quiet room?'`, `'where can I"
+      " borrow a wheelchair?'`), STAY IN PLACE and answer verbally (you may"
+      " briefly offer to lead them there). Do NOT call `navigate`, `drive`,"
+      " `get_waypoints`, `stow`, or `update_plan` while answering a question—"
+      "move ONLY after the visitor explicitly asks or confirms they want you"
+      " to take/guide/escort them somewhere. NEVER call `search_knowledge_base`"
+      " or `navigate` on `[HEARTBEAT]` prompts."
   )
   return "\n".join(parts)
 
@@ -1057,7 +1071,11 @@ def run_rag_tool(
           " sentences; NEVER invent or extrapolate unmentioned policies, and"
           " NEVER volunteer unasked medical disclaimers on non-medical topics)."
           + unmatched_note
-          + " If the visitor wants to go there, offer to guide them or call"
-          " navigate(waypoint=...)."
+          + " STAY STATIONARY right where you are while answering this"
+          " question (do NOT call navigate or drive unless the visitor"
+          " explicitly asked you to guide/take them there; you may briefly"
+          " offer to lead the way if helpful, and if you already greeted"
+          " earlier in this session, answer directly without saying 'Hello' or"
+          " 'Welcome' again)."
       ),
   }

@@ -567,6 +567,8 @@ class ScenarioRagTest(unittest.TestCase):
         "我嗓子疼发烧应该吃什么药？",
         "请问感冒挂哪个科？能帮我做医疗咨询吗？",
         "Do you provide medical consultations or medication advice?",
+        "I got a cough. Well, where should I go?",
+        "I have a cold and sore throat, where can I ask?",
     ):
       res = scenario_rag.run_rag_tool({"query": med_q}, "cymbal_hospital")
       self.assertTrue(res["grounded"], f"Expected hosp_hlp_02 match for {med_q!r}")

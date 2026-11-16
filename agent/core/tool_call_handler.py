@@ -84,6 +84,186 @@ def user_requested_sit(text: str) -> bool:
   )
 
 
+_WAVE_GESTURE_NAMES = frozenset({
+    "high_wave",
+    "wave",
+    "left_hand_wave",
+    "right_hand_wave",
+    "greeting_crowd",
+    "greets_with_both_hands",
+    "hello",
+    "hello_1",
+})
+
+_GREETING_OR_WAVE_RE = re.compile(
+    r"\b(?:hello|hi|hey|howdy|greetings|good\s+(?:morning|afternoon|evening|night)"
+    r"|bye|goodbye|see\s+(?:you|ya)|farewell|wave|waving"
+    r"|who\s+are\s+you|what(?:'s|’s|\s+is)\s+your\s+name|introduce\s+yourself"
+    r"|say\s+(?:hi|hello|bye|goodbye))\b"
+    r"|你好|您好|嗨|哈喽|哈啰|早上好|早安|下午好|晚上好|晚安|再见|拜拜|回头见"
+    r"|你是谁|你叫什么|自我介绍|介绍一下你自己|挥手|挥个手|挥挥手|招手|招个手|打招呼|打个招呼"
+    r"|こんにちは|こんばんは|おはよう|さようなら|バイバイ|手を振"
+    r"|안녕|반가워|잘\s*가|계세요"
+    r"|\b(?:hola|buenos\s+d[ií]as|buenas\s+(?:tardes|noches)|adi[oó]s"
+    r"|bonjour|bonsoir|salut|au\s+revoir"
+    r"|hallo|guten\s+(?:morgen|tag|abend)|tsch[üu]ss"
+    r"|ciao|buongiorno|buonasera|arrivederci"
+    r"|ol[aá]|bom\s+dia|boa\s+(?:tarde|noite)|tchau"
+    r"|привет|здравствуйте|пока|до\s+свидания)\b",
+    re.IGNORECASE,
+)
+
+_NEGATED_LOCOMOTION_RE = re.compile(
+    r"(?:\b(?:do\s+not|don['’]?t|no\s+need\s+to|never)\b[^.!?]{0,40}"
+    r"\b(?:move|walk|go|guide|lead|escort|take\s+me|navigate|drive|come|follow)\b"
+    r"|\b(?:stay\s+(?:here|still|put|in\s+place|where\s+you\s+are)"
+    r"|just\s+(?:tell|answer|explain)(?:\s+me)?)\b"
+    r"|\bno\s*,?\s*thanks?\b"
+    r"|(?:不要|别|不用|不需要|不必|无需|先别|先不用).{0,6}"
+    r"(?:动|走|移动|带我|带路|领我|领路|陪我|过去|去|导航|跟着)"
+    r"|原地(?:待着|不动)|(?:只用|只要|光)?(?:告诉我|说一下|讲一下|回答)(?:就行|就可以|就好)"
+    r"|動かないで|案内しなくていい|움직이지\s*마|안내하지\s*마"
+    r"|\bno\s+te\s+muevas\b|\bne\s+bouge\s+pas\b|\bbeweg\s+dich\s+nicht\b)",
+    re.IGNORECASE,
+)
+
+_EXPLICIT_LOCOMOTION_RE = re.compile(
+    # English escort / follow / relative body motion commands
+    r"\b(?:take\s+me|guide\s+me|lead\s+(?:me|the\s+way)|show\s+me\s+the\s+way"
+    r"|walk\s+(?:me|with\s+me)|escort(?:\s+me)?|bring\s+me\s+(?:to|over|there)"
+    r"|come\s+(?:here|over|with\s+me|closer)|follow\s+me"
+    r"|let['’]?s\s+(?:go|walk|head\s+over)|navigate|head\s+over)\b"
+    r"|\bdrive\s+(?:forward|back|backward|left|right|ahead|slowly|a\s+bit)\b"
+    r"|\b(?:move|step|walk)\s+(?:forward|back|backward|left|right|closer|away|ahead"
+    r"|two\s+steps|a\s+step|a\s+little)\b"
+    r"|\bturn\s+(?:left|right|around)\b"
+    # Imperative / polite 2nd-person "go to / walk to / head to <place>" (excludes "how do I go to" / "where should I go")
+    r"|(?:^|[.!?,;]\s*|\b(?:please|can\s+you|could\s+you|would\s+you|will\s+you|robot|now|first|then)\s+)"
+    r"(?:go|walk|head|move)\s+(?:to|over\s+to|back\s+to|straight\s+to|towards?)\b"
+    # Chinese escort / navigation / fetch-at-station / relative drive commands
+    r"|带我去|带我过去|带我到|带我找|领我去|领我过去|领我到|陪我去|陪我过去"
+    r"|帮我带路|给我带路|替我带路|带路吧|带个路|请带路|领路|引路"
+    r"|跟我走|跟上我|跟我来|我们走吧|咱们走吧|走吧|出发吧|带过去"
+    r"|过来一下|走过来|退后|后退|往前走|向前走|往后退|向后退"
+    r"|往左走|往右走|向左走|向右走|左转|右转|转身|走两步|前进一步|导航到|导航去"
+    r"|(?:^|[，。！？,!?]\s*|(?:请你?|麻烦你?|你能|你可以|能帮我|帮我))"
+    r"(?!(?:怎么|如何|在哪|哪里|哪儿|几楼))(?:去|走到|前往)(?!哪|几楼)[^，。！？?？]{1,15}(?:帮我|拿|取|捡|送)"
+    r"|(?:请你?|麻烦你?|你去|你走到|你前往)(?!(?:怎么|如何|在哪|哪里|哪儿|几楼))"
+    r"(?:去|走到|前往)?(?!哪|几楼)[^，。！？?？]{2,15}"
+    # Multilingual (ja / ko / es / pt / fr / de / it / ru)
+    r"|案内して|連れて行って|そこまで行って|ついてきて|前に進んで|後ろに下がって|右に曲がって|左に曲がって"
+    r"|안내해\s*줘|안내해\s*주|데려다\s*줘|데려다\s*주|따라와|같이\s*가자|앞으로\s*가"
+    r"|\b(?:ll[eé]vame|gu[ií]ame|acomp[aá][ñn]ame|vamos\s+all[aá]"
+    r"|leve-me|guie-me|emm[eè]ne-moi|guide-moi|accompagne-moi"
+    r"|f[üu]hr\s+mich|bring\s+mich\s+hin|begleite\s+mich"
+    r"|portami|accompagnami|отведи\s+меня|проводи\s+меня)\b",
+    re.IGNORECASE,
+)
+
+_ASSISTANT_ESCORT_OFFER_RE = re.compile(
+    r"\b(?:guide\s+you|lead\s+(?:you|the\s+way)|escort\s+you|walk\s+(?:you|with\s+you)"
+    r"|show\s+you\s+the\s+way|take\s+you\s+(?:there|over|right|straight|to)"
+    r"|(?:want|like)\s+me\s+to\s+(?:guide|lead|take|walk|escort)"
+    r"|shall\s+i\s+(?:guide|lead|take|walk|escort)|follow\s+me)\b"
+    r"|带你去|带您去|带你过去|带您过去|带您前往|带你前往|领你去|领您去|领你过去|领您过去"
+    r"|陪你去|陪您去|为您带路|为你带路|给您带路|给你带路|帮您带路|帮你带路|需要我带|要我带|跟我来"
+    r"|案内しま|ご案内いたし|連れて行き|안내해\s*드릴|데려다\s*드릴"
+    r"|\b(?:le\s+gu[ií]o|te\s+gu[ií]o|acompa[ñn]arle|guiar\s+voc[eê]"
+    r"|vous\s+guider|vous\s+accompagner|sie\s+begleiten|accompagnarla)\b",
+    re.IGNORECASE,
+)
+
+_SHORT_AFFIRMATIVE_RE = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|please|please\s+do|yes\s*,?\s*please"
+    r"|sure\s*,?\s*please|go\s+ahead|lead\s+on|sounds\s+good|let['’]?s\s+do\s+it|alright)"
+    r"[!.,\s]*$"
+    r"|^(?:好|好的|好呀|好啊|好嘞|可以|可以呀|行|行啊|嗯|嗯嗯|嗯好的|好的谢谢"
+    r"|麻烦了|麻烦你了|有劳了|劳驾|太好了|走|去吧)[！!。，,~～\s]*$"
+    r"|^(?:はい|お願いします|ええ|네|좋아요|부탁해요|s[ií]|claro|vale"
+    r"|oui|d['’]accord|ja|gerne|sim|certo)[!.,\s]*$",
+    re.IGNORECASE,
+)
+
+_NEW_QUESTION_TOPIC_RE = re.compile(
+    r"[?？]|\b(?:where|what|when|how|why|who|which)\b|怎么|哪里|哪儿|什么|多少|几楼|吗",
+    re.IGNORECASE,
+)
+
+_LEADING_MID_SESSION_GREETING_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:hello(?:\s+there|\s+again)?|hi(?:\s+there|\s+again)?|hey(?:\s+there)?|greetings)"
+    r"\s*[!,.，。！？]+\s*"
+    r"(?:welcome\s+to\s+cymbal\s+(?:hospital|bank)[^.!?。！？]*[.!?。！？]\s*)?"
+    r"(?:(?:i['’]?m|i\s+am)\s+(?:your\s+)?(?:atrium|smart|flagship)[^.!?。！？]*robot[^.!?。！？]*[.!?。！？]\s*)?"
+    r"|(?:你好|您好|嗨|哈喽)\s*[！!，,。.]*\s*"
+    r"(?:欢迎来到[^。！？!?.]*[。！？!?.]\s*)?"
+    r"(?:我是[^。！？!?.]*(?:机器人|助手)[^。！？!?.]*[。！？!?.]\s*)?"
+    r")",
+    re.IGNORECASE,
+)
+
+_MANIPULATION_STEP_RE = re.compile(
+    r"\b(?:detect|pick|place|wait_for_pick_up|open_gripper|close_gripper)\b",
+    re.IGNORECASE,
+)
+_LOCOMOTION_STEP_RE = re.compile(r"\b(?:navigate|drive)\b", re.IGNORECASE)
+
+
+def user_requested_wave_or_greeting(text: str) -> bool:
+  """Return True when the user greeted, said goodbye, asked who the robot is, or asked for a wave."""
+  norm = _CJK_GAP_RE.sub("", (text or "").strip())
+  if not norm:
+    return False
+  return bool(_GREETING_OR_WAVE_RE.search(norm))
+
+
+def assistant_offered_escort_in_text(text: str) -> bool:
+  """Return True when the assistant's reply offered to guide/escort the user somewhere."""
+  norm = _CJK_GAP_RE.sub("", (text or "").strip())
+  if not norm:
+    return False
+  return bool(_ASSISTANT_ESCORT_OFFER_RE.search(norm))
+
+
+def user_requested_locomotion(
+    text: str, assistant_offered_escort: bool = False
+) -> bool:
+  """Return True ONLY when the user explicitly commands or confirms robot movement/escort."""
+  norm = _CJK_GAP_RE.sub("", (text or "").strip())
+  if not norm or norm == "🎤 正在识别语音…":
+    return False
+  if _NEGATED_LOCOMOTION_RE.search(norm):
+    return False
+  if _EXPLICIT_LOCOMOTION_RE.search(norm):
+    return True
+  if (
+      assistant_offered_escort
+      and len(norm) <= 45
+      and not _NEW_QUESTION_TOPIC_RE.search(norm)
+      and _SHORT_AFFIRMATIVE_RE.match(norm)
+  ):
+    return True
+  return False
+
+
+def strip_redundant_mid_session_greeting(
+    message: str, already_greeted: bool, user_text: str
+) -> str:
+  """Strip accidental mid-session re-greetings ('Hello! Welcome to...') on follow-up Q&A turns."""
+  msg = (message or "").strip()
+  if not msg or not already_greeted or user_requested_wave_or_greeting(user_text):
+    return message
+  m = _LEADING_MID_SESSION_GREETING_RE.match(msg)
+  if not m:
+    return message
+  remainder = msg[m.end() :].lstrip()
+  if len(remainder) < 10:
+    return message
+  if remainder[0].isascii() and remainder[0].islower():
+    remainder = remainder[0].upper() + remainder[1:]
+  return remainder
+
+
 def pick_response_for_model(
     result: Any,
     post_action_frame_sent: bool,
@@ -186,6 +366,16 @@ class ToolCallHandler:
     self._blocking_tools = frozenset(blocking_tools or ())
     self._blocking_execution_count = 0
     self._sit_authorized = False
+    self._locomotion_authorized = False
+    self._plan_allows_locomotion = False
+    self._locomotion_done_hb_count: int | None = None
+    self._assistant_offered_escort = False
+    self._prev_turn_offered_escort = False
+    self._assistant_turn_buf = ""
+    self._assistant_has_replied = False
+    self._greeted_prior_turn = False
+    self._current_utterance_id: int | None = None
+    self._wave_count_in_session = 0
     self._user_transcript = ""
     # Last accepted update_plan (goal/steps/current_step/status); used to gate
     # advancing past an unconfirmed action and to mark the plan failed when
@@ -210,6 +400,10 @@ class ToolCallHandler:
     bus.subscribe(
         [event_bus.EventType.TEXT_INPUT, event_bus.EventType.USER_TRANSCRIPT],
         self._record_user_instruction,
+    )
+    bus.subscribe(
+        [event_bus.EventType.GEMINI_TEXT],
+        self._record_assistant_text,
     )
 
   @staticmethod
@@ -388,81 +582,266 @@ class ToolCallHandler:
         "response": {"error": "tool produced no response"},
     }
 
+  async def _await_inflight_user_transcript_if_needed(
+      self, func_name: str
+  ) -> None:
+    """If server VAD just started a new user utterance, wait briefly for its transcript."""
+    if func_name not in ("navigate", "drive", "make_gesture", "update_plan"):
+      return
+    sm = self._session_manager
+    dm = getattr(sm, "decision_making", None)
+    speech_start = float(getattr(dm, "last_user_speech_start", 0.0) or 0.0)
+    now = time.monotonic()
+    if (
+        speech_start > 0.0
+        and 0.0 <= (now - speech_start) < 4.0
+        and speech_start > self._last_user_input_time + 0.05
+    ):
+      for _ in range(8):
+        await asyncio.sleep(0.03)
+        if self._last_user_input_time >= speech_start - 0.05:
+          break
+
+  def _already_greeted_in_prior_turn(self) -> bool:
+    sm = self._session_manager
+    return bool(
+        self._greeted_prior_turn
+        or int(getattr(sm, "user_turn_count", 0) or 0) >= 2
+    )
+
+  def _should_block_unrequested_locomotion(
+      self, is_subagent: bool = False
+  ) -> bool:
+    """Block unrequested navigate/drive during informational Q&A or idle heartbeats."""
+    if is_subagent:
+      return False
+    if self._plan_allows_locomotion and self.task_active():
+      return False
+    sm = self._session_manager
+    hb_count = int(getattr(sm, "_heartbeat_sent_count", 0) or 0)
+    if self._locomotion_authorized:
+      if (
+          self._locomotion_done_hb_count is not None
+          and not self.task_active()
+          and hb_count > self._locomotion_done_hb_count
+      ):
+        return True
+      return False
+    has_user_turn = (
+        bool(self._user_transcript.strip())
+        or int(getattr(sm, "user_turn_count", 0) or 0) > 0
+    )
+    has_live_heartbeat = hb_count > 0
+    if not has_user_turn and not has_live_heartbeat:
+      return False
+    return True
+
+  def _precheck_suppressed_tool(
+      self,
+      func_name: str,
+      args: dict[str, Any],
+      is_subagent: bool = False,
+  ) -> dict[str, Any] | None:
+    """Suppress unrequested Q&A locomotion or mid-session wave spam before executing."""
+    if func_name in ("navigate", "drive") and self._should_block_unrequested_locomotion(
+        is_subagent=is_subagent
+    ):
+      logging.info(
+          "Suppressed unrequested %s during Q&A / heartbeat (user_transcript=%r)",
+          func_name,
+          self._user_transcript,
+      )
+      return {
+          "executed": False,
+          "status": "stayed_in_place",
+          "_suppressed_ui": True,
+          "note": (
+              "STAY STATIONARY: The visitor only asked a question (or no"
+              " movement was requested) and did NOT ask you to move or"
+              " guide/escort them yet. Answer their question verbally right"
+              " where you are (you may briefly offer to lead them there if"
+              " helpful), and call navigate/drive ONLY after the visitor"
+              " explicitly asks or confirms they want you to go or guide them."
+          ),
+      }
+    if (
+        func_name == "update_plan"
+        and str(args.get("status", "in_progress")) in ("planning", "in_progress")
+        and not self.task_active()
+        and self._should_block_unrequested_locomotion(is_subagent=is_subagent)
+    ):
+      steps_joined = " ".join(str(s) for s in (args.get("steps") or []))
+      if _LOCOMOTION_STEP_RE.search(steps_joined) and not _MANIPULATION_STEP_RE.search(
+          steps_joined
+      ):
+        logging.info(
+            "Suppressed unrequested navigation-only update_plan during Q&A / heartbeat"
+        )
+        return {
+            "status": "ignored",
+            "executed": False,
+            "_suppressed_ui": True,
+            "note": (
+                "STAY STATIONARY: Do NOT start a navigation plan on a Q&A turn"
+                " or heartbeat when the visitor did not request movement or"
+                " escort. Answer verbally in place (or call ack if this was a"
+                " heartbeat)."
+            ),
+        }
+    if func_name == "make_gesture":
+      gesture_name = str(args.get("gesture") or "").strip().lower()
+      if gesture_name in _WAVE_GESTURE_NAMES:
+        sm = self._session_manager
+        has_context = (
+            bool(self._user_transcript.strip())
+            or int(getattr(sm, "_heartbeat_sent_count", 0) or 0) > 0
+        )
+        already_waved_or_greeted = (
+            self._wave_count_in_session >= 1
+            or self._already_greeted_in_prior_turn()
+            or bool(getattr(sm, "_greeted_in_session", False))
+        )
+        if (
+            already_waved_or_greeted
+            and has_context
+            and not user_requested_wave_or_greeting(self._user_transcript)
+        ):
+          logging.info(
+              "Suppressed redundant mid-session %s(%r) during ongoing Q&A",
+              func_name,
+              gesture_name,
+          )
+          return {
+              "executed": False,
+              "status": "skipped",
+              "_suppressed_ui": True,
+              "note": (
+                  "Already greeted earlier in this session; skipped redundant"
+                  " wave gesture during ongoing Q&A. Continue answering the"
+                  " visitor's question naturally without re-greeting ('Hello' /"
+                  " 'Hi' / 'Welcome to...')."
+              ),
+          }
+    return None
+
   async def _execute_single_tool(self, fc: dict, sink: Any = None) -> None:
     """Execute a single function call and publish the result."""
     func_name = fc.get("name", "")
-    args = fc.get("args", {})
+    args = dict(fc.get("args", {}) or {})
     call_id = str(fc.get("id", ""))
+    is_subagent = bool(fc.get("_agent"))
     is_blocking = func_name in self._blocking_tools
     if is_blocking:
       self._blocking_execution_count += 1
       self.tool_executing.set()
-    if func_name and func_name not in event_bus.IDLE_TOOL_NAMES:
-      if (
-          func_name not in {"update_plan", "confirm_action", "retry_step"}
-          and self._plan
-          and self._plan.get("status") in ("done", "failed")
-          and self._last_user_input_time > self._plan_finished_at
-      ):
-        self._plan = None
-      self._notify_ui({
-          "type": "tool_started",
-          "id": call_id,
-          "name": func_name,
-          "args": args,
-          "agent": fc.get("_agent") or "",
-      })
+    suppressed_ui = False
     try:
-      watchdog_block = (
-          self._watchdog.blocks(func_name) if self._watchdog is not None else None
+      await self._await_inflight_user_transcript_if_needed(func_name)
+      suppressed_result = self._precheck_suppressed_tool(
+          func_name, args, is_subagent=is_subagent
       )
-      if watchdog_block is not None:
-        # Another command is still awaiting visual confirmation.
-        result = watchdog_block
-      elif func_name in {"detect", "pick", "place"}:
-        if func_name == "detect":
-          await self._clear_pick_target()
-        stability_error = self._camera_stability_error(func_name)
-        if stability_error is not None:
-          if func_name in {"pick", "place"}:
-            robot = getattr(self._embodiment, "robot", None)
-            clear_target = getattr(robot, "clear_detected_target", None)
-            if clear_target is not None:
-              clear_target()
-          result = stability_error
+      if suppressed_result is not None:
+        suppressed_ui = bool(suppressed_result.get("_suppressed_ui"))
+        result = suppressed_result
+      else:
+        if (
+            func_name == "send_message"
+            and args.get("target") == "user"
+            and isinstance(args.get("message"), str)
+        ):
+          cleaned_msg = strip_redundant_mid_session_greeting(
+              args["message"],
+              already_greeted=self._already_greeted_in_prior_turn(),
+              user_text=self._user_transcript,
+          )
+          if cleaned_msg != args["message"]:
+            args["message"] = cleaned_msg
+            fc = {**fc, "args": args}
+        if func_name and func_name not in event_bus.IDLE_TOOL_NAMES:
+          if (
+              func_name not in {"update_plan", "confirm_action", "retry_step"}
+              and self._plan
+              and self._plan.get("status") in ("done", "failed")
+              and self._last_user_input_time > self._plan_finished_at
+          ):
+            self._plan = None
+          self._notify_ui({
+              "type": "tool_started",
+              "id": call_id,
+              "name": func_name,
+              "args": args,
+              "agent": fc.get("_agent") or "",
+          })
+        watchdog_block = (
+            self._watchdog.blocks(func_name) if self._watchdog is not None else None
+        )
+        if watchdog_block is not None:
+          # Another command is still awaiting visual confirmation.
+          result = watchdog_block
+        elif func_name in {"detect", "pick", "place"}:
+          if func_name == "detect":
+            await self._clear_pick_target()
+          stability_error = self._camera_stability_error(func_name)
+          if stability_error is not None:
+            if func_name in {"pick", "place"}:
+              robot = getattr(self._embodiment, "robot", None)
+              clear_target = getattr(robot, "clear_detected_target", None)
+              if clear_target is not None:
+                clear_target()
+            result = stability_error
+          else:
+            result = await self._invoke_tool(func_name, args)
+            if func_name == "detect":
+              await self._publish_detected_target(result)
+              # If the model is re-detecting after a timeout notice, give its
+              # follow-up pick/place a full grace window so _auto_reissue does
+              # not fire with stale coordinates between detect and pick/place.
+              if (
+                  self._watchdog is not None
+                  and self._watchdog.pending is not None
+                  and self._watchdog.pending.timeout_notified_at is not None
+              ):
+                self._watchdog.pending.timeout_notified_at = (
+                    self._watchdog._clock()  # pylint: disable=protected-access
+                )
         else:
           result = await self._invoke_tool(func_name, args)
-          if func_name == "detect":
-            await self._publish_detected_target(result)
-            # If the model is re-detecting after a timeout notice, give its
-            # follow-up pick/place a full grace window so _auto_reissue does
-            # not fire with stale coordinates between detect and pick/place.
-            if (
-                self._watchdog is not None
-                and self._watchdog.pending is not None
-                and self._watchdog.pending.timeout_notified_at is not None
-            ):
-              self._watchdog.pending.timeout_notified_at = (
-                  self._watchdog._clock()  # pylint: disable=protected-access
-              )
-      else:
-        result = await self._invoke_tool(func_name, args)
-      if (
-          self._watchdog is not None
-          and watchdog_block is None
-          and self._watchdog.is_verified_action(func_name)
-      ):
-        result = await self._arm_watchdog(func_name, args, result)
-      # Embodiments without a robot-side renderer hand us UI overlay
-      # payloads (draw_points / clear_overlay); publish and strip them.
-      result = await self._publish_ui_overlay(result)
+          if func_name == "make_gesture":
+            gesture_name = str(args.get("gesture") or "").strip().lower()
+            if gesture_name in _WAVE_GESTURE_NAMES:
+              self._wave_count_in_session += 1
+          elif (
+              func_name == "navigate"
+              and isinstance(result, dict)
+              and result.get("executed") is not False
+              and not result.get("error")
+              and not self.task_active()
+          ):
+            self._locomotion_done_hb_count = int(
+                getattr(self._session_manager, "_heartbeat_sent_count", 0) or 0
+            )
+        if (
+            self._watchdog is not None
+            and watchdog_block is None
+            and self._watchdog.is_verified_action(func_name)
+        ):
+          result = await self._arm_watchdog(func_name, args, result)
+        # Embodiments without a robot-side renderer hand us UI overlay
+        # payloads (draw_points / clear_overlay); publish and strip them.
+        result = await self._publish_ui_overlay(result)
 
       # A blocking FunctionResponse resumes model generation. Send the latest
       # visual context first instead of creating a competing heartbeat turn.
       post_action_frame_sent = False
-      if is_blocking and sink is None and func_name not in (
-          "talk_motion",
-          scenario_rag.SCENARIO_RAG_TOOL_NAME,
+      if (
+          not suppressed_ui
+          and is_blocking
+          and sink is None
+          and func_name
+          not in (
+              "talk_motion",
+              scenario_rag.SCENARIO_RAG_TOOL_NAME,
+          )
       ):
         send_frame = getattr(
             self._session_manager, "send_latest_video_frame", None
@@ -475,6 +854,7 @@ class ToolCallHandler:
         result_dict = {'result': result}
       else:
         result_dict = dict(result)
+      result_dict.pop("_suppressed_ui", None)
       if func_name == "pick":
         result_dict = pick_response_for_model(result, post_action_frame_sent)
 
@@ -536,6 +916,18 @@ class ToolCallHandler:
               " unrequested language."
           )
         result_dict.setdefault("reply_language_rule", rule)
+        if self._already_greeted_in_prior_turn() and not user_requested_wave_or_greeting(
+            self._user_transcript
+        ):
+          result_dict.setdefault(
+              "conversation_continuity_rule",
+              (
+                  "Ongoing mid-session conversation (already greeted on an"
+                  " earlier turn): jump straight into answering the user's"
+                  " question naturally — do NOT start with 'Hello', 'Hi',"
+                  " 'Welcome to...', or re-introduce yourself."
+              ),
+          )
 
       # Send tool response back to the Gemini session as a JSON dict.
       msg = {"toolResponse": {"functionResponses": [function_response]}}
@@ -547,25 +939,26 @@ class ToolCallHandler:
           raise RuntimeError('Session manager is not initialized')
         await self._session_manager.send_message(msg)
 
-      # Publish result for UI and logging.
-      action_data = json.dumps(fc)
+      if not suppressed_ui:
+        # Publish result for UI and logging.
+        action_data = json.dumps(fc)
 
-      await self._bus.publish(
-          event_bus.Event(
-              type=event_bus.EventType.TOOL_RESULT,
-              source=event_bus.EventSource.USER,
-              data={
-                  "type": "tool_call",
-                  "id": call_id,
-                  "name": func_name,
-                  "args": args,
-                  "result": result,
-                  "action_data": action_data,
-                  # Which model issued the call (composite mode: "er2").
-                  "agent": fc.get("_agent") or "",
-              },
-          )
-      )
+        await self._bus.publish(
+            event_bus.Event(
+                type=event_bus.EventType.TOOL_RESULT,
+                source=event_bus.EventSource.USER,
+                data={
+                    "type": "tool_call",
+                    "id": call_id,
+                    "name": func_name,
+                    "args": args,
+                    "result": result,
+                    "action_data": action_data,
+                    # Which model issued the call (composite mode: "er2").
+                    "agent": fc.get("_agent") or "",
+                },
+            )
+        )
       logging.info(
           'Tool call %s id=%s completed with result: %s',
           func_name,
@@ -584,9 +977,30 @@ class ToolCallHandler:
         if self._blocking_execution_count == 0:
             self.tool_executing.clear()
 
+  async def _record_assistant_text(self, event: event_bus.Event) -> None:
+    """Track assistant replies for ongoing-greeting state and escort offers."""
+    data = event.data
+    text = data.get("text", "") if isinstance(data, dict) else str(data or "")
+    cleaned = text.strip()
+    if not cleaned:
+      return
+    self._assistant_has_replied = True
+    sm = self._session_manager
+    if sm is not None and (
+        bool(self._user_transcript.strip())
+        or int(getattr(sm, "user_turn_count", 0) or 0) >= 1
+    ):
+      sm._greeted_in_session = True  # pylint: disable=protected-access
+    self._assistant_turn_buf = f"{self._assistant_turn_buf} {cleaned}".strip()[
+        -600:
+    ]
+    if assistant_offered_escort_in_text(self._assistant_turn_buf):
+      self._assistant_offered_escort = True
+
   async def _record_user_instruction(self, event: event_bus.Event) -> None:
-    """Track user requests: sit authorisation, stop/cancel, plan stickiness."""
+    """Track user requests: sit/locomotion authorisation, greeting state, stop/cancel."""
     is_replace = False
+    is_new_utterance = False
     if event.type == event_bus.EventType.TEXT_INPUT:
       text = str(event.data or "")
       stripped = text.lstrip()
@@ -594,15 +1008,56 @@ class ToolCallHandler:
           ("[HEARTBEAT]", "[ROBOT]", "[ROBOT_TASK_RESULT]", "[USER COMMAND]")
       ):
         return
-      self._user_transcript = text
+      is_new_utterance = True
+      self._current_utterance_id = None
+      self._user_transcript = text.strip()
     else:
       data = event.data or {}
       text = data.get("text", "") if isinstance(data, dict) else str(data)
+      full_text = data.get("full_text") if isinstance(data, dict) else None
+      uid = data.get("utterance_id") if isinstance(data, dict) else None
       is_replace = bool(isinstance(data, dict) and data.get("replace"))
-      if is_replace:
-        self._user_transcript = text
+      if text.strip() == "🎤 正在识别语音…":
+        return
+      if uid is not None:
+        try:
+          uid_int = int(uid)
+        except (TypeError, ValueError):
+          uid_int = None
       else:
-        self._user_transcript = f"{self._user_transcript} {text}".strip()
+        uid_int = None
+      if uid_int is not None:
+        if uid_int != self._current_utterance_id:
+          is_new_utterance = True
+          self._current_utterance_id = uid_int
+          self._user_transcript = str(
+              full_text if full_text is not None else text
+          ).strip()
+        else:
+          if full_text is not None:
+            self._user_transcript = str(full_text).strip()
+          elif is_replace:
+            self._user_transcript = text.strip()
+          else:
+            self._user_transcript = f"{self._user_transcript} {text}".strip()
+      else:
+        is_new_utterance = True
+        self._current_utterance_id = None
+        self._user_transcript = text.strip()
+
+    if is_new_utterance and self._user_transcript:
+      sm = self._session_manager
+      if (
+          self._assistant_has_replied
+          or self._wave_count_in_session >= 1
+          or bool(getattr(sm, "_greeted_in_session", False))
+      ):
+        self._greeted_prior_turn = True
+      self._prev_turn_offered_escort = self._assistant_offered_escort
+      self._assistant_offered_escort = False
+      self._assistant_turn_buf = ""
+      self._locomotion_done_hb_count = None
+
     if text.strip() and text.strip() != "🎤 正在识别语音…":
       # Any genuine user input re-opens the right to (re)plan and dismisses
       # a finished plan from a previous turn.
@@ -613,8 +1068,13 @@ class ToolCallHandler:
           and self._plan.get("status") in ("done", "failed")
       ):
         self._plan = None
+        self._plan_allows_locomotion = False
         self._notify_ui({"type": "plan_clear"})
     self._sit_authorized = user_requested_sit(self._user_transcript)
+    self._locomotion_authorized = user_requested_locomotion(
+        self._user_transcript,
+        assistant_offered_escort=self._prev_turn_offered_escort,
+    )
     if self.task_active() and _USER_STOP_RE.search(text or ""):
       await self.cancel_task("user said stop")
 
@@ -640,6 +1100,8 @@ class ToolCallHandler:
       except Exception:  # pylint: disable=broad-except
         logging.debug("stop() not available on this embodiment")
     had_plan = bool(self._plan and self._plan.get("status") in ("planning", "in_progress"))
+    self._plan_allows_locomotion = False
+    self._locomotion_authorized = False
     if had_plan:
       self._plan["status"] = "failed"
       self._plan_finished_at = time.monotonic()
@@ -998,8 +1460,13 @@ class ToolCallHandler:
               data=payload,
           )
       )
+    if status in ("planning", "in_progress") and (
+        not prev or prev.get("status") in ("done", "failed")
+    ):
+      self._plan_allows_locomotion = bool(self._locomotion_authorized)
     if status in ("done", "failed"):
       self._plan_finished_at = time.monotonic()
+      self._plan_allows_locomotion = False
     if status in ("done", "failed") and wd is not None:
       if status == "failed" and wd.pending is not None:
         hook = getattr(self._embodiment, "on_task_aborted", None)
@@ -1557,6 +2024,18 @@ class ToolCallHandler:
             "Error: sending messages to user is not enabled."
             " Use inline text instead."
         )
+      self._assistant_has_replied = True
+      sm = self._session_manager
+      if sm is not None and (
+          bool(self._user_transcript.strip())
+          or int(getattr(sm, "user_turn_count", 0) or 0) >= 1
+      ):
+        sm._greeted_in_session = True  # pylint: disable=protected-access
+      self._assistant_turn_buf = f"{self._assistant_turn_buf} {message}".strip()[
+          -600:
+      ]
+      if assistant_offered_escort_in_text(self._assistant_turn_buf):
+        self._assistant_offered_escort = True
       dm = getattr(self._session_manager, "decision_making", None)
       if dm is not None and hasattr(dm, "_start_tts_task"):
         logging.info(

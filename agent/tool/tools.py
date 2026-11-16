@@ -437,8 +437,12 @@ def navigate_tool() -> dict[str, Any]:
       description=(
           "Navigate the robot to a named waypoint using GraphNav. The robot"
           " will walk to the specified waypoint and report when it arrives."
-          " Call only after get_waypoints returns navigation_ready=true, use"
-          " an exact name from that result, and call stow before navigating."
+          " Call ONLY when the user explicitly asks or confirms they want the"
+          " robot to go there, guide/escort them, or fetch/deliver an item"
+          " (stay stationary when merely answering 'where is...?' or venue"
+          " Q&A). Call only after get_waypoints returns navigation_ready=true,"
+          " use an exact name from that result, and call stow before"
+          " navigating."
       ),
       parameters={
           "type": "OBJECT",
@@ -464,7 +468,9 @@ def drive_tool() -> dict[str, Any]:
       name="drive",
       description=(
           "Drive the robot without a waypoint for a short, bounded interval"
-          " using body-frame velocities. Positive v_x moves forward, positive"
+          " using body-frame velocities when the user explicitly requests"
+          " movement (do not call while answering conversational Q&A)."
+          " Positive v_x moves forward, positive"
           " v_y moves left, and positive v_rot turns counterclockwise. The"
           " robot powers on and stands automatically. The current camera-arm"
           " joint pose is held relative to the body, so the gripper camera"
@@ -684,9 +690,10 @@ def spot_gesture_tool() -> dict[str, Any]:
           " paw; a humanoid uses its hand). Use it naturally"
           " while you talk, not as a task step:"
           " 'high_wave' = a big, high wave to say hello or goodbye - call it"
-          " when the user greets you (e.g. 'hello', '你好', 'こんにちは'), when"
-          " you introduce yourself or are asked who you are, and when the user"
-          " says goodbye;"
+          " ONLY on the opening greeting of the session (e.g. 'hello', '你好',"
+          " 'こんにちは'), when explicitly asked who you are or asked to wave,"
+          " or when the user says goodbye (never repeat 'high_wave' on"
+          " ordinary follow-up Q&A turns);"
           " 'shake_hand' = extend the gripper for a handshake - call it when"
           " the user offers or asks for a handshake ('let's shake hands',"
           " '握个手') or says 'nice to meet you'."
