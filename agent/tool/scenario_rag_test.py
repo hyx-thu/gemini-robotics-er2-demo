@@ -40,11 +40,15 @@ class ScenarioRagTest(unittest.TestCase):
     self.assertIn("cymbal_hospital", items)
     self.assertIn("cymbal_bank", items)
     self.assertEqual(items["default"]["doc_count"], 0)
-    self.assertEqual(items["cymbal_hospital"]["doc_count"], 120)
+    self.assertEqual(items["cymbal_hospital"]["doc_count"], 128)
     self.assertEqual(items["cymbal_bank"]["doc_count"], 120)
     self.assertEqual(len(items["cymbal_hospital"]["topic_guide"]), 10)
     self.assertEqual(len(items["cymbal_bank"]["topic_guide"]), 10)
     self.assertIn("welcome_desk_1f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("blood_test_lab_2f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("pharmacy_pickup_1f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("imaging_center_2f", items["cymbal_hospital"]["waypoints"])
+    self.assertIn("health_check_3f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("quiet_comfort_lounge_1f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("healing_garden_4f", items["cymbal_hospital"]["waypoints"])
     self.assertIn("vip_wealth_lounge", items["cymbal_bank"]["waypoints"])
@@ -92,26 +96,17 @@ class ScenarioRagTest(unittest.TestCase):
     forbidden_clinical_terms = (
         "phlebotomy",
         "venipuncture",
-        "blood draw",
         "fasting",
         "urinalysis",
-        "urine",
         "stool",
         "sputum",
         "swab",
         "biopsy",
         "pathology",
-        "mri",
-        "ultrasound",
         "mammogram",
-        "endoscopy",
-        "colonoscopy",
-        "gastroscopy",
         "sedation",
         "anesthesia",
         "contrast",
-        "xray",
-        "ecg",
         "holter",
         "vaccine",
         "vaccination",
@@ -238,6 +233,25 @@ class ScenarioRagTest(unittest.TestCase):
         ("Where in the underground garage are the 24 EV charging bays located?", {"hosp_trn_03"}),
         ("What should I do if a family member suddenly feels unwell in the lobby right now?", {"hosp_hlp_01"}),
         ("Where do I speak with licensed staff if I have a question about health concerns, test prep, or medications?", {"hosp_hlp_02"}),
+        ("Where can I do a blood test?", {"hosp_nav_13"}),
+        ("I need to do a blood test. Where should I go?", {"hosp_nav_13"}),
+        ("Where can I get my medicine?", {"hosp_nav_14"}),
+        ("I need to pick my medicine. Where should I go?", {"hosp_nav_14"}),
+        ("Where is the pharmacy to pick up medicine?", {"hosp_nav_14"}),
+        ("Where do I go for an X-ray or CT scan?", {"hosp_nav_15"}),
+        ("Which floor is the MRI or ultrasound room on?", {"hosp_nav_16"}),
+        ("Where do I go for an ECG or lung function test?", {"hosp_nav_17"}),
+        ("Where is the annual health checkup center?", {"hosp_nav_18"}),
+        ("Where do I check in for an endoscopy or gastroscopy?", {"hosp_nav_19"}),
+        ("Where can I print my blood test results or imaging report?", {"hosp_nav_20"}),
+        ("抽血化验在几楼哪个窗口？", {"hosp_nav_13"}),
+        ("门诊药房在哪？去哪里取药拿药？", {"hosp_nav_14"}),
+        ("拍X光片和做CT检查在几楼？", {"hosp_nav_15"}),
+        ("做核磁共振MRI或者B超彩超在几楼哪个区？", {"hosp_nav_16"}),
+        ("做心电图和肺功能检查在几楼？", {"hosp_nav_17"}),
+        ("健康体检中心在几楼报到？", {"hosp_nav_18"}),
+        ("做胃镜肠镜在几楼报到？", {"hosp_nav_19"}),
+        ("化验单和影像检查报告去哪里自助打印？", {"hosp_nav_20"}),
         ("请问怎么在自助签到机扫码报到？", {"hosp_chk_02"}),
         ("支持国际商业保险 Cigna 或 Bupa 免现金直付担保函吗？", {"hosp_bil_03"}),
         ("我第一次来医院心里很紧张焦虑，有安静休息区或者深呼吸放松引导吗？", {"hosp_anx_01", "hosp_anx_02", "hosp_anx_03"}),
@@ -469,21 +483,27 @@ class ScenarioRagTest(unittest.TestCase):
       )
 
     catalog = {s["id"]: s for s in scenario_rag.list_scenarios()}
+    expected_totals = {"cymbal_hospital": 128, "cymbal_bank": 120}
     for sid in ("cymbal_hospital", "cymbal_bank"):
       sc = catalog[sid]
-      self.assertEqual(len(sc["documents"]), 120)
+      self.assertEqual(len(sc["documents"]), expected_totals[sid])
       self.assertEqual(len(sc["topic_guide"]), 10)
       all_doc_ids = {d["id"] for d in sc["documents"]}
       derived_prompt_ids = set()
       for t in sc["topic_guide"]:
-        self.assertEqual(t["doc_count"], 12)
-        self.assertEqual(len(t["grounded_prompts"]), 12)
+        expected_cat_cnt = (
+            20
+            if (sid == "cymbal_hospital" and t["category"] == "Campus & Floor Wayfinding")
+            else 12
+        )
+        self.assertEqual(t["doc_count"], expected_cat_cnt)
+        self.assertEqual(len(t["grounded_prompts"]), expected_cat_cnt)
         for gp in t["grounded_prompts"]:
           self.assertIn(gp["doc_id"], all_doc_ids)
           derived_prompt_ids.add(gp["doc_id"])
       self.assertEqual(derived_prompt_ids, all_doc_ids)
 
-      # Verify 100% 1-to-1 Rank-#1 retrieval across all 120 grounded questions
+      # Verify 100% 1-to-1 Rank-#1 retrieval across all grounded questions
       for doc in sc["documents"]:
         q = doc["sample_question"]
         self.assertTrue(q, f"Missing sample_question on {doc['id']}")

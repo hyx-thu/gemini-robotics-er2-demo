@@ -58,6 +58,19 @@ _NAVIGATION_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_WAYFINDING_QA_RE = re.compile(
+    r"(\b(where\s+(can|do|should|could|is|are)|which\s+(floor|window|counter|room|wing)|"
+    r"pick(\s+up)?\s+(my\s+|the\s+)?medicine|get\s+my\s+medicine|blood\s+test)\b|"
+    r"在哪|哪里|去哪|几楼|哪个窗口|取药|拿药|领药|取号|拿报告|取报告|打报告)",
+    re.IGNORECASE,
+)
+
+_EXPLICIT_REFUSAL_REPLY_RE = re.compile(
+    r"(\b(i\s+cannot|i\s+can't|don't\s+have\s+its\s+location|not\s+in\s+my\s+directory|"
+    r"don't\s+see\s+a\s+.*in\s+my\s+directory)\b|无法为您|无法替您送|目录中没有)",
+    re.IGNORECASE,
+)
+
 _CHITCHAT_ONLY_RE = re.compile(
     r"^(你好|嗨|哈喽|喂|可以听到吗|能听到吗|听得到吗|在吗|你是谁|天气|几号|几点|"
     r"hello|hi|hey|can you hear me|how are you)[？?！!。.,\s]*$",
@@ -80,6 +93,8 @@ def _is_action_request_text(text: str) -> bool:
   if _CHITCHAT_ONLY_RE.match(cleaned):
     return False
   if _NAVIGATION_ONLY_RE.search(cleaned):
+    return False
+  if _WAYFINDING_QA_RE.search(cleaned):
     return False
   return bool(_ACTION_INTENT_RE.search(cleaned))
 
@@ -1503,7 +1518,7 @@ class SessionManager:
           elif not wrong_lang and assistant_reply.strip():
             self._language_nudge_count = 0
 
-          if called_embodiment_action:
+          if called_embodiment_action or _EXPLICIT_REFUSAL_REPLY_RE.search(assistant_reply):
             self._pending_user_action_text = ""
             if not self._pending_action_nudge.startswith(
                 "[HEARTBEAT] LANGUAGE"

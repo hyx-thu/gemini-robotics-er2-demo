@@ -110,19 +110,29 @@ _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
     ("扫码减免停车费", "停车优惠", "减免停车费", "parking_validation", "parking_discount", "qr_parking_exit"),
     ("新能源充电桩", "充电桩", "汽车充电", "ev_charging", "electric_car_charger", "level_b2_green_zone"),
     ("地下停车场", "落客雨棚", "无障碍车位", "地铁直达", "免费接驳班车", "网约车室内等候", "找车机", "夜间护送上车", "汽车电瓶搭电", "parking_garage", "curbside_drop_off", "accessible_parking", "medical_center_station", "free_shuttle", "rideshare_lounge", "find_my_car", "night_escort", "jump_start"),
+    # Hospital — Common Exams, Lab, Pharmacy & Report Wayfinding (fine-grained per sub-topic)
+    ("抽血", "验血", "采血", "血常规", "抽血化验", "做化验", "去化验", "化验样本", "化验室", "检验科", "留尿", "尿检", "交样本", "样本采集", "blood_test", "blood_tests", "blood_work", "bloodwork", "laboratory", "specimen_collection", "sample_drop_off", "urine_sample"),
+    ("药房", "门诊药房", "取药", "拿药", "领药", "取药窗口", "智能取药柜", "夜间取药", "急诊药房", "pick_up_medicine", "picking_medicine", "pick_medicine", "get_medicine", "get_my_medicine", "collect_medicine", "medicine_pickup", "outpatient_pharmacy", "pharmacy", "pharmacy_window", "dispensary", "smart_medicine_locker"),
+    ("拍片", "拍片子", "x光", "胸片", "放射科", "ct检查", "做ct", "牙片", "骨密度", "xray", "x_ray", "ct_scan", "radiology", "bone_density", "panoramic_dental"),
+    ("核磁", "核磁共振", "磁共振", "做mri", "b超", "彩超", "超声", "超声科", "mri", "mri_scan", "ultrasound", "sonogram"),
+    ("心电图", "动态心电", "背盒子", "肺功能", "吹气检查", "听力筛查", "视力检查", "ecg", "ekg", "electrocardiogram", "wearable_monitor", "lung_function", "spirometry"),
+    ("体检", "体检中心", "健康体检", "入职体检", "年度体检", "全身体检", "health_checkup", "annual_physical", "physical_exam", "wellness_checkup"),
+    ("胃镜", "肠镜", "胃肠镜", "内镜", "内镜中心", "日间检查", "日间手术报到", "endoscopy", "gastroscopy", "colonoscopy", "day_procedure"),
+    ("自助打印", "打报告", "打印报告", "报告打印", "取报告", "化验单", "打印化验单", "验血报告", "检查报告", "影像报告", "取片机", "胶片打印", "print_report", "report_printing", "printed_reports", "self_service_printing", "lab_report", "lab_results", "imaging_report", "report_kiosk", "report_kiosks", "printed_films"),
     # Hospital — Safety, Privacy & Medical Question Handoff
     ("身体不舒服", "突然头晕", "头晕难受", "紧急求助", "24小时紧急入口", "feeling_unwell", "feeling_faint", "urgent_help", "urgent_entrance"),
     (
         "医疗咨询", "医疗服务", "医学咨询", "医学问题", "看病", "问诊", "诊断",
-        "看病挂哪个科", "挂哪个科", "挂号问诊", "检查准备要求", "空腹咨询",
+        "看病挂哪个科", "挂哪个科", "挂号问诊", "检查准备要求", "空腹咨询", "要不要空腹",
         "吃药咨询", "吃什么药", "开药", "买药", "用药问题",
         "嗓子疼", "发烧", "感冒", "咳嗽", "头疼", "肚子疼",
         "转人工咨询",
         "medical_consultation", "medical_consultations", "medical_advice",
         "medical_service", "health_question", "medication_question",
-        "test_preparation", "symptoms", "symptom", "diagnose", "medicine",
-        "medications", "cough", "coughing", "fever", "cold", "sore_throat",
-        "headache", "stomachache", "illness", "sick", "licensed_staff_desk",
+        "medication_advice", "test_preparation", "symptoms", "symptom",
+        "diagnose", "medications", "cough", "coughing", "fever", "cold",
+        "sore_throat", "headache", "stomachache", "illness", "sick",
+        "licensed_staff_desk",
     ),
     # Bank — Lobby, Cards, Deposits & Wealth
     ("智能柜员机", "超柜", "取号", "排号", "贵宾室", "私人银行", "stm", "kiosk", "vip", "private_banking", "aum"),
@@ -490,25 +500,27 @@ def search_knowledge_base_tool(scenario_id: str | None = None) -> dict[str, Any]
   org = sc.get("organization") or "the active venue"
 
   if sid == "cymbal_hospital":
+    doc_cnt = len(sc.get("documents") or []) or 128
     desc = (
-        f"Search the official {org} 120-entry visit guidance, campus"
+        f"Search the official {org} {doc_cnt}-entry visit guidance, exam/lab/pharmacy"
         " wayfinding & comfort concierge RAG knowledge base across 10"
         " hospitality domains: Check-In & Visit Flow, Campus & Floor"
         " Wayfinding, Billing, Insurance & Forms, Anxiety Relief & Calm"
         " Spaces, Waiting Comfort & Family Care, Accessibility & Senior"
         " Support, Language & Guest Concierge, Dining, Lounges & Amenities,"
         " Parking, Transit & Drop-Off, and Safety, Privacy & Help Desks."
-        " Always call this tool before answering any check-in, wayfinding,"
-        " comfort lounge, accessibility, amenity, billing/forms, or help-desk"
-        " question, and never invent facts outside returned matches."
+        " Always call this tool before answering any check-in, blood test,"
+        " pharmacy pickup, imaging/exam floor wayfinding, comfort lounge,"
+        " accessibility, amenity, billing/forms, or help-desk question, and"
+        " never invent facts outside returned matches."
     )
     query_desc = (
         "The visitor or family member's question or keywords, e.g."
-        " 'self-service arrival check-in kiosk QR pass', '4-4-4-4 box"
-        " breathing anxiety relief', '1F Quiet Comfort Lounge or 4F Botanical"
-        " Healing Atrium', 'free UV-sanitized wheelchair', 'cashless direct"
-        " billing GOP paperwork', or '3-hour discounted visitor parking"
-        " validation'."
+        " 'blood test lab 2F East', 'pick up medicine outpatient pharmacy 1F"
+        " East', 'X-ray CT MRI ultrasound floor', 'self-service arrival"
+        " check-in kiosk QR pass', '1F Quiet Comfort Lounge or 4F Botanical"
+        " Healing Atrium', 'free UV-sanitized wheelchair', or '3-hour"
+        " discounted visitor parking validation'."
     )
     cat_desc = (
         "Optional hospital hospitality category filter hint (e.g. 'Check-In &"

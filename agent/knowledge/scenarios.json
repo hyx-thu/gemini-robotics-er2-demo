@@ -38,7 +38,12 @@
         "healing_garden_4f",
         "international_guest_5f",
         "garden_cafe_b1",
-        "urgent_entrance_1f"
+        "urgent_entrance_1f",
+        "pharmacy_pickup_1f",
+        "blood_test_lab_2f",
+        "imaging_center_2f",
+        "health_check_3f",
+        "day_procedure_4f"
       ],
       "documents": [
         {
@@ -258,8 +263,8 @@
             "campus directory",
             "levels b1 to 6f"
           ],
-          "summary": "Campus floor layout at a glance: Level B1 houses the Garden Dining Court, Metro Skybridge, and Parking Garage Lobby; 1F features the Main Atrium, Welcome Desk, Check-In Kiosks, Billing/Insurance Windows, Quiet Lounge, and 24/7 East Urgent Entrance; 2F houses East/West Waiting Lounges & Reading Nook; 3F features the Family & Kids Lounge and Nursing Suites; 4F offers the Botanical Healing Atrium & Caregiver Rest Lounge; 5F houses the International Guest & Group Welcome Center; and 6F connects to the Inpatient Visitor Lobby & Sky Garden.",
-          "content": "[Campus & Floor Wayfinding — Complete Campus Floor Directory (Level B1 Concourse to 6F Sky Garden)]\nLocation: Main Campus Podium B1–5F & 6F Visitor Concourse (Waypoint: `elevator_hub_central`).\nConcierge Guide & Reassurance: Campus floor layout at a glance: Level B1 houses the Garden Dining Court, Metro Skybridge, and Parking Garage Lobby; 1F features the Main Atrium, Welcome Desk, Check-In Kiosks, Billing/Insurance Windows, Quiet Lounge, and 24/7 East Urgent Entrance; 2F houses East/West Waiting Lounges & Reading Nook; 3F features the Family & Kids Lounge and Nursing Suites; 4F offers the Botanical Healing Atrium & Caregiver Rest Lounge; 5F houses the International Guest & Group Welcome Center; and 6F connects to the Inpatient Visitor Lobby & Sky Garden.",
+          "summary": "Campus floor layout at a glance: Level B1 houses the Garden Dining Court, Metro Skybridge, and Parking Garage Lobby; 1F features the Main Atrium, Welcome Desk, Check-In & Report Kiosks, Outpatient Pharmacy (1F East Windows P1–P6), Billing/Insurance Windows (1F West), Quiet Lounge, and 24/7 East Urgent Entrance; 2F houses the Blood Test & Specimen Lab (2F East L1–L8), Diagnostic Imaging for X-Ray, CT, MRI & Ultrasound (2F North), and 2F Waiting Lounges; 3F hosts ECG & Functional Testing (3F East F1–F4), the Annual Health Checkup Center (3F West H1–H3), and the Family & Kids Lounge; 4F offers Endoscopy & Day Check-In Reception (4F East E1–E3) plus the Botanical Healing Atrium; 5F houses the International Guest & Group Welcome Center; and 6F connects to the Inpatient Visitor Lobby & Sky Garden.",
+          "content": "[Campus & Floor Wayfinding — Complete Campus Floor Directory (Level B1 Concourse to 6F Sky Garden)]\nLocation: Main Campus Podium B1–5F & 6F Visitor Concourse (Waypoint: `elevator_hub_central`).\nConcierge Guide & Reassurance: Campus floor layout at a glance: Level B1 houses the Garden Dining Court, Metro Skybridge, and Parking Garage Lobby; 1F features the Main Atrium, Welcome Desk, Check-In & Report Kiosks, Outpatient Pharmacy (1F East Windows P1–P6), Billing/Insurance Windows (1F West), Quiet Lounge, and 24/7 East Urgent Entrance; 2F houses the Blood Test & Specimen Lab (2F East L1–L8), Diagnostic Imaging for X-Ray, CT, MRI & Ultrasound (2F North), and 2F Waiting Lounges; 3F hosts ECG & Functional Testing (3F East F1–F4), the Annual Health Checkup Center (3F West H1–H3), and the Family & Kids Lounge; 4F offers Endoscopy & Day Check-In Reception (4F East E1–E3) plus the Botanical Healing Atrium; 5F houses the International Guest & Group Welcome Center; and 6F connects to the Inpatient Visitor Lobby & Sky Garden.",
           "sample_question": "Can you give me an overview of what facilities are on each floor from Level B1 to 6F?"
         },
         {
@@ -275,8 +280,8 @@
             "amber east wing",
             "green central atrium"
           ],
-          "summary": "If hospital corridors ever feel confusing, simply follow the continuous floor-ribbon stripes beneath your feet: Ocean Blue leads to the West Wing (Billing, Quiet Lounge), Forest Green leads to the Central Elevator Hub & Welcome Atrium, and Warm Amber leads to the East Wing (24/7 Entrance, Convenience Shop).",
-          "content": "[Campus & Floor Wayfinding — Color-Coded Floor Stripes & Wing Landmarks (Never Feel Lost Indoors)]\nLocation: All Corridors on Floors 1F–5F (Waypoint: `elevator_hub_central`).\nConcierge Guide & Reassurance: If hospital corridors ever feel confusing, simply follow the continuous floor-ribbon stripes beneath your feet: Ocean Blue leads to the West Wing (Billing, Quiet Lounge), Forest Green leads to the Central Elevator Hub & Welcome Atrium, and Warm Amber leads to the East Wing (24/7 Entrance, Convenience Shop).",
+          "summary": "If hospital corridors ever feel confusing, simply follow the continuous floor-ribbon stripes beneath your feet: Ocean Blue leads to the West Wing (1F Billing & Quiet Lounge, 3F West Health Checkup Center), Forest Green leads to the Central Elevator Hub, Atrium Welcome Desk & 2F North Imaging Reception, and Warm Amber leads to the East Wing (1F East Outpatient Pharmacy & 24/7 Entrance, 2F East Blood Test Lab, 3F East ECG Suite, and 4F East Day Check-In).",
+          "content": "[Campus & Floor Wayfinding — Color-Coded Floor Stripes & Wing Landmarks (Never Feel Lost Indoors)]\nLocation: All Corridors on Floors 1F–5F (Waypoint: `elevator_hub_central`).\nConcierge Guide & Reassurance: If hospital corridors ever feel confusing, simply follow the continuous floor-ribbon stripes beneath your feet: Ocean Blue leads to the West Wing (1F Billing & Quiet Lounge, 3F West Health Checkup Center), Forest Green leads to the Central Elevator Hub, Atrium Welcome Desk & 2F North Imaging Reception, and Warm Amber leads to the East Wing (1F East Outpatient Pharmacy & 24/7 Entrance, 2F East Blood Test Lab, 3F East ECG Suite, and 4F East Day Check-In).",
           "sample_question": "How do the Ocean Blue, Forest Green, and Warm Amber floor stripes help me navigate?"
         },
         {
@@ -448,6 +453,149 @@
           "summary": "If you ever feel turned around in a hallway or parking level, press the illuminated button on any Blue-Light Concierge Intercom Pillar. A live bilingual reception coordinator answers within 5 seconds with live camera orientation and can dispatch a roving ambassador to meet you.",
           "content": "[Campus & Floor Wayfinding — Blue-Light Two-Way Intercom Help Pillars & Emergency Exit Maps]\nLocation: All Public Hallways & Parking Levels B1–B3 (Waypoint: `elevator_hub_central`).\nConcierge Guide & Reassurance: If you ever feel turned around in a hallway or parking level, press the illuminated button on any Blue-Light Concierge Intercom Pillar. A live bilingual reception coordinator answers within 5 seconds with live camera orientation and can dispatch a roving ambassador to meet you.",
           "sample_question": "How do the Blue-Light Concierge Intercom Pillars help if I get turned around in a hallway?"
+        },
+        {
+          "id": "hosp_nav_13",
+          "category": "Campus & Floor Wayfinding",
+          "title": "Blood Test & Specimen Collection Center (2F East Laboratory Hall)",
+          "location": "2F East Wing — Laboratory & Specimen Hall (Counters L1–L8 & Window L0)",
+          "waypoint": "blood_test_lab_2f",
+          "keywords": [
+            "blood test",
+            "blood work",
+            "laboratory hall",
+            "specimen drop-off",
+            "lab counter 2f east",
+            "where to do blood test",
+            "sample collection"
+          ],
+          "summary": "Routine blood tests and specimen drop-offs take place on the 2F East Wing (follow the Warm Amber stripe from Central Elevator Bank A or the Atrium Escalator; open Mon–Sat 07:00–17:30, with 24/7 urgent lab collection at 1F East). Scan your QR visit pass at the 2F East Lab Check-In Kiosk for your queue ticket to Blood Test Counters L1–L8 (low-height accessible booth at L1, kids comfort booth at L8) or Specimen Drop-Off Window L0.",
+          "sample_question": "Where do I go to do a blood test or drop off a laboratory sample?",
+          "content": "[Campus & Floor Wayfinding — Blood Test & Specimen Collection Center (2F East Laboratory Hall)]\nLocation: 2F East Wing — Laboratory & Specimen Hall (Counters L1–L8 & Window L0) (Waypoint: `blood_test_lab_2f`).\nConcierge Guide & Reassurance: Routine blood tests and specimen drop-offs take place on the 2F East Wing (follow the Warm Amber stripe from Central Elevator Bank A or the Atrium Escalator; open Mon–Sat 07:00–17:30, with 24/7 urgent lab collection at 1F East). Scan your QR visit pass at the 2F East Lab Check-In Kiosk for your queue ticket to Blood Test Counters L1–L8 (low-height accessible booth at L1, kids comfort booth at L8) or Specimen Drop-Off Window L0."
+        },
+        {
+          "id": "hosp_nav_14",
+          "category": "Campus & Floor Wayfinding",
+          "title": "Outpatient Pharmacy & Medicine Pickup Windows (1F East Atrium)",
+          "location": "1F East Atrium — Outpatient Pharmacy Hall (Windows P1–P6 & Smart Lockers)",
+          "waypoint": "pharmacy_pickup_1f",
+          "keywords": [
+            "pick up medicine",
+            "picking medicine",
+            "get my medicine",
+            "outpatient pharmacy",
+            "medicine pickup window",
+            "dispensary 1f east",
+            "smart medicine locker"
+          ],
+          "summary": "Picking up medicine takes place at the 1F East Outpatient Pharmacy Hall (follow the Warm Amber floor stripe right past the Central Welcome Desk; Windows P1–P6 open daily 08:00–20:00, plus 24/7 After-Hours Pharmacy Window P0 at the 1F East Entrance overnight). Once checkout is complete, check the assigned window number (P1–P6) on your slip or overhead screen and scan your QR pass at that counter—or enter your pickup code at the 1F East 24/7 Smart Medicine Lockers.",
+          "sample_question": "Where is the outpatient pharmacy and which window do I go to pick up my medicine?",
+          "content": "[Campus & Floor Wayfinding — Outpatient Pharmacy & Medicine Pickup Windows (1F East Atrium)]\nLocation: 1F East Atrium — Outpatient Pharmacy Hall (Windows P1–P6 & Smart Lockers) (Waypoint: `pharmacy_pickup_1f`).\nConcierge Guide & Reassurance: Picking up medicine takes place at the 1F East Outpatient Pharmacy Hall (follow the Warm Amber floor stripe right past the Central Welcome Desk; Windows P1–P6 open daily 08:00–20:00, plus 24/7 After-Hours Pharmacy Window P0 at the 1F East Entrance overnight). Once checkout is complete, check the assigned window number (P1–P6) on your slip or overhead screen and scan your QR pass at that counter—or enter your pickup code at the 1F East 24/7 Smart Medicine Lockers."
+        },
+        {
+          "id": "hosp_nav_15",
+          "category": "Campus & Floor Wayfinding",
+          "title": "X-Ray & CT Scan Imaging Center Wayfinding (2F North Zone A)",
+          "location": "2F North Wing — Diagnostic Imaging Reception (Zone A, Desks R1–R2)",
+          "waypoint": "imaging_center_2f",
+          "keywords": [
+            "x-ray room",
+            "ct scan floor",
+            "radiology reception",
+            "diagnostic imaging 2f north",
+            "bone density scan",
+            "dental panoramic x-ray"
+          ],
+          "summary": "Digital X-Ray, dental panoramic X-ray, bone-density scan, and CT Scan rooms are located on the 2F North Wing, Zone A (take Central Elevator Bank A to 2F North; open daily 07:30–18:00, with 24/7 urgent X-ray and CT at 1F East). Scan your QR booking pass at Imaging Reception Desks R1–R2 to receive your Zone A lounge queue number and private changing-booth locker wristband.",
+          "sample_question": "Which floor and reception desk should I go to for an X-ray or CT scan?",
+          "content": "[Campus & Floor Wayfinding — X-Ray & CT Scan Imaging Center Wayfinding (2F North Zone A)]\nLocation: 2F North Wing — Diagnostic Imaging Reception (Zone A, Desks R1–R2) (Waypoint: `imaging_center_2f`).\nConcierge Guide & Reassurance: Digital X-Ray, dental panoramic X-ray, bone-density scan, and CT Scan rooms are located on the 2F North Wing, Zone A (take Central Elevator Bank A to 2F North; open daily 07:30–18:00, with 24/7 urgent X-ray and CT at 1F East). Scan your QR booking pass at Imaging Reception Desks R1–R2 to receive your Zone A lounge queue number and private changing-booth locker wristband."
+        },
+        {
+          "id": "hosp_nav_16",
+          "category": "Campus & Floor Wayfinding",
+          "title": "MRI & Ultrasound Suite Wayfinding (2F North Zone B)",
+          "location": "2F North Wing — MRI & Ultrasound Reception (Zone B, Desks R3–R4)",
+          "waypoint": "imaging_center_2f",
+          "keywords": [
+            "mri suite",
+            "ultrasound room",
+            "sonogram floor",
+            "2f north zone b",
+            "mri check-in desk",
+            "ultrasound reception"
+          ],
+          "summary": "MRI Suites (M1–M3) and Ultrasound Rooms (U1–U10) are located on the 2F North Wing, Zone B, right past the Zone A Imaging Foyer (open Mon–Sat 07:30–17:30). Scan your QR booking pass at Desks R3–R4, store personal metal items in the complimentary RFID lockers outside the MRI foyer, and relax in the sunlit Zone B lounge until your queue number appears on screen.",
+          "sample_question": "Where do I check in for an MRI or ultrasound scan on the 2nd floor?",
+          "content": "[Campus & Floor Wayfinding — MRI & Ultrasound Suite Wayfinding (2F North Zone B)]\nLocation: 2F North Wing — MRI & Ultrasound Reception (Zone B, Desks R3–R4) (Waypoint: `imaging_center_2f`).\nConcierge Guide & Reassurance: MRI Suites (M1–M3) and Ultrasound Rooms (U1–U10) are located on the 2F North Wing, Zone B, right past the Zone A Imaging Foyer (open Mon–Sat 07:30–17:30). Scan your QR booking pass at Desks R3–R4, store personal metal items in the complimentary RFID lockers outside the MRI foyer, and relax in the sunlit Zone B lounge until your queue number appears on screen."
+        },
+        {
+          "id": "hosp_nav_17",
+          "category": "Campus & Floor Wayfinding",
+          "title": "ECG, Monitor Return & Functional Testing Suite (3F East Wing)",
+          "location": "3F East Wing — Functional Testing Reception (Counters F1–F4)",
+          "waypoint": "health_check_3f",
+          "keywords": [
+            "ecg room",
+            "ekg floor",
+            "electrocardiogram",
+            "24-hour monitor return",
+            "lung function test",
+            "spirometry 3f east"
+          ],
+          "summary": "ECG / EKG booths, 24-hour wearable monitor pickup & return, lung-function testing, and routine vision/hearing screening rooms are grouped together on the 3F East Wing (take Central Elevator Bank A or the Atrium Escalator to 3F; open Mon–Sat 07:30–17:00). Scan your QR pass once at Counters F1–F4 for unified queue routing across all 3F East testing rooms.",
+          "sample_question": "Which floor are the ECG, wearable monitor return, and lung-function testing rooms on?",
+          "content": "[Campus & Floor Wayfinding — ECG, Monitor Return & Functional Testing Suite (3F East Wing)]\nLocation: 3F East Wing — Functional Testing Reception (Counters F1–F4) (Waypoint: `health_check_3f`).\nConcierge Guide & Reassurance: ECG / EKG booths, 24-hour wearable monitor pickup & return, lung-function testing, and routine vision/hearing screening rooms are grouped together on the 3F East Wing (take Central Elevator Bank A or the Atrium Escalator to 3F; open Mon–Sat 07:30–17:00). Scan your QR pass once at Counters F1–F4 for unified queue routing across all 3F East testing rooms."
+        },
+        {
+          "id": "hosp_nav_18",
+          "category": "Campus & Floor Wayfinding",
+          "title": "One-Stop Annual Health Checkup & Physical Center (3F West Wing)",
+          "location": "3F West Wing — Comprehensive Health Checkup Lounge (Desks H1–H3)",
+          "waypoint": "health_check_3f",
+          "keywords": [
+            "health checkup center",
+            "annual physical",
+            "wellness screening floor",
+            "corporate checkup lounge",
+            "3f west checkup"
+          ],
+          "summary": "Pre-booked annual physicals, corporate wellness checkups, and routine health screening packages take place in the dedicated 3F West Health Checkup Lounge (take Central Elevator Bank A to 3F West; check-in 07:00–11:30, lounge open until 16:00), featuring one-floor checkup stations, private RFID lockers, and a complimentary light-breakfast bar once your checkup circuit finishes.",
+          "sample_question": "Where is the one-stop Annual Health Checkup and Physical Center located?",
+          "content": "[Campus & Floor Wayfinding — One-Stop Annual Health Checkup & Physical Center (3F West Wing)]\nLocation: 3F West Wing — Comprehensive Health Checkup Lounge (Desks H1–H3) (Waypoint: `health_check_3f`).\nConcierge Guide & Reassurance: Pre-booked annual physicals, corporate wellness checkups, and routine health screening packages take place in the dedicated 3F West Health Checkup Lounge (take Central Elevator Bank A to 3F West; check-in 07:00–11:30, lounge open until 16:00), featuring one-floor checkup stations, private RFID lockers, and a complimentary light-breakfast bar once your checkup circuit finishes."
+        },
+        {
+          "id": "hosp_nav_19",
+          "category": "Campus & Floor Wayfinding",
+          "title": "Endoscopy & Day Procedure Check-In Reception (4F East Wing)",
+          "location": "4F East Wing — Endoscopy & Day Check-In Desk (Counters E1–E3)",
+          "waypoint": "day_procedure_4f",
+          "keywords": [
+            "endoscopy check-in",
+            "gastroscopy floor",
+            "colonoscopy reception",
+            "day procedure desk",
+            "4f east counters e1-e3"
+          ],
+          "summary": "Scheduled endoscopy (gastroscopy and colonoscopy) arrival check-in and day-procedure registration take place on the 4F East Wing at Counters E1–E3, directly across from the 4F Botanical Atrium (take Central Elevator Bank A to 4F; open Mon–Sat 07:30–16:30), complete with a dedicated Family Companion Lounge displaying real-time progress boards for accompanying relatives.",
+          "sample_question": "Where do I check in for a scheduled endoscopy or day procedure on the 4th floor?",
+          "content": "[Campus & Floor Wayfinding — Endoscopy & Day Procedure Check-In Reception (4F East Wing)]\nLocation: 4F East Wing — Endoscopy & Day Check-In Desk (Counters E1–E3) (Waypoint: `day_procedure_4f`).\nConcierge Guide & Reassurance: Scheduled endoscopy (gastroscopy and colonoscopy) arrival check-in and day-procedure registration take place on the 4F East Wing at Counters E1–E3, directly across from the 4F Botanical Atrium (take Central Elevator Bank A to 4F; open Mon–Sat 07:30–16:30), complete with a dedicated Family Companion Lounge displaying real-time progress boards for accompanying relatives."
+        },
+        {
+          "id": "hosp_nav_20",
+          "category": "Campus & Floor Wayfinding",
+          "title": "Self-Service Lab & Imaging Report Printing Kiosks (1F & 2F)",
+          "location": "1F Atrium East Kiosk Bank & 2F Lab/Imaging Foyers (Kiosks R1–R8)",
+          "waypoint": "checkin_kiosks_1f",
+          "keywords": [
+            "print blood test results",
+            "lab report kiosk",
+            "imaging report printing",
+            "film printing kiosk",
+            "test result sheet"
+          ],
+          "summary": "Printed blood test result sheets, laboratory summaries, and imaging reports or films are available 24/7 at Self-Service Report Kiosks R1–R8 in the 1F Atrium East Kiosk Bank and outside the 2F East Lab & 2F North Imaging Foyers. Simply scan your QR visit pass or photo ID to print free of charge, or view digital reports anytime in the Cymbal Visitor Portal.",
+          "sample_question": "Where are the self-service kiosks to print my blood test results or imaging reports?",
+          "content": "[Campus & Floor Wayfinding — Self-Service Lab & Imaging Report Printing Kiosks (1F & 2F)]\nLocation: 1F Atrium East Kiosk Bank & 2F Lab/Imaging Foyers (Kiosks R1–R8) (Waypoint: `checkin_kiosks_1f`).\nConcierge Guide & Reassurance: Printed blood test result sheets, laboratory summaries, and imaging reports or films are available 24/7 at Self-Service Report Kiosks R1–R8 in the 1F Atrium East Kiosk Bank and outside the 2F East Lab & 2F North Imaging Foyers. Simply scan your QR visit pass or photo ID to print free of charge, or view digital reports anytime in the Cymbal Visitor Portal."
         },
         {
           "id": "hosp_bil_01",

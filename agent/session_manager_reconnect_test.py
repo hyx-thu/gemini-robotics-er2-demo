@@ -327,6 +327,40 @@ class StreamRecoveryTest(unittest.IsolatedAsyncioTestCase):
     hb_text = sm._get_heartbeat_text()  # pylint: disable=protected-access
     self.assertIn("[CONVERSATION STATE]", hb_text)
 
+  def test_wayfinding_pickup_questions_not_misclassified_as_tabletop_action(self):
+    # Wayfinding / medicine pickup / blood test questions must NOT trigger arm action nudges.
+    self.assertFalse(
+        session_manager._is_action_request_text(  # pylint: disable=protected-access
+            "I need to pick my medicine. Where should I go?"
+        )
+    )
+    self.assertFalse(
+        session_manager._is_action_request_text(  # pylint: disable=protected-access
+            "Where can I get my medicine?"
+        )
+    )
+    self.assertFalse(
+        session_manager._is_action_request_text(  # pylint: disable=protected-access
+            "Where can I do a blood test?"
+        )
+    )
+    self.assertFalse(
+        session_manager._is_action_request_text(  # pylint: disable=protected-access
+            "去哪里取药？抽血在几楼？"
+        )
+    )
+    # Real tabletop manipulation requests still trigger action intent.
+    self.assertTrue(
+        session_manager._is_action_request_text(  # pylint: disable=protected-access
+            "Pick up the red block on the table"
+        )
+    )
+    # Explicit refusal replies match _EXPLICIT_REFUSAL_REPLY_RE so action_nudge clears.
+    self.assertRegex(
+        "I'm sorry, I cannot deliver to your room as I don't have its location stored in my directory.",
+        session_manager._EXPLICIT_REFUSAL_REPLY_RE,  # pylint: disable=protected-access
+    )
+
 
 if __name__ == "__main__":
   unittest.main()
