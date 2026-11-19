@@ -215,5 +215,104 @@ class ModelCapabilityTest(unittest.TestCase):
       )
       self.assertEqual("Bearer tok", headers["Authorization"])
 
+  def test_thirty_voices_and_affective_audio_setup(self):
+    import asyncio
+    from fastapi import testclient
+    from agent import agent as agent_lib
+    from model import tts_client
+    import session_manager
+
+    # 1. All 30 official prebuilt voices match _GEMINI_PREBUILT_VOICES (14F + 16M).
+    self.assertEqual(30, len(session_config.GEMINI_VOICES))
+    self.assertEqual(
+        {v["name"].lower() for v in session_config.GEMINI_VOICES},
+        tts_client._GEMINI_PREBUILT_VOICES,  # pylint: disable=protected-access
+    )
+    females = [v for v in session_config.GEMINI_VOICES if v["gender"] == "Female"]
+    males = [v for v in session_config.GEMINI_VOICES if v["gender"] == "Male"]
+    self.assertEqual(14, len(females))
+    self.assertEqual(16, len(males))
+    self.assertEqual("Zephyr", session_config.normalize_voice_name("en-US-Chirp3-HD-Zephyr"))
+    self.assertEqual("Aoede", session_config.normalize_voice_name("aoede"))
+    self.assertEqual("Puck", session_config.normalize_voice_name("unknown-voice"))
+
+    # 2. Affective mode strips anti-emotion persona damper in AUDIO mode.
+    ag = agent_lib.Agent.from_name("robot")
+    aff_di = server._strip_text_only_comms_rules(ag.developer_instruction, affective_dialog=True)  # pylint: disable=protected-access
+    self.assertNotIn("without role-play, catchphrases, or exaggerated enthusiasm", aff_di)
+    self.assertIn("natural human warmth", aff_di)
+    neutral_di = server._strip_text_only_comms_rules(ag.developer_instruction, affective_dialog=False)  # pylint: disable=protected-access
+    self.assertIn("without role-play, catchphrases, or exaggerated enthusiasm", neutral_di)
+
+    # 3. _send_setup configures speechConfig + temperature without 1007 on 3.8,
+    #    and enables wire enableAffectiveDialog on 2.5 native-audio models.
+    class FakeStream:
+      def __init__(self):
+        self.sent = []
+
+      def Send(self, d):
+        self.sent.append(d)
+
+    async def build_audio_setup(model, voice, affective):
+      sm = session_manager.SessionManager.__new__(session_manager.SessionManager)
+      sm.model = model
+      sm.tools = []
+      sm.supports_blocking_tools = False
+      sm.thinking_level = "none"
+      sm.system_instruction = "si"
+      sm.developer_instruction = "di"
+      sm.response_modality = "AUDIO"
+      sm.voice_name = voice
+      sm.affective_dialog = affective
+      sm.stream = FakeStream()
+      sm._setup_complete = asyncio.Event()  # pylint: disable=protected-access
+      await sm._send_setup()  # pylint: disable=protected-access
+      return sm.stream.sent[0]["setup"]
+
+    s38 = asyncio.run(build_audio_setup("models/gemini-3.8-live", "Sulafat", True))
+    self.assertEqual(
+        "Sulafat",
+        s38["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"],
+    )
+    self.assertEqual(1.0, s38["generationConfig"]["temperature"])
+    self.assertNotIn("enableAffectiveDialog", s38["generationConfig"])
+
+    s38_off = asyncio.run(build_audio_setup("models/gemini-3.8-live", "Charon", False))
+    self.assertEqual(
+        "Charon",
+        s38_off["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"],
+    )
+    self.assertEqual(0.7, s38_off["generationConfig"]["temperature"])
+    self.assertNotIn("enableAffectiveDialog", s38_off["generationConfig"])
+
+    s25 = asyncio.run(build_audio_setup("models/gemini-2.5-flash-native-audio-latest", "Zephyr", True))
+    self.assertTrue(s25["generationConfig"]["enableAffectiveDialog"])
+    self.assertEqual(
+        "Zephyr",
+        s25["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"],
+    )
+
+    # 4. REST endpoints expose all 30 voices & persist voice/affective settings.
+    app = server.create_app(server.ServerConfig(api_key="test-key"))
+    client = testclient.TestClient(app)
+    defs = client.get("/api/server_defaults").json()
+    self.assertEqual(30, len(defs["voices"]))
+    self.assertEqual("Puck", defs["default_voice"])
+    self.assertTrue(defs["affective_dialog"])
+
+    upd = client.post(
+        "/api/config/voice",
+        json={"voice_name": "Aoede", "affective_dialog": False},
+    ).json()
+    self.assertTrue(upd["success"])
+    self.assertEqual("Aoede", upd["voice_name"])
+    self.assertFalse(upd["affective_dialog"])
+
+    acfg = client.get("/api/agent_config/robot").json()
+    self.assertEqual("Aoede", acfg["voice_name"])
+    self.assertFalse(acfg["affective_dialog"])
+    self.assertEqual(30, len(acfg["voices"]))
+
+
 
 

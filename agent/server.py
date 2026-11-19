@@ -75,6 +75,7 @@ class ServerConfig:
   tts_voice: str = "en-US-Chirp3-HD-Puck"
   tts_language_code: str = "en-US"
   tts_audio_gain: float = 1.0
+  affective_dialog: bool = True
   response_modality: str = "AUDIO"
   dump_video_dir: str = ""
   heartbeat_interval_seconds: float = 3.0
@@ -171,12 +172,29 @@ _TEXT_ONLY_INLINE_REPLACEMENTS = (
 )
 
 
-def _strip_text_only_comms_rules(di: str) -> str:
+_ANTI_EMOTION_PERSONA_SENTENCE = (
+    "You are a practical Robot assistant. Communicate clearly and concisely"
+    " without role-play, catchphrases, or exaggerated enthusiasm."
+)
+_AFFECTIVE_PERSONA_REPLACEMENT = (
+    "You are a warm, expressive, and practical embodied Robot assistant. Speak"
+    " clearly and concisely with natural human warmth, lively intonation, and"
+    " genuine emotional responsiveness."
+)
+
+
+def _strip_text_only_comms_rules(
+    di: str, affective_dialog: bool = True
+) -> str:
   out = di
   for pat in _TEXT_ONLY_COMMS_PATTERNS:
     out = re.sub(pat, "", out, flags=re.MULTILINE)
   for old, new in _TEXT_ONLY_INLINE_REPLACEMENTS:
     out = out.replace(old, new)
+  if affective_dialog:
+    out = out.replace(
+        _ANTI_EMOTION_PERSONA_SENTENCE, _AFFECTIVE_PERSONA_REPLACEMENT
+    )
   return re.sub(r"\n{3,}", "\n\n", out)
 
 
@@ -322,6 +340,9 @@ async def api_server_defaults(request: fastapi.Request):
       "maps_embed_key": os.environ.get("MAPS_EMBED_KEY", ""),
       "default_modality": config.response_modality,
       "use_tts": config.use_tts,
+      "voices": list(session_config.GEMINI_VOICES),
+      "default_voice": session_config.normalize_voice_name(config.tts_voice),
+      "affective_dialog": config.affective_dialog,
       "spot_simulated": agent_lib.spot_simulated(),
       # Opt-in dataset recording (private bucket) is available on this server.
       "recording_available": bool(os.environ.get("RECORDING_BUCKET")),
@@ -409,11 +430,113 @@ async def update_instructions(request: fastapi.Request):
       )
     config.use_event_driven_heartbeat = value
 
+  if "voice_name" in body and body["voice_name"] is not None:
+    if not isinstance(body["voice_name"], str):
+      raise fastapi.HTTPException(
+          status_code=400, detail="voice_name must be a string"
+      )
+    norm_voice = session_config.normalize_voice_name(body["voice_name"])
+    config.tts_voice = f"en-US-Chirp3-HD-{norm_voice}"
+
+  if "affective_dialog" in body and body["affective_dialog"] is not None:
+    if not isinstance(body["affective_dialog"], bool):
+      raise fastapi.HTTPException(
+          status_code=400, detail="affective_dialog must be a boolean"
+      )
+    config.affective_dialog = body["affective_dialog"]
+
   return {
       "success": True,
       "agent_name": agent_name,
+      "voice_name": session_config.normalize_voice_name(config.tts_voice),
+      "affective_dialog": config.affective_dialog,
       "requires_reconnect": request.app.state.active_session is not None,
   }
+
+
+@router.post("/api/config/voice")
+async def update_voice_settings(request: fastapi.Request):
+  """Persist selected prebuilt voice and affective expressiveness setting."""
+  body = await request.json()
+  config = request.app.state.config
+  if "voice_name" in body and body["voice_name"] is not None:
+    if not isinstance(body["voice_name"], str):
+      raise fastapi.HTTPException(
+          status_code=400, detail="voice_name must be a string"
+      )
+    norm_voice = session_config.normalize_voice_name(body["voice_name"])
+    config.tts_voice = f"en-US-Chirp3-HD-{norm_voice}"
+  if "affective_dialog" in body and body["affective_dialog"] is not None:
+    if not isinstance(body["affective_dialog"], bool):
+      raise fastapi.HTTPException(
+          status_code=400, detail="affective_dialog must be a boolean"
+      )
+    config.affective_dialog = body["affective_dialog"]
+  return {
+      "success": True,
+      "voice_name": session_config.normalize_voice_name(config.tts_voice),
+      "affective_dialog": config.affective_dialog,
+      "requires_reconnect": request.app.state.active_session is not None,
+  }
+
+
+_voice_preview_cache: dict[str, bytes] = {}
+
+
+@router.get("/api/voice_preview")
+async def api_voice_preview(
+    request: fastapi.Request, voice: str = session_config.DEFAULT_VOICE_NAME
+):
+  """Synthesize and return a short 24 kHz WAV sample for any of the 30 voices."""
+  import io  # pylint: disable=g-import-not-at-top
+  import wave  # pylint: disable=g-import-not-at-top
+
+  norm_voice = session_config.normalize_voice_name(voice)
+  cached = _voice_preview_cache.get(norm_voice)
+  if cached is not None:
+    return fastapi.Response(
+        content=cached,
+        media_type="audio/wav",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+  config = request.app.state.config
+  sample_text = (
+      f"Hi there! I'm {norm_voice}, ready to help you with a warm smile today!"
+  )
+
+  def _synth() -> bytes:
+    tts = tts_client_lib.Tts3pClient(
+        voice_name=f"en-US-Chirp3-HD-{norm_voice}",
+        language_code="en-US",
+        api_key=config.tts_api_key or config.api_key,
+        provider="gemini",
+    )
+    pcm = tts.synthesize(sample_text)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+      wf.setnchannels(1)
+      wf.setsampwidth(2)
+      wf.setframerate(24000)
+      wf.writeframes(pcm)
+    return buf.getvalue()
+
+  try:
+    wav_bytes = await asyncio.get_running_loop().run_in_executor(None, _synth)
+  except Exception as exc:  # pylint: disable=broad-except
+    logger.warning("Voice preview synthesis failed for %s: %s", norm_voice, exc)
+    raise fastapi.HTTPException(
+        status_code=502, detail=f"Voice preview unavailable: {exc}"
+    ) from exc
+
+  if len(_voice_preview_cache) >= 32:
+    _voice_preview_cache.clear()
+  _voice_preview_cache[norm_voice] = wav_bytes
+  return fastapi.Response(
+      content=wav_bytes,
+      media_type="audio/wav",
+      headers={"Cache-Control": "public, max-age=3600"},
+  )
 
 
 @router.delete("/api/config/instructions")
@@ -429,9 +552,13 @@ async def reset_instructions(request: fastapi.Request, agent_name: str):
   config.heartbeat_interval_seconds = defaults["heartbeat_interval_seconds"]
   config.heartbeat_min_delay_seconds = defaults["heartbeat_min_delay_seconds"]
   config.use_event_driven_heartbeat = defaults["use_event_driven_heartbeat"]
+  config.tts_voice = defaults["tts_voice"]
+  config.affective_dialog = defaults["affective_dialog"]
   return {
       "success": True,
       "agent_name": agent_name,
+      "voice_name": session_config.normalize_voice_name(config.tts_voice),
+      "affective_dialog": config.affective_dialog,
       "requires_reconnect": request.app.state.active_session is not None,
   }
 
@@ -619,7 +746,10 @@ async def api_agent_config(
       "model": config.model,
       "response_modality": config.response_modality,
       "use_tts": config.use_tts,
-      "tts_voice": config.tts_voice,
+      "tts_voice": session_config.normalize_voice_name(config.tts_voice),
+      "voice_name": session_config.normalize_voice_name(config.tts_voice),
+      "affective_dialog": config.affective_dialog,
+      "voices": list(session_config.GEMINI_VOICES),
       "tts_language_code": config.tts_language_code,
       "endpoint_type": endpoint_type,
       "service_address": service_address,
@@ -647,6 +777,8 @@ async def websocket_endpoint(
     thinking_level: str | None = None,
     endpoint_type: str = "gemini_live_api",
     scenario: str | None = None,
+    voice_name: str | None = None,
+    affective_dialog: bool | None = None,
 ):
   """WebSocket: Proactive Agent session with Gemini Live API."""
   app = websocket.app
@@ -705,8 +837,19 @@ async def websocket_endpoint(
         thinking_level=thinking_level,
         endpoint_type=endpoint_type,
         scenario=active_scenario,
+        voice_name=voice_name,
+        affective_dialog=affective_dialog,
     )
     logger.info("[SERVER] Resolved session config: %s", session_cfg)
+
+    resolved_voice_name = session_config.normalize_voice_name(
+        session_cfg.voice_name or config.tts_voice
+    )
+    resolved_affective_dialog = (
+        session_cfg.affective_dialog
+        if session_cfg.affective_dialog is not None
+        else config.affective_dialog
+    )
 
     # Resolve agent
     custom_si_override = session_cfg.custom_si or config.custom_si.get(
@@ -754,9 +897,14 @@ async def websocket_endpoint(
           agent.developer_instruction.rstrip() + "\n\n" + persona_block
       )
     if modality == "AUDIO":
-      agent.developer_instruction = _strip_text_only_comms_rules(
-          agent.developer_instruction
-      ).rstrip() + "\n\n" + agent_lib.native_audio_addendum()
+      stripped_di = _strip_text_only_comms_rules(
+          agent.developer_instruction,
+          affective_dialog=resolved_affective_dialog,
+      ).rstrip()
+      audio_parts = [stripped_di, agent_lib.native_audio_addendum()]
+      if resolved_affective_dialog:
+        audio_parts.append(agent_lib.affective_audio_addendum())
+      agent.developer_instruction = "\n\n".join(p for p in audio_parts if p)
 
     # Heartbeat policy: models not trained on the ack protocol get a slower
     # cadence, a longer post-speech grace and an explicit heartbeat text.
@@ -833,11 +981,14 @@ async def websocket_endpoint(
     )
 
     logger.info(
-        "Session: agent=%s, model=%s, modality=%s, tts=%s, thinking_level=%s",
+        "Session: agent=%s, model=%s, modality=%s, tts=%s, voice=%s,"
+        " affective=%s, thinking_level=%s",
         session_cfg.agent_name,
         resolved_model,
         modality,
         resolved_use_tts,
+        resolved_voice_name,
+        resolved_affective_dialog,
         resolved_thinking_level,
     )
 
@@ -864,6 +1015,8 @@ async def websocket_endpoint(
         supports_blocking_tools=spec.supports_blocking_tools,
         heartbeat_only_when_task_active=not spec.heartbeat_native,
         er_orchestrator_config=er_orchestrator_config,
+        voice_name=resolved_voice_name,
+        affective_dialog=resolved_affective_dialog,
     )
     app.state.session_agent_name = session_cfg.agent_name
     app.state.active_session.scenario_id = active_scenario
@@ -871,6 +1024,8 @@ async def websocket_endpoint(
     app.state.active_session.recording_meta = {
         "agent": session_cfg.agent_name,
         "scenario": active_scenario,
+        "voice_name": resolved_voice_name,
+        "affective_dialog": resolved_affective_dialog,
     }
 
   try:
@@ -885,13 +1040,14 @@ async def websocket_endpoint(
     tts_client = None
     text_output_cb = None
     if resolved_use_tts:
+      resolved_tts_voice = f"en-US-Chirp3-HD-{resolved_voice_name}"
       tts_client = tts_client_lib.Tts3pClient(
-          voice_name=config.tts_voice,
+          voice_name=resolved_tts_voice,
           language_code=config.tts_language_code,
           api_key=config.tts_api_key or config.api_key,
           audio_gain=config.tts_audio_gain,
       )
-      logger.info("TTS client initialized with voice: %s", config.tts_voice)
+      logger.info("TTS client initialized with voice: %s", resolved_tts_voice)
 
       async def text_output(text):
         filtered_text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
@@ -1131,6 +1287,8 @@ def create_app(config: ServerConfig) -> fastapi.FastAPI:
       "heartbeat_interval_seconds": config.heartbeat_interval_seconds,
       "heartbeat_min_delay_seconds": config.heartbeat_min_delay_seconds,
       "use_event_driven_heartbeat": config.use_event_driven_heartbeat,
+      "tts_voice": config.tts_voice,
+      "affective_dialog": config.affective_dialog,
   }
 
   application.add_middleware(

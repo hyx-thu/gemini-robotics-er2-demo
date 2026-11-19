@@ -556,14 +556,33 @@ class ToolCallHandler:
 
 
   async def _handle_tool_call(self, event: event_bus.Event) -> None:
-    """Handle a TOOL_CALL event by executing all function calls."""
+    """Handle a TOOL_CALL event by executing all function calls and sending one batched toolResponse."""
     tool_call = event.data
     function_calls = tool_call.get("functionCalls", [])
+    if len(function_calls) <= 1:
+      for fc in function_calls:
+        try:
+          await self._execute_single_tool(fc)
+        except Exception:  # pylint: disable=broad-except
+          logging.exception('Tool call %s failed', fc.get("name", "unknown"))
+      return
+
+    batched_responses: list[dict[str, Any]] = []
+
+    async def collect(fr: dict[str, Any]) -> None:
+      batched_responses.append(fr)
+
     for fc in function_calls:
       try:
-        await self._execute_single_tool(fc)
+        await self._execute_single_tool(fc, sink=collect)
       except Exception:  # pylint: disable=broad-except
         logging.exception('Tool call %s failed', fc.get("name", "unknown"))
+    if batched_responses:
+      if self._session_manager is None:
+        raise RuntimeError('Session manager is not initialized')
+      await self._session_manager.send_message(
+          {"toolResponse": {"functionResponses": batched_responses}}
+      )
 
   async def execute_for_agent(self, fc: dict) -> dict[str, Any]:
     """Run a tool for a non-Live sub-agent (e.g. the ER2 orchestrator).

@@ -44,6 +44,24 @@ def native_audio_addendum() -> str:
   return _build_di("native_audio_addendum.md")
 
 
+def affective_audio_addendum() -> str:
+  """Spoken emotional prosody guidance when affective voice expressiveness is enabled."""
+  return (
+      "AFFECTIVE & EMOTIONALLY EXPRESSIVE SPOKEN DELIVERY:\n"
+      "- Listen attentively to the speaker's vocal tone, pace, and mood, and"
+      " express rich, natural human emotion in your spoken voice rather than"
+      " speaking in a flat or monotone cadence.\n"
+      "- When welcoming visitors, answering everyday questions, or completing a"
+      " robot task, speak with a warm audible smile, lively pitch variation,"
+      " and friendly, upbeat energy.\n"
+      "- When a visitor sounds anxious, hurried, tired, or unsure, soften your"
+      " speaking pace and reply with calm, gentle, reassuring empathy.\n"
+      "- When the moment calls for light humor or playful concierge charm, let"
+      " natural warmth and expressive conversational inflection shine through"
+      " while keeping answers crisp and concise."
+  )
+
+
 def _build_di(*files: str) -> str:
   """Concatenate instruction files from prompt/data in order."""
   parts = []

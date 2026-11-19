@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Robotic ER2 — Live Robot Control</title>
-    <link rel="stylesheet" href="/static/style.css?v=51" />
+    <link rel="stylesheet" href="/static/style.css?v=52" />
   </head>
   <body>
     <div class="container">
@@ -262,7 +262,7 @@
                 <code id="config-tts">—</code>
               </div>
               <div class="config-item">
-                <label>TTS Voice</label>
+                <label>Active Voice</label>
                 <code id="config-tts-voice">—</code>
               </div>
               <div class="config-item">
@@ -274,6 +274,30 @@
                 <code id="config-service">—</code>
               </div>
             </div>
+
+            <div id="voice-reconnect-banner" class="scenario-reconnect-banner hidden" style="margin-top: 12px;">
+              <span>🎙️ Voice settings updated — reconnect the Live session to apply the new human voice &amp; emotional prosody.</span>
+              <button type="button" id="voice-reconnect-btn" class="btn btn-primary btn-xs">Reconnect Now</button>
+            </div>
+            <h3>Voice &amp; Emotional Expressiveness</h3>
+            <div class="voice-config-card">
+              <div class="voice-select-row">
+                <div class="voice-select-col">
+                  <label for="config-voice-select" class="voice-field-label">Human Voice (All 30 Official Gemini Live &amp; TTS Voices)</label>
+                  <select id="config-voice-select" class="form-select"></select>
+                </div>
+                <button type="button" id="preview-voice-btn" class="btn voice-preview-btn" title="Play a short sample of the selected human voice">🔊 Preview</button>
+              </div>
+              <div id="voice-profile-meta" class="voice-profile-meta"></div>
+              <label class="voice-affective-row" for="config-affective-dialog">
+                <input type="checkbox" id="config-affective-dialog" checked />
+                <div class="voice-affective-text">
+                  <span class="voice-affective-title">Enable Affective &amp; Emotionally Expressive Voice <span class="voice-rec-pill">Recommended</span></span>
+                  <span class="voice-affective-desc">Unlocks warm emotional prosody, audible smiles, gentle empathy, and lively pitch dynamics in Gemini Live native audio (enabled by default).</span>
+                </div>
+              </label>
+            </div>
+
             <h3>Tools</h3>
             <div id="config-tools" class="config-tools">—</div>
             <h3>Thinking Level</h3>
@@ -490,7 +514,7 @@
     </div>
     <script src="/static/media-handler.js?v=7"></script>
     <script src="/static/agent-client.js?v=2"></script>
-    <script src="/static/agent-ui.js?v=66"></script>
+    <script src="/static/agent-ui.js?v=67"></script>
     <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.min.js" } }</script>
     <script type="module" src="/static/robot-twin.js?v=27"></script>
   </body>

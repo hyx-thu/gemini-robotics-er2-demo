@@ -23,9 +23,22 @@ def _is_internal_heartbeat_text(text: str) -> bool:
   return text.lstrip().startswith("[HEARTBEAT]")
 
 
+_OUTPUT_PLACEHOLDER_RE = re.compile(
+    r"(<\s*no\s*speech\s*>|<\s*no\b|\bno\s*speech\s*>|\{\s*pause\s*\})",
+    re.IGNORECASE,
+)
+
+
+def _strip_output_placeholders(text: str) -> str:
+  """Strip native-audio control placeholder tokens such as <no speech> or {pause}."""
+  if not text:
+    return ""
+  return _OUTPUT_PLACEHOLDER_RE.sub("", text)
+
+
 def _is_ignored_output_transcription(text: str) -> bool:
   """Return True for non-speech placeholders or canned transcription errors."""
-  stripped = text.strip()
+  stripped = _strip_output_placeholders(text).strip()
   if not stripped:
     return True
   if _is_internal_heartbeat_text(stripped):
@@ -562,7 +575,8 @@ class DecisionMaking:
     # canned transcription-layer error strings. Route pre-tool reasoning leaks
     # (markdown bullets/backticks) to GEMINI_THOUGHT instead of GEMINI_TEXT.
     if "outputTranscription" in server_content:
-      text = server_content["outputTranscription"].get("text", "")
+      raw_out = server_content["outputTranscription"].get("text", "")
+      text = _strip_output_placeholders(raw_out)
       if text and not _is_ignored_output_transcription(text):
         self._mark_first_response()
         event_type = (

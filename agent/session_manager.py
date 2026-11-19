@@ -20,6 +20,7 @@ from core import event_bus
 from core import observation
 from core import tool_call_handler
 from model import live_api_client
+import session_config
 
 
 logger = logging.getLogger(__name__)
@@ -389,8 +390,12 @@ class SessionManager:
       supports_blocking_tools: bool = True,
       heartbeat_only_when_task_active: bool = False,
       er_orchestrator_config: dict[str, Any] | None = None,
+      voice_name: str | None = None,
+      affective_dialog: bool = True,
   ):
     self.model = model
+    self.voice_name = session_config.normalize_voice_name(voice_name) if voice_name else None
+    self.affective_dialog = bool(affective_dialog)
     # Composite "Live + ER2" mode: config for the ER robot-task orchestrator
     # (model, tools, system_instruction, thinking_level); built in
     # start_session once the ToolCallHandler exists.
@@ -884,6 +889,27 @@ class SessionManager:
     }
     if modality == "AUDIO":
       setup_dict["setup"]["outputAudioTranscription"] = {}
+      resolved_voice = session_config.normalize_voice_name(
+          getattr(self, "voice_name", None)
+      )
+      setup_dict["setup"]["generationConfig"]["speechConfig"] = {
+          "voiceConfig": {
+              "prebuiltVoiceConfig": {
+                  "voiceName": resolved_voice,
+              }
+          }
+      }
+      affective_on = bool(getattr(self, "affective_dialog", True))
+      # Keep native-audio temperature >= 0.7 (1.0 when affective expressiveness
+      # is ON for rich pitch/emotion dynamics; 0.7 when turned OFF for steadier
+      # delivery; never <= 0.3 which can cause tonal humming).
+      setup_dict["setup"]["generationConfig"]["temperature"] = (
+          1.0 if affective_on else 0.7
+      )
+      if affective_on and session_config.uses_wire_affective_dialog_flag(
+          model_name
+      ):
+        setup_dict["setup"]["generationConfig"]["enableAffectiveDialog"] = True
 
     # Add thinking config if a level is set. includeThoughts streams the
     # model's reasoning summaries back so the UI can render them.

@@ -3299,6 +3299,137 @@ body:not(.dark-theme) #video-placeholder { background: radial-gradient(ellipse a
   background: rgba(251, 188, 4, 0.12);
 }
 
+/* Voice Selector & Affective Expressiveness Card (Settings -> Agent Config) */
+.voice-config-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.voice-select-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.voice-select-col {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.voice-field-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+.voice-preview-btn {
+  height: 36px;
+  padding: 0 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.voice-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.voice-meta-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(26, 115, 232, 0.1);
+  color: #1967d2;
+}
+.voice-meta-pill.voice-meta-female {
+  background: rgba(161, 66, 244, 0.12);
+  color: #7627bb;
+}
+.voice-meta-pill.voice-meta-male {
+  background: rgba(26, 115, 232, 0.12);
+  color: #185abc;
+}
+.voice-meta-pill.voice-meta-style {
+  background: var(--accent-bg);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.dark-theme .voice-meta-pill {
+  background: rgba(138, 180, 248, 0.16);
+  color: #8ab4f8;
+}
+.dark-theme .voice-meta-pill.voice-meta-female {
+  background: rgba(215, 174, 251, 0.16);
+  color: #d7aefb;
+}
+.dark-theme .voice-meta-pill.voice-meta-male {
+  background: rgba(138, 180, 248, 0.16);
+  color: #8ab4f8;
+}
+.dark-theme .voice-meta-pill.voice-meta-style {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+.voice-affective-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 115, 232, 0.22);
+  background: rgba(26, 115, 232, 0.05);
+  cursor: pointer;
+}
+.dark-theme .voice-affective-row {
+  border-color: rgba(138, 180, 248, 0.25);
+  background: rgba(138, 180, 248, 0.07);
+}
+.voice-affective-row input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.voice-affective-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.voice-affective-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.voice-rec-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(19, 115, 51, 0.13);
+  color: #137333;
+}
+.dark-theme .voice-rec-pill {
+  background: rgba(129, 201, 149, 0.18);
+  color: #81c995;
+}
+.voice-affective-desc {
+  font-size: 11.3px;
+  line-height: 1.38;
+  color: var(--text-secondary);
+}
+
 /* =====================================================================
    Layout v3: Stage Row (Smooth 380ms Bottom-Right PiP <-> 50:50 Split)
    ===================================================================== */

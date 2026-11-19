@@ -102,6 +102,144 @@ let scenarioCatalog = [];
 let scenarioCustomPersonaMap = {};
 let scenarioCustomKbMap = {};
 
+// Complete catalog of all 30 official Gemini Live & Gemini TTS human voices.
+const DEFAULT_VOICE_CATALOG = [
+  // Female voices (14)
+  { name: 'Aoede', gender: 'Female', pitch: 'Middle Pitch', style: 'Breezy, relaxed, conversational' },
+  { name: 'Zephyr', gender: 'Female', pitch: 'Higher Pitch', style: 'Bright, sunny, highly cheerful' },
+  { name: 'Sulafat', gender: 'Female', pitch: 'Middle Pitch', style: 'Warm, inviting, supportive' },
+  { name: 'Leda', gender: 'Female', pitch: 'Higher Pitch', style: 'Youthful, relaxed, upbeat' },
+  { name: 'Laomedeia', gender: 'Female', pitch: 'Higher Pitch', style: 'Upbeat, active, lively' },
+  { name: 'Autonoe', gender: 'Female', pitch: 'Middle Pitch', style: 'Bright, energetic' },
+  { name: 'Callirrhoe', gender: 'Female', pitch: 'Middle Pitch', style: 'Easy-going, friendly, casual' },
+  { name: 'Despina', gender: 'Female', pitch: 'Middle Pitch', style: 'Smooth, conversational' },
+  { name: 'Kore', gender: 'Female', pitch: 'Middle Pitch', style: 'Firm, steady, clear' },
+  { name: 'Erinome', gender: 'Female', pitch: 'Middle Pitch', style: 'Clear, conversational' },
+  { name: 'Vindemiatrix', gender: 'Female', pitch: 'Middle Pitch', style: 'Gentle, soft, calming' },
+  { name: 'Achernar', gender: 'Female', pitch: 'Higher Pitch', style: 'Soft, quiet, gentle' },
+  { name: 'Pulcherrima', gender: 'Female', pitch: 'Middle Pitch', style: 'Forward, direct, active' },
+  { name: 'Gacrux', gender: 'Female', pitch: 'Middle Pitch', style: 'Mature, seasoned, expert' },
+  // Male voices (16)
+  { name: 'Puck', gender: 'Male', pitch: 'Middle Pitch', style: 'Upbeat, energetic' },
+  { name: 'Fenrir', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Excitable, upbeat' },
+  { name: 'Umbriel', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Easy-going, warm, friendly' },
+  { name: 'Achird', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Friendly, approachable, conversational' },
+  { name: 'Sadachbia', gender: 'Male', pitch: 'Lower Pitch', style: 'Lively, active' },
+  { name: 'Charon', gender: 'Male', pitch: 'Deep Pitch', style: 'Informative, deep, steady' },
+  { name: 'Algieba', gender: 'Male', pitch: 'Lower Pitch', style: 'Smooth, calm, helpful' },
+  { name: 'Orus', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Firm, steady' },
+  { name: 'Sadaltager', gender: 'Male', pitch: 'Middle Pitch', style: 'Knowledgeable, educational' },
+  { name: 'Iapetus', gender: 'Male', pitch: 'High Register', style: 'Clear, crisp' },
+  { name: 'Alnilam', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Firm, balanced, authoritative' },
+  { name: 'Rasalgethi', gender: 'Male', pitch: 'Middle Pitch', style: 'Informative, structured' },
+  { name: 'Schedar', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Even, neutral, steady' },
+  { name: 'Zubenelgenubi', gender: 'Male', pitch: 'Lower-Middle Pitch', style: 'Casual, everyday conversational' },
+  { name: 'Algenib', gender: 'Male', pitch: 'Lower Pitch', style: 'Gravelly, textured, conversational' },
+  { name: 'Enceladus', gender: 'Male', pitch: 'Lower Pitch', style: 'Breathy, textured' },
+];
+let voiceCatalog = DEFAULT_VOICE_CATALOG.slice();
+let selectedVoiceName = localStorage.getItem('lite_voice_name') || 'Puck';
+let selectedAffectiveDialog = localStorage.getItem('lite_affective_dialog') !== 'false';
+let activeSessionVoiceName = null;
+let activeSessionAffectiveDialog = null;
+let previewAudioEl = null;
+
+function normalizeUiVoiceName(raw) {
+  const cleaned = String(raw || '').trim();
+  const tail = cleaned.includes('-') ? cleaned.split('-').pop() : cleaned;
+  const found = voiceCatalog.find(v => v.name.toLowerCase() === tail.toLowerCase());
+  return found ? found.name : 'Puck';
+}
+selectedVoiceName = normalizeUiVoiceName(selectedVoiceName);
+
+function stopVoicePreview() {
+  if (previewAudioEl) {
+    try { previewAudioEl.pause(); } catch (_) {}
+    previewAudioEl = null;
+  }
+  const btn = document.getElementById('preview-voice-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '🔊 Preview';
+  }
+}
+
+function renderVoiceProfileMeta() {
+  const metaEl = document.getElementById('voice-profile-meta');
+  const activeCodeEl = document.getElementById('config-tts-voice');
+  const v = voiceCatalog.find(item => item.name === selectedVoiceName) || voiceCatalog[0];
+  if (activeCodeEl && v) {
+    activeCodeEl.textContent = `${v.name} · ${selectedAffectiveDialog ? 'Affective ON' : 'Neutral'}`;
+  }
+  if (!metaEl || !v) return;
+  metaEl.innerHTML = '';
+  const genderPill = document.createElement('span');
+  genderPill.className = 'voice-meta-pill ' + (v.gender === 'Female' ? 'voice-meta-female' : 'voice-meta-male');
+  genderPill.textContent = v.gender;
+  const pitchPill = document.createElement('span');
+  pitchPill.className = 'voice-meta-pill';
+  pitchPill.textContent = v.pitch;
+  const stylePill = document.createElement('span');
+  stylePill.className = 'voice-meta-pill voice-meta-style';
+  stylePill.textContent = v.style;
+  metaEl.appendChild(genderPill);
+  metaEl.appendChild(pitchPill);
+  metaEl.appendChild(stylePill);
+}
+
+function populateVoiceSelect() {
+  const sel = document.getElementById('config-voice-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const females = voiceCatalog.filter(v => v.gender === 'Female');
+  const males = voiceCatalog.filter(v => v.gender !== 'Female');
+  const addGroup = (label, items) => {
+    if (!items.length) return;
+    const grp = document.createElement('optgroup');
+    grp.label = `${label} (${items.length})`;
+    items.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} — ${v.style} (${v.pitch})`;
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  };
+  addGroup('Female Voices', females);
+  addGroup('Male Voices', males);
+  selectedVoiceName = normalizeUiVoiceName(selectedVoiceName);
+  sel.value = selectedVoiceName;
+  const affChk = document.getElementById('config-affective-dialog');
+  if (affChk) affChk.checked = selectedAffectiveDialog;
+  renderVoiceProfileMeta();
+}
+
+function updateVoiceReconnectBanner() {
+  const banner = document.getElementById('voice-reconnect-banner');
+  if (!banner) return;
+  const connected = typeof geminiClient !== 'undefined' && geminiClient.isConnected();
+  const changed = connected && (
+    (activeSessionVoiceName !== null && activeSessionVoiceName !== selectedVoiceName) ||
+    (activeSessionAffectiveDialog !== null && activeSessionAffectiveDialog !== selectedAffectiveDialog)
+  );
+  banner.classList.toggle('hidden', !changed);
+}
+
+async function persistVoiceSettingsToServer() {
+  try {
+    await fetch('/api/config/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voice_name: selectedVoiceName,
+        affective_dialog: selectedAffectiveDialog,
+      }),
+    });
+  } catch (e) {
+    console.warn('Failed to sync voice settings to server:', e);
+  }
+}
+
 function syncThinkingLevelForModel(model) {
   const sel = document.getElementById('config-thinking-level');
   if (sel) {
@@ -419,6 +557,17 @@ async function initServerDefaults() {
     if (!resp.ok) throw new Error();
     const defaults = await resp.json();
     if (defaults.thinking) modelThinkingInfo = defaults.thinking;
+    if (Array.isArray(defaults.voices) && defaults.voices.length) {
+      voiceCatalog = defaults.voices;
+    }
+    if (!localStorage.getItem('lite_voice_name') && defaults.default_voice) {
+      selectedVoiceName = normalizeUiVoiceName(defaults.default_voice);
+    }
+    if (localStorage.getItem('lite_affective_dialog') === null &&
+        typeof defaults.affective_dialog === 'boolean') {
+      selectedAffectiveDialog = defaults.affective_dialog;
+    }
+    populateVoiceSelect();
     mapsEmbedKey = defaults.maps_embed_key || '';
     recordingAvailable = !!defaults.recording_available;
     updateRecordBtn();
@@ -3179,12 +3328,17 @@ connectBtn.onclick = async () => {
         endpoint_type: sessionCfg.endpoint_type,
         thinking_level: pendingThinkingLevel(sessionCfg.model),
         scenario: selectedScenarioId,
+        voice_name: selectedVoiceName,
+        affective_dialog: selectedAffectiveDialog,
       };
       activeThinkingLevel = connParams.thinking_level;
       activeSessionScenarioId = selectedScenarioId;
+      activeSessionVoiceName = selectedVoiceName;
+      activeSessionAffectiveDialog = selectedAffectiveDialog;
       if (typeof updateScenarioReconnectBanner === 'function') {
         updateScenarioReconnectBanner();
       }
+      updateVoiceReconnectBanner();
       renderThinkingStatus();
       geminiClient.connect(connParams);
     } catch (error) {
@@ -3295,6 +3449,9 @@ function resetUI() {
   lastUserRequestText = '';
   userTurnSeq = 0;
   awaitingToolsForTurnSeq = -1;
+  activeSessionVoiceName = null;
+  activeSessionAffectiveDialog = null;
+  updateVoiceReconnectBanner();
 }
 
 // --- Settings Modal and Theme Toggle ---
@@ -3337,6 +3494,12 @@ async function loadAgentConfig(name = selectedAgentName, model = selectedModel) 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const cfg = await resp.json();
 
+    if (Array.isArray(cfg.voices) && cfg.voices.length) {
+      voiceCatalog = cfg.voices;
+    }
+    populateVoiceSelect();
+    updateVoiceReconnectBanner();
+
     const titleLabel = cfg.name === 'robot' ? 'Robot' : cfg.name;
     document.getElementById('config-title').textContent =
       `${titleLabel} Agent Config`;
@@ -3346,9 +3509,13 @@ async function loadAgentConfig(name = selectedAgentName, model = selectedModel) 
       sessionCfg.response_modality;
     document.getElementById('config-tts').textContent =
       sessionCfg.use_tts ? 'Enabled' : 'Disabled';
-    document.getElementById('config-tts-voice').textContent = cfg.tts_voice;
+    renderVoiceProfileMeta();
     document.getElementById('config-endpoint').textContent = cfg.endpoint_type;
     document.getElementById('config-service').textContent = cfg.service_address;
+    const resetBtnEl = document.getElementById('reset-prompt-btn');
+    if (resetBtnEl) {
+      resetBtnEl.disabled = !(cfg.is_modified || selectedVoiceName !== 'Puck' || !selectedAffectiveDialog);
+    }
 
     // Tools
     const toolsDiv = document.getElementById('config-tools');
@@ -3430,6 +3597,8 @@ if (updatePromptBtn) {
           heartbeat_interval_seconds: heartbeatInterval !== '' ? parseFloat(heartbeatInterval) : null,
           heartbeat_min_delay_seconds: heartbeatMinDelay !== '' ? parseFloat(heartbeatMinDelay) : null,
           use_event_driven_heartbeat: useEventDrivenHeartbeat,
+          voice_name: selectedVoiceName,
+          affective_dialog: selectedAffectiveDialog,
         }),
       });
       const data = await resp.json();
@@ -3463,6 +3632,12 @@ if (resetPromptBtn) {
       });
       const data = await resp.json();
       if (data.success) {
+        selectedVoiceName = normalizeUiVoiceName(data.voice_name || 'Puck');
+        selectedAffectiveDialog = data.affective_dialog !== false;
+        localStorage.setItem('lite_voice_name', selectedVoiceName);
+        localStorage.setItem('lite_affective_dialog', String(selectedAffectiveDialog));
+        populateVoiceSelect();
+        updateVoiceReconnectBanner();
         resetPromptBtn.textContent = 'Reset ✅';
         setTimeout(() => {
           loadAgentConfig(selectedAgentName, selectedModel);
@@ -3483,6 +3658,7 @@ if (resetPromptBtn) {
 
 if (closeModalBtn) {
   closeModalBtn.onclick = () => {
+    stopVoicePreview();
     settingsModal.classList.add('hidden');
   };
 }
@@ -3490,6 +3666,7 @@ if (closeModalBtn) {
 // Close modal on click outside
 window.onclick = (event) => {
   if (event.target === settingsModal) {
+    stopVoicePreview();
     settingsModal.classList.add('hidden');
   }
 };
@@ -3542,6 +3719,92 @@ themeRadios.forEach(radio => {
     sel.onchange = () => {
       if (!sel.disabled) saveThinkingLevel(selectedModel, sel.value);
       renderThinkingStatus();
+    };
+  }
+}
+
+// --- Human Voice selector, Preview button & Affective Expressiveness toggle ---
+{
+  populateVoiceSelect();
+  const voiceSel = document.getElementById('config-voice-select');
+  if (voiceSel) {
+    voiceSel.onchange = () => {
+      stopVoicePreview();
+      selectedVoiceName = normalizeUiVoiceName(voiceSel.value);
+      localStorage.setItem('lite_voice_name', selectedVoiceName);
+      renderVoiceProfileMeta();
+      updateVoiceReconnectBanner();
+      const resetBtnEl = document.getElementById('reset-prompt-btn');
+      if (resetBtnEl) resetBtnEl.disabled = false;
+      persistVoiceSettingsToServer();
+    };
+  }
+
+  const affChk = document.getElementById('config-affective-dialog');
+  if (affChk) {
+    affChk.onchange = () => {
+      selectedAffectiveDialog = !!affChk.checked;
+      localStorage.setItem('lite_affective_dialog', String(selectedAffectiveDialog));
+      renderVoiceProfileMeta();
+      updateVoiceReconnectBanner();
+      const resetBtnEl = document.getElementById('reset-prompt-btn');
+      if (resetBtnEl) resetBtnEl.disabled = false;
+      persistVoiceSettingsToServer();
+    };
+  }
+
+  const previewBtn = document.getElementById('preview-voice-btn');
+  if (previewBtn) {
+    previewBtn.onclick = async () => {
+      if (previewAudioEl) {
+        stopVoicePreview();
+        return;
+      }
+      const voice = normalizeUiVoiceName(selectedVoiceName);
+      previewBtn.disabled = true;
+      previewBtn.textContent = '⏳ Loading…';
+      try {
+        const resp = await fetch(`/api/voice_preview?voice=${encodeURIComponent(voice)}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio(blobUrl);
+        previewAudioEl = audio;
+        previewBtn.disabled = false;
+        previewBtn.textContent = '⏹ Stop';
+        audio.onended = () => {
+          URL.revokeObjectURL(blobUrl);
+          if (previewAudioEl === audio) stopVoicePreview();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          if (previewAudioEl === audio) stopVoicePreview();
+        };
+        await audio.play();
+      } catch (e) {
+        console.warn('Voice preview failed:', e);
+        stopVoicePreview();
+        previewBtn.textContent = '⚠️ Retry';
+        setTimeout(() => {
+          if (!previewAudioEl) previewBtn.textContent = '🔊 Preview';
+        }, 1800);
+      }
+    };
+  }
+
+  const voiceReconnBtn = document.getElementById('voice-reconnect-btn');
+  if (voiceReconnBtn) {
+    voiceReconnBtn.onclick = () => {
+      stopVoicePreview();
+      if (settingsModal) settingsModal.classList.add('hidden');
+      if (geminiClient.isConnected()) {
+        geminiClient.disconnect();
+        setTimeout(() => {
+          if (connectBtn && !geminiClient.isConnected()) connectBtn.click();
+        }, 320);
+      } else if (connectBtn) {
+        connectBtn.click();
+      }
     };
   }
 }

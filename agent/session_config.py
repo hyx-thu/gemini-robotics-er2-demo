@@ -21,6 +21,73 @@ class EndpointType(enum.Enum):
 THINKING_LEVELS = ("none", "minimal", "low", "medium", "high")
 DEFAULT_THINKING_LEVEL = "low"
 
+# Canonical catalog of all 30 official Gemini Live & Gemini TTS prebuilt human
+# voices (14 Female + 16 Male), with official gender, pitch, and vocal style.
+DEFAULT_VOICE_NAME = "Puck"
+
+GEMINI_VOICES: tuple[dict[str, str], ...] = (
+    # Female voices (14)
+    {"name": "Aoede", "gender": "Female", "pitch": "Middle Pitch", "style": "Breezy, relaxed, conversational"},
+    {"name": "Zephyr", "gender": "Female", "pitch": "Higher Pitch", "style": "Bright, sunny, highly cheerful"},
+    {"name": "Sulafat", "gender": "Female", "pitch": "Middle Pitch", "style": "Warm, inviting, supportive"},
+    {"name": "Leda", "gender": "Female", "pitch": "Higher Pitch", "style": "Youthful, relaxed, upbeat"},
+    {"name": "Laomedeia", "gender": "Female", "pitch": "Higher Pitch", "style": "Upbeat, active, lively"},
+    {"name": "Autonoe", "gender": "Female", "pitch": "Middle Pitch", "style": "Bright, energetic"},
+    {"name": "Callirrhoe", "gender": "Female", "pitch": "Middle Pitch", "style": "Easy-going, friendly, casual"},
+    {"name": "Despina", "gender": "Female", "pitch": "Middle Pitch", "style": "Smooth, conversational"},
+    {"name": "Kore", "gender": "Female", "pitch": "Middle Pitch", "style": "Firm, steady, clear"},
+    {"name": "Erinome", "gender": "Female", "pitch": "Middle Pitch", "style": "Clear, conversational"},
+    {"name": "Vindemiatrix", "gender": "Female", "pitch": "Middle Pitch", "style": "Gentle, soft, calming"},
+    {"name": "Achernar", "gender": "Female", "pitch": "Higher Pitch", "style": "Soft, quiet, gentle"},
+    {"name": "Pulcherrima", "gender": "Female", "pitch": "Middle Pitch", "style": "Forward, direct, active"},
+    {"name": "Gacrux", "gender": "Female", "pitch": "Middle Pitch", "style": "Mature, seasoned, expert"},
+    # Male voices (16)
+    {"name": "Puck", "gender": "Male", "pitch": "Middle Pitch", "style": "Upbeat, energetic"},
+    {"name": "Fenrir", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Excitable, upbeat"},
+    {"name": "Umbriel", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Easy-going, warm, friendly"},
+    {"name": "Achird", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Friendly, approachable, conversational"},
+    {"name": "Sadachbia", "gender": "Male", "pitch": "Lower Pitch", "style": "Lively, active"},
+    {"name": "Charon", "gender": "Male", "pitch": "Deep Pitch", "style": "Informative, deep, steady"},
+    {"name": "Algieba", "gender": "Male", "pitch": "Lower Pitch", "style": "Smooth, calm, helpful"},
+    {"name": "Orus", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Firm, steady"},
+    {"name": "Sadaltager", "gender": "Male", "pitch": "Middle Pitch", "style": "Knowledgeable, educational"},
+    {"name": "Iapetus", "gender": "Male", "pitch": "High Register", "style": "Clear, crisp"},
+    {"name": "Alnilam", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Firm, balanced, authoritative"},
+    {"name": "Rasalgethi", "gender": "Male", "pitch": "Middle Pitch", "style": "Informative, structured"},
+    {"name": "Schedar", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Even, neutral, steady"},
+    {"name": "Zubenelgenubi", "gender": "Male", "pitch": "Lower-Middle Pitch", "style": "Casual, everyday conversational"},
+    {"name": "Algenib", "gender": "Male", "pitch": "Lower Pitch", "style": "Gravelly, textured, conversational"},
+    {"name": "Enceladus", "gender": "Male", "pitch": "Lower Pitch", "style": "Breathy, textured"},
+)
+
+_VOICE_LOOKUP: dict[str, str] = {v["name"].lower(): v["name"] for v in GEMINI_VOICES}
+
+
+def normalize_voice_name(
+    voice_name: str | None, default: str = DEFAULT_VOICE_NAME
+) -> str:
+  """Normalize any Gemini or Chirp3-HD voice string to a valid case-sensitive Gemini voiceName."""
+  raw = (voice_name or "").strip()
+  if not raw:
+    return default
+  candidate = raw.split("-")[-1] if "-" in raw else raw
+  matched = _VOICE_LOOKUP.get(candidate.lower())
+  if matched:
+    return matched
+  logger.warning("Unknown voice_name %r; falling back to %s", voice_name, default)
+  return default
+
+
+def uses_wire_affective_dialog_flag(model_name: str) -> bool:
+  """Return True only for 2.5 native-audio Live models that take enableAffectiveDialog on the wire.
+
+  On Gemini 3.8 Live (Beyond architecture), affective dialog is natively built
+  into the model weights and sending the legacy 2.5 `enableAffectiveDialog` JSON
+  field closes the WebSocket with code 1007.
+  """
+  norm = (model_name or "").removeprefix("models/").lower()
+  return "2.5" in norm and "tts" not in norm
+
 
 
 @dataclasses.dataclass
@@ -163,3 +230,9 @@ class SessionConfig:
 
   # Active business scenario & RAG knowledge base ("default", "cymbal_hospital", "cymbal_bank")
   scenario: str = "default"
+
+  # Selected prebuilt human voice name (e.g. "Puck", "Aoede", "Zephyr").
+  voice_name: str | None = None
+
+  # Whether emotionally expressive / affective vocal delivery is enabled.
+  affective_dialog: bool | None = None
